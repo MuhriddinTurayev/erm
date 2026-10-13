@@ -1,0 +1,36 @@
+@extends('layouts.panel')
+@section('title', __('Мой Telegram'))
+@section('content')
+<div class="grid g32">
+  <div class="card">
+    <div class="card-h"><h3>{!! ic('send') !!}{{ __('Подключение') }}</h3>
+      @if ($u->telegram_chat_id)<span class="badge b-ok">{{ __('подключён') }}</span>@else<span class="badge b-warn">{{ __('не подключён') }}</span>@endif</div>
+    @if (! $enabled || ! $bot)
+      <div class="alert alert-warn" style="margin:0">{!! ic('triangle-alert') !!}<div>{{ __('Telegram-бот ещё не настроен администратором платформы.') }}</div></div>
+    @elseif ($u->telegram_chat_id)
+      <p>{{ __('Ваш Telegram привязан. Бот :b принимает ваши расходы, фото чеков и записи журнала работ.', ['b' => '@'.$bot]) }}</p>
+      <div class="flex">
+        <a class="btn btn-p" href="https://t.me/{{ $bot }}" target="_blank" rel="noopener">{!! ic('external-link') !!}{{ __('Открыть бота') }}</a>
+        <form method="post" action="/me/telegram/unlink" onsubmit="return confirm(this.dataset.q)" data-q="{{ __('Отвязать Telegram?') }}">@csrf<button class="btn">{!! ic('unlink') !!}{{ __('Отвязать') }}</button></form>
+      </div>
+    @else
+      <ol class="steps-list">
+        <li>{!! __('Откройте бота :b в Telegram.', ['b' => '<a href="https://t.me/'.e($bot).'?start='.e($u->tg_link_code).'" target="_blank" rel="noopener"><b>@'.e($bot).'</b></a>']) !!}</li>
+        <li>{{ __('Нажмите «Start» или отправьте боту этот код:') }} <span class="big-code">{{ $u->tg_link_code }}</span></li>
+        <li>{{ __('Вернитесь сюда и нажмите кнопку:') }}</li>
+      </ol>
+      <form method="post" action="/me/telegram/check">@csrf<button class="btn btn-dark">{!! ic('link') !!}{{ __('Проверить подключение') }}</button></form>
+    @endif
+  </div>
+  <div class="card">
+    <div class="card-h"><h3>{!! ic('message-square') !!}{{ __('Что умеет бот') }}</h3></div>
+    <div class="tg-preview">
+      <div class="tg-msg"><b>{{ __('Расход текстом') }}</b><br><span class="code">{{ __('Бетон 25 млн БетонСтрой') }}</span></div>
+      <div class="tg-msg"><b>{{ __('Фото чека') }}</b><br>{{ __('ИИ сам прочитает сумму, продавца и дату') }}</div>
+      <div class="tg-msg"><b>{{ __('Журнал работ') }}</b><br>{{ __('Фото с объекта и короткое описание за день') }}</div>
+      <div class="tg-msg"><b>{{ __('Команды') }}</b><br><span class="code">/obyekt</span> — {{ __('выбрать объект') }}<br><span class="code">/kassa</span> — {{ __('остаток кассы') }}<br><span class="code">/bekor</span> — {{ __('отменить') }}</div>
+    </div>
+    <p class="muted mt">{{ __('Крупные расходы (больше лимита компании) уходят руководителю на согласование — он подтверждает их одной кнопкой в Telegram.') }}</p>
+  </div>
+</div>
+@endsection

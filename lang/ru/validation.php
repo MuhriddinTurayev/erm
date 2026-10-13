@@ -1,0 +1,30 @@
+<?php
+
+return [
+    'array' => 'Поле «:attribute» должно быть списком.',
+    'boolean' => 'Поле «:attribute» должно быть «да» или «нет».',
+    'confirmed' => 'Поле «:attribute» не совпадает с подтверждением.',
+    'date' => 'Поле «:attribute» должно быть датой.',
+    'date_format' => 'Поле «:attribute» должно быть в формате :format.',
+    'email' => 'Поле «:attribute» должно быть правильным email.',
+    'exists' => 'Выбранное значение «:attribute» не найдено.',
+    'in' => 'Выбрано неверное значение «:attribute».',
+    'integer' => 'Поле «:attribute» должно быть целым числом.',
+    'max' => ['numeric' => 'Поле «:attribute» не может быть больше :max.', 'string' => 'Поле «:attribute» не может быть длиннее :max символов.', 'array' => 'В поле «:attribute» не больше :max элементов.'],
+    'min' => ['numeric' => 'Поле «:attribute» должно быть не меньше :min.', 'string' => 'Поле «:attribute» должно быть не короче :min символов.', 'array' => 'В поле «:attribute» не меньше :min элементов.'],
+    'numeric' => 'Поле «:attribute» должно быть числом.',
+    'regex' => 'Поле «:attribute» заполнено неверно.',
+    'required' => 'Заполните поле «:attribute».',
+    'required_if' => 'Заполните поле «:attribute».',
+    'string' => 'Поле «:attribute» должно быть текстом.',
+    'unique' => 'Такое значение поля «:attribute» уже занято.',
+    'url' => 'Поле «:attribute» должно быть ссылкой.',
+    'alpha_dash' => 'Поле «:attribute» может содержать только латинские буквы, цифры, дефис и подчёркивание.',
+    'password' => ['min' => 'Пароль должен быть не короче :min символов.'],
+    'attributes' => [
+        'email' => 'Email', 'password' => 'Пароль', 'name' => 'Имя', 'company' => 'Название компании', 'phone' => 'Телефон', 'role' => 'Роль',
+        'slug' => 'Код', 'price_month' => 'Цена в месяц', 'api_key' => 'Ключ API', 'model' => 'Модель', 'base_url' => 'Адрес API',
+        'report_time' => 'Время отправки', 'report_email' => 'Email руководителя', 'report_chats' => 'Telegram chat_id', 'amount' => 'Сумма', 'months' => 'Месяцев',
+        'name.ru' => 'Название (русский)', 'messages' => 'Вопрос', 'system' => 'Данные проекта', 'confirm' => 'Подтверждение',
+    ],
+];

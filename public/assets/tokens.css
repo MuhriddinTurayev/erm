@@ -1,0 +1,32 @@
+/* Oftob — цветовые токены: корпоративный синий, светлая и тёмная тема (общие для сайта, панели и программы) */
+:root,[data-theme=light]{
+  --bg:#f3f5f9;--surface:#fff;--surface-2:#f8fafc;--sunken:#eef2f7;--hover:#f1f5f9;
+  --border:#dde3ec;--border-2:#e9edf3;--ring:rgba(37,99,235,.2);
+  --text:#0f172a;--text-2:#334155;--muted:#64748b;--faint:#94a3b8;
+  --accent:#1d4ed8;--accent-hover:#1e40af;--accent-soft:#eaf1ff;--accent-text:#1d4ed8;--on-accent:#fff;
+  --ok:#15803d;--ok-soft:#ecf8f0;--ok-text:#15803d;
+  --warn:#b45309;--warn-soft:#fdf6e9;--warn-text:#a16207;
+  --bad:#c81e1e;--bad-soft:#fdf0f0;--bad-text:#b91c1c;
+  --info:#0369a1;--info-soft:#ebf6fc;--info-text:#0369a1;
+  --chart:#1d4ed8;--chart-2:#93b4f5;--chart-muted:#dde3ec;
+  /* боковое меню — тёмно-синее в обеих темах */
+  --nav-bg:#0f2547;--nav-bg-2:#16305a;--nav-text:#c7d3e6;--nav-muted:#7f93b3;--nav-active:#1f3d6e;--nav-line:#1c3561;--nav-accent:#60a5fa;
+  --sh-sm:0 1px 2px rgba(15,23,42,.05);--sh:0 1px 3px rgba(15,23,42,.08),0 1px 2px rgba(15,23,42,.04);--sh-lg:0 16px 40px -12px rgba(15,23,42,.25);
+  --r:10px;--r-s:6px;--r-l:12px;
+  --font:Inter,ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;
+  color-scheme:light;
+}
+[data-theme=dark]{
+  --bg:#0b1220;--surface:#111a2b;--surface-2:#0f1726;--sunken:#0c1422;--hover:#17233a;
+  --border:#22314b;--border-2:#1b2840;--ring:rgba(96,165,250,.3);
+  --text:#e8eef8;--text-2:#c3cfe2;--muted:#8a9ab4;--faint:#5f7090;
+  --accent:#3b82f6;--accent-hover:#60a5fa;--accent-soft:rgba(59,130,246,.14);--accent-text:#93c5fd;--on-accent:#fff;
+  --ok:#22c55e;--ok-soft:rgba(34,197,94,.12);--ok-text:#4ade80;
+  --warn:#f59e0b;--warn-soft:rgba(245,158,11,.12);--warn-text:#fbbf24;
+  --bad:#ef4444;--bad-soft:rgba(239,68,68,.13);--bad-text:#f87171;
+  --info:#38bdf8;--info-soft:rgba(56,189,248,.12);--info-text:#7dd3fc;
+  --chart:#3b82f6;--chart-2:#1e3a6e;--chart-muted:#22314b;
+  --nav-bg:#08101d;--nav-bg-2:#0e1a2e;--nav-text:#b6c3d9;--nav-muted:#6b7c99;--nav-active:#16253f;--nav-line:#16233a;--nav-accent:#60a5fa;
+  --sh-sm:none;--sh:none;--sh-lg:0 20px 50px -12px rgba(0,0,0,.7);
+  color-scheme:dark;
+}

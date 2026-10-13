@@ -1,0 +1,30 @@
+<?php
+
+return [
+    'array' => 'Майдони «:attribute» бояд рӯйхат бошад.',
+    'boolean' => 'Майдони «:attribute» бояд «ҳа» ё «не» бошад.',
+    'confirmed' => 'Майдони «:attribute» бо тасдиқ мувофиқат намекунад.',
+    'date' => 'Майдони «:attribute» бояд сана бошад.',
+    'date_format' => 'Майдони «:attribute» бояд дар формати :format бошад.',
+    'email' => 'Майдони «:attribute» бояд email-и дуруст бошад.',
+    'exists' => 'Қимати интихобшудаи «:attribute» ёфт нашуд.',
+    'in' => 'Қимати нодурусти «:attribute» интихоб шудааст.',
+    'integer' => 'Майдони «:attribute» бояд адади бутун бошад.',
+    'max' => ['numeric' => '«:attribute» набояд аз :max зиёд бошад.', 'string' => '«:attribute» набояд аз :max аломат дарозтар бошад.', 'array' => 'Дар «:attribute» на зиёда аз :max унсур.'],
+    'min' => ['numeric' => '«:attribute» бояд на камтар аз :min бошад.', 'string' => '«:attribute» бояд на камтар аз :min аломат бошад.', 'array' => 'Дар «:attribute» на камтар аз :min унсур.'],
+    'numeric' => 'Майдони «:attribute» бояд адад бошад.',
+    'regex' => 'Майдони «:attribute» нодуруст пур карда шудааст.',
+    'required' => 'Майдони «:attribute»-ро пур кунед.',
+    'required_if' => 'Майдони «:attribute»-ро пур кунед.',
+    'string' => 'Майдони «:attribute» бояд матн бошад.',
+    'unique' => 'Чунин қимати майдони «:attribute» аллакай банд аст.',
+    'url' => 'Майдони «:attribute» бояд пайванд бошад.',
+    'alpha_dash' => '«:attribute» метавонад танҳо ҳарфҳои лотинӣ, рақамҳо, тире ва зерхат дошта бошад.',
+    'password' => ['min' => 'Парол бояд на камтар аз :min аломат бошад.'],
+    'attributes' => [
+        'email' => 'Email', 'password' => 'Парол', 'name' => 'Ном', 'company' => 'Номи ширкат', 'phone' => 'Телефон', 'role' => 'Нақш',
+        'slug' => 'Код', 'price_month' => 'Нарх дар моҳ', 'api_key' => 'Калиди API', 'model' => 'Модел', 'base_url' => 'Суроғаи API',
+        'report_time' => 'Вақти фиристодан', 'report_email' => 'Email-и роҳбар', 'report_chats' => 'Telegram chat_id', 'amount' => 'Маблағ', 'months' => 'Моҳҳо',
+        'name.ru' => 'Ном (русӣ)', 'messages' => 'Савол', 'system' => 'Маълумоти лоиҳа', 'confirm' => 'Тасдиқ',
+    ],
+];

@@ -1,0 +1,154 @@
+<?php
+
+namespace App\Http\Controllers\Company;
+
+use App\Models\CashDesk;
+use App\Models\Contract;
+use App\Models\PaymentRequest;
+use App\Models\SiteLog;
+use App\Models\SupplyRequest;
+use App\Models\Task;
+use App\Services\CompanyStats;
+use App\Services\Erp\Cash;
+use App\Services\Erp\Money;
+use App\Services\Erp\Payments;
+use App\Services\Erp\Stock;
+use App\Services\StateWriter;
+use Illuminate\Http\Request;
+
+/** Мониторинг руководителя (настраиваемые виджеты), прогноз денег, фотоотчёты с геометкой */
+class MonitorController extends ErpController
+{
+    public const WIDGETS = [
+        'money' => ['Деньги в кассах', 'wallet'],
+        'today' => ['Сегодня по объектам', 'calendar'],
+        'approvals' => ['Ждут моего решения', 'file-check'],
+        'forecast' => ['Прогноз денег на 8 недель', 'trending-up'],
+        'limits' => ['Лимиты по статьям', 'gauge'],
+        'projects' => ['Готовность объектов', 'building-2'],
+        'tasks' => ['Задачи', 'list-checks'],
+        'stock' => ['Склад: заканчивается', 'package'],
+        'supply' => ['Снабжение', 'truck'],
+        'debts' => ['Долги по договорам', 'scale'],
+        'photos' => ['Последние фотоотчёты', 'camera'],
+    ];
+
+    private function widgets(): array
+    {
+        $saved = $this->ws()->setting('widgets.'.auth()->id());
+
+        return is_array($saved) ? array_values(array_intersect($saved, array_keys(self::WIDGETS))) : array_keys(self::WIDGETS);
+    }
+
+    public function index(Request $request)
+    {
+        $ws = $this->ws();
+        Cash::ensureDefaults($ws);
+        $u = $request->user();
+        $on = $this->widgets();
+        $w = [];
+        $base = Money::base($ws);
+        $cur = CompanyStats::currency($ws);
+        $money = $u->seesMoney();
+
+        if (in_array('money', $on) && $money) {
+            $bal = Cash::balances($ws);
+            $w['money'] = ['total' => Cash::totalBase($ws), 'desks' => CashDesk::of($ws->id)->where('is_active', true)->get()->map(fn ($d) => ['d' => $d, 'b' => $bal[$d->id] ?? 0]), 'rate' => Money::usdRate($ws)];
+        }
+        if (in_array('today', $on) && $money) {
+            $w['today'] = CompanyStats::build($ws, null, $u->allowedObjects());
+        }
+        if (in_array('approvals', $on)) {
+            $prs = PaymentRequest::of($ws->id)->where('status', 'pending')->with('user')->latest('id')->get()->filter(fn ($r) => Payments::canDecide($u, $r));
+            $w['approvals'] = ['list' => $prs->take(6), 'n' => $prs->count(), 'toPay' => PaymentRequest::of($ws->id)->where('status', 'approved')->count(),
+                'exp' => \App\Models\Expense::where('workspace_id', $ws->id)->where('status', 'pending')->count()];
+        }
+        if (in_array('forecast', $on) && $money) {
+            $w['forecast'] = Cash::forecast($ws, 8);
+        }
+        if (in_array('limits', $on) && $money) {
+            $w['limits'] = array_values(array_filter(Cash::limits($ws), fn ($r) => $r['limit'] > 0 || $r['spent'] > 0));
+        }
+        if (in_array('projects', $on)) {
+            $w['projects'] = collect($ws->projects())->filter(fn ($p) => $u->allowedObjects() === null || in_array((string) $p['id'], $u->allowedObjects(), true))
+                ->map(function ($p) {
+                    $t = $s = 0;
+                    $late = 0;
+                    foreach ((array) ($p['stages'] ?? []) as $st) {
+                        $d = max(1, (int) ($st['dur'] ?? 1));
+                        $t += $d;
+                        $s += $d * (float) ($st['progress'] ?? 0);
+                    }
+
+                    return ['name' => $p['name'] ?? '', 'pct' => $t ? round($s / $t) : 0, 'status' => $p['status'] ?? '', 'demo' => \App\Models\Workspace::isDemo($p)];
+                })->values();
+        }
+        if (in_array('tasks', $on)) {
+            $tq = Task::of($ws->id)->where('status', '!=', 'done')->tap(fn ($q) => $this->scopeProjects($q));
+            $w['tasks'] = ['open' => (clone $tq)->count(), 'overdue' => (clone $tq)->whereDate('due_date', '<', now())->count(), 'review' => (clone $tq)->where('status', 'review')->count(),
+                'mine' => (clone $tq)->where('assignee_id', $u->id)->with('assignee')->orderBy('due_date')->limit(6)->get()];
+        }
+        if (in_array('stock', $on)) {
+            $w['stock'] = Stock::low($ws);
+        }
+        if (in_array('supply', $on)) {
+            $w['supply'] = SupplyRequest::of($ws->id)->whereIn('status', ['new', 'approved', 'ordered', 'partial'])->selectRaw('status, count(*) n')->groupBy('status')->pluck('n', 'status');
+        }
+        if (in_array('debts', $on) && $money) {
+            $rows = [];
+            foreach (Contract::of($ws->id)->where('status', 'active')->with('counterparty')->get() as $c) {
+                $paid = (float) $c->ops()->where('type', $c->direction === 'out' ? 'out' : 'in')->sum('amount_base');
+                $left = Money::toBase($ws, $c->amount, $c->currency) - $paid;
+                if ($left > 0) {
+                    $rows[] = ['c' => $c, 'left' => $left];
+                }
+            }
+            usort($rows, fn ($a, $b) => $b['left'] <=> $a['left']);
+            $w['debts'] = ['we' => array_sum(array_map(fn ($r) => $r['c']->direction === 'out' ? $r['left'] : 0, $rows)),
+                'us' => array_sum(array_map(fn ($r) => $r['c']->direction === 'in' ? $r['left'] : 0, $rows)), 'top' => array_slice($rows, 0, 6),
+                'inter' => Cash::interProject($ws)];
+        }
+        if (in_array('photos', $on)) {
+            $w['photos'] = SiteLog::with('user')->where('workspace_id', $ws->id)->whereNotNull('photos')->tap(fn ($q) => $this->scopeProjects($q))->latest('id')->limit(8)->get();
+        }
+
+        return view('company.erp.monitor', ['ws' => $ws, 'w' => $w, 'on' => $on, 'cur' => $cur, 'base' => $base, 'projects' => StateWriter::projects($ws)]);
+    }
+
+    public function saveWidgets(Request $request)
+    {
+        $list = array_values(array_intersect((array) $request->input('w', []), array_keys(self::WIDGETS)));
+        $this->ws()->putSetting('widgets.'.$request->user()->id, $list);
+
+        return back()->with('ok', __('Панель настроена'));
+    }
+
+    public function forecast()
+    {
+        $ws = $this->ws();
+        Cash::ensureDefaults($ws);
+
+        return view('company.erp.forecast', ['ws' => $ws, 'rows' => Cash::forecast($ws, 12), 'inter' => Cash::interProject($ws), 'limits' => Cash::limits($ws),
+            'cur' => CompanyStats::currency($ws), 'total' => Cash::totalBase($ws)]);
+    }
+
+    /** Фотоотчёт с объекта: фото + геометка + время съёмки (с телефона прямо из браузера) */
+    public function photo(Request $request)
+    {
+        $u = $this->editor();
+        $ws = $this->ws();
+        $d = $request->validate(['project_id' => ['required', 'string', 'max:40'], 'text' => ['nullable', 'string', 'max:2000'],
+            'photos' => ['required', 'array', 'max:10'], 'photos.*' => ['image', 'max:15360'],
+            'lat' => ['nullable', 'numeric', 'between:-90,90'], 'lng' => ['nullable', 'numeric', 'between:-180,180'], 'accuracy' => ['nullable', 'numeric', 'min:0']]);
+        $this->checkProject($d['project_id']);
+        $paths = [];
+        foreach ($request->file('photos') as $f) {
+            $paths[] = $f->store('logs/'.$ws->id.'/'.now()->format('Y-m'), 'local');
+        }
+        SiteLog::create(['workspace_id' => $ws->id, 'project_id' => $d['project_id'], 'user_id' => $u->id, 'date' => $ws->localNow()->toDateString(),
+            'text' => $d['text'] ?? null, 'photos' => $paths, 'source' => 'web', 'lat' => $d['lat'] ?? null, 'lng' => $d['lng'] ?? null,
+            'accuracy' => isset($d['accuracy']) ? (int) $d['accuracy'] : null, 'taken_at' => now()]);
+
+        return back()->with('ok', __('Фотоотчёт сохранён'));
+    }
+}

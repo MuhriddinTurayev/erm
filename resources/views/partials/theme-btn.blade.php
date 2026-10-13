@@ -1,0 +1,1 @@
+<button type="button" class="icon-btn theme-btn" onclick="toggleTheme()" title="{{ __('Светлая / тёмная тема') }}" aria-label="{{ __('Светлая / тёмная тема') }}">{!! ic('moon', 'only-light') !!}{!! ic('sun', 'only-dark') !!}</button>

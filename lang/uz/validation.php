@@ -1,0 +1,30 @@
+<?php
+
+return [
+    'array' => '«:attribute» maydoni ro\'yxat bo\'lishi kerak.',
+    'boolean' => '«:attribute» maydoni «ha» yoki «yo\'q» bo\'lishi kerak.',
+    'confirmed' => '«:attribute» maydoni tasdiq bilan mos kelmaydi.',
+    'date' => '«:attribute» maydoni sana bo\'lishi kerak.',
+    'date_format' => '«:attribute» maydoni :format formatida bo\'lishi kerak.',
+    'email' => '«:attribute» maydoni to\'g\'ri email bo\'lishi kerak.',
+    'exists' => '«:attribute» uchun tanlangan qiymat topilmadi.',
+    'in' => '«:attribute» uchun noto\'g\'ri qiymat tanlangan.',
+    'integer' => '«:attribute» maydoni butun son bo\'lishi kerak.',
+    'max' => ['numeric' => '«:attribute» :max dan katta bo\'lmasligi kerak.', 'string' => '«:attribute» :max ta belgidan uzun bo\'lmasligi kerak.', 'array' => '«:attribute» da :max tadan ko\'p element bo\'lmasligi kerak.'],
+    'min' => ['numeric' => '«:attribute» kamida :min bo\'lishi kerak.', 'string' => '«:attribute» kamida :min ta belgidan iborat bo\'lishi kerak.', 'array' => '«:attribute» da kamida :min ta element bo\'lishi kerak.'],
+    'numeric' => '«:attribute» maydoni son bo\'lishi kerak.',
+    'regex' => '«:attribute» maydoni noto\'g\'ri to\'ldirilgan.',
+    'required' => '«:attribute» maydonini to\'ldiring.',
+    'required_if' => '«:attribute» maydonini to\'ldiring.',
+    'string' => '«:attribute» maydoni matn bo\'lishi kerak.',
+    'unique' => '«:attribute» maydonining bunday qiymati allaqachon band.',
+    'url' => '«:attribute» maydoni havola bo\'lishi kerak.',
+    'alpha_dash' => '«:attribute» faqat lotin harflari, raqamlar, chiziqcha va pastki chiziqdan iborat bo\'lishi mumkin.',
+    'password' => ['min' => 'Parol kamida :min ta belgidan iborat bo\'lishi kerak.'],
+    'attributes' => [
+        'email' => 'Email', 'password' => 'Parol', 'name' => 'Ism', 'company' => 'Kompaniya nomi', 'phone' => 'Telefon', 'role' => 'Rol',
+        'slug' => 'Kod', 'price_month' => 'Oylik narx', 'api_key' => 'API kaliti', 'model' => 'Model', 'base_url' => 'API manzili',
+        'report_time' => 'Yuborish vaqti', 'report_email' => 'Rahbar emaili', 'report_chats' => 'Telegram chat_id', 'amount' => 'Summa', 'months' => 'Oylar',
+        'name.ru' => 'Nomi (ruscha)', 'messages' => 'Savol', 'system' => 'Loyiha ma\'lumotlari', 'confirm' => 'Tasdiqlash',
+    ],
+];

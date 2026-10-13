@@ -1,0 +1,1 @@
+<span class="lang notr">@foreach (config('oftob.locales') as $k => [$name, $short])<a href="{{ lang_url($k) }}" class="{{ app()->getLocale() === $k ? 'on' : '' }}" title="{{ $name }}">{{ $short }}</a>@endforeach</span>
