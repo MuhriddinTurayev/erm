@@ -44,9 +44,9 @@
   <div class="wrap">
     <a href="/" style="text-decoration:none" aria-label="{{ $brand }}">@include('partials.logo')</a>
     <nav class="links">
+      <a href="{{ $h('#leaks') }}">{{ st('Потери') }}</a>
+      <a href="{{ $h('#math') }}">{{ st('Калькулятор') }}</a>
       <a href="{{ $h('#modules') }}">{{ st('Модули') }}</a>
-      <a href="{{ $h('#report') }}">{{ st('Отчёт директору') }}</a>
-      <a href="{{ $h('#security') }}">{{ st('Безопасность') }}</a>
       <a href="{{ $h('#pricing') }}">{{ st('Тарифы') }}</a>
       <a href="/blog">{{ st('Блог') }}</a>
       <a href="{{ $h('#faq') }}">{{ st('Вопросы') }}</a>
@@ -58,7 +58,7 @@
         <a class="btn btn-p" href="{{ $appUrl }}">{{ st('Открыть программу') }}{!! ic('arrow-right') !!}</a>
       @else
         <a class="btn btn-ghost hide-s" href="/login">{{ st('Войти') }}</a>
-        @if ($regOpen)<a class="btn btn-p" href="/register">{{ st('Попробовать бесплатно') }}</a>@endif
+        <a class="btn btn-p" href="{{ $h('#demo') }}">{{ st('Бесплатный разбор') }}</a>
       @endif
       <button class="icon-btn burger" onclick="document.body.classList.toggle('nav-open')" aria-label="Menu">{!! ic('menu') !!}</button>
     </div>
@@ -74,8 +74,8 @@
     <div><a href="/" style="text-decoration:none">@include('partials.logo')</a>
       <p class="muted" style="max-width:340px;margin-top:14px;font-size:14px">{{ st('ERP и CRM для строительных компаний: деньги, объекты, склад, снабжение, продажи квартир и ежедневный отчёт руководителю.') }}</p>
       <div class="foot-badges"><span>{!! ic('lock', '', 14) !!}{{ st('Шифрование данных') }}</span><span>{!! ic('server', '', 14) !!}{{ st('Ежедневные резервные копии') }}</span></div></div>
-    <div><h4>{{ st('Продукт') }}</h4><a href="{{ $h('#modules') }}">{{ st('Модули') }}</a><a href="{{ $h('#report') }}">{{ st('Отчёт директору') }}</a><a href="{{ $h('#security') }}">{{ st('Безопасность') }}</a><a href="{{ $h('#pricing') }}">{{ st('Тарифы') }}</a><a href="/blog">{{ st('Блог') }}</a></div>
-    <div><h4>{{ st('Компания') }}</h4><a href="/login">{{ st('Войти') }}</a>@if ($regOpen)<a href="/register">{{ st('Регистрация') }}</a>@endif<a href="/privacy">{{ st('Политика конфиденциальности') }}</a><a href="/terms">{{ st('Условия использования') }}</a></div>
+    <div><h4>{{ st('Продукт') }}</h4><a href="{{ $h('#math') }}">{{ st('Калькулятор потерь') }}</a><a href="{{ $h('#modules') }}">{{ st('Модули') }}</a><a href="{{ $h('#report') }}">{{ st('Отчёт директору') }}</a><a href="{{ $h('#security') }}">{{ st('Безопасность') }}</a><a href="{{ $h('#pricing') }}">{{ st('Тарифы') }}</a><a href="/blog">{{ st('Блог') }}</a></div>
+    <div><h4>{{ st('Компания') }}</h4><a href="{{ $h('#demo') }}">{{ st('Бесплатный разбор') }}</a><a href="/login">{{ st('Войти') }}</a>@if ($regOpen)<a href="/register">{{ st('Регистрация') }}</a>@endif<a href="/privacy">{{ st('Политика конфиденциальности') }}</a><a href="/terms">{{ st('Условия использования') }}</a></div>
     <div><h4>{{ st('Контакты') }}</h4>
       @if ($support['phone'])<a href="tel:{{ preg_replace('/[^+\d]/', '', $support['phone']) }}">{!! ic('phone', '', 14) !!} {{ $support['phone'] }}</a>@endif
       @if ($support['telegram'])<a href="https://t.me/{{ ltrim($support['telegram'], '@') }}" target="_blank" rel="noopener">{!! ic('send', '', 14) !!} Telegram</a>@endif

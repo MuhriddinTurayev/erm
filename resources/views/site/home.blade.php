@@ -1,6 +1,6 @@
 @extends('layouts.site')
-@section('title', $brand.' — '.st('ERP и CRM для строительных компаний'))
-@section('description', st('Кассы и валюта, заявки на оплату с согласованием, склад с QR, снабжение, тендеры, договоры, задачи, продажи квартир и ежедневный отчёт директору в Telegram. На русском, узбекском и таджикском.'))
+@section('title', $brand.' — '.st('ERP для стройки: контроль денег, склада и подрядчиков'))
+@section('description', st('Найдите, где стройка теряет деньги: согласование платежей, склад с QR, договоры с подрядчиками, кассы в сумах и долларах и отчёт директору в Telegram. Бесплатный разбор за 20 минут.'))
 @php
     $modules = [
         ['wallet', st('Кассы, счета и валюта'), st('Несколько касс и банковских счетов в сумах и долларах, обмен по курсу ЦБ, переводы, выплата зарплаты, лимиты по статьям.')],
@@ -16,7 +16,25 @@
         ['layout-grid', st('Продажи квартир'), st('Шахматка, бронь, рассрочка, график платежей, кабинет покупателя и шахматка для вашего сайта.')],
         ['sparkles', st('ИИ-аналитик'), st('Gemini, ChatGPT, DeepSeek или Claude находит перерасход, читает чеки по фото и отвечает по вашим данным.')],
     ];
+    // утечки денег: проблема → как закрывает программа
+    $leaks = [
+        ['receipt', st('Смета отдельно, расходы отдельно'), st('Закупки и работы не сверяют со сметой. О перерасходе узнают, когда объект уже почти сдан.'), st('Каждый расход сразу сравнивается со сметой и лимитом статьи')],
+        ['hand-coins', st('Платежи «по звонку»'), st('Деньги уходят без заявки и подписи. Потом никто не помнит, кто разрешил и почему заплатили дважды.'), st('Каждая оплата — по заявке, с цепочкой согласования и защитой от дублей')],
+        ['package-x', st('Склад в тетради'), st('Материал покупают повторно, потому что не знают остаток. Часть уезжает с объекта без следа.'), st('Остатки по складам и партиям с QR, выдача только на объект')],
+        ['hourglass', st('Простои и сорванные сроки'), st('Неделя задержки — это аренда техники, зарплата бригад и неустойка заказчику.'), st('Этапы и сроки на графике, просрочки видны в отчёте каждый вечер')],
+        ['handshake', st('Подрядчику заплатили вперёд'), st('Аванс выдан, акт не подписан, работа сделана наполовину. Долг подрядчика никто не считает.'), st('Договоры с остатком долга, оплата только после согласования')],
+        ['file-x', st('Отчёт собирают неделю'), st('Цифры сводят вручную в Excel, ошибаются и опаздывают. Решения принимаются наугад.'), st('Отчёт директору готов сам — каждый вечер в Telegram')],
+    ];
+    // калькулятор: статья потерь — [ключ, иконка, название, пояснение, мин %, макс %, по умолчанию %]
+    $losses = [
+        ['materials', 'package-x', st('Перерасход и двойные закупки материалов'), st('покупки «про запас», потери и хищения на объекте'), 1, 5, 2.5],
+        ['supply', 'truck', st('Завышенные цены поставщиков'), st('закупка без сравнения нескольких предложений'), 0.5, 4, 1.5],
+        ['payments', 'hand-coins', st('Ошибки и дубли в платежах'), st('оплата без согласования, двойные и лишние платежи'), 0.5, 4, 1],
+        ['delays', 'hourglass', st('Простои и срыв сроков'), st('аренда техники, зарплата бригад, неустойки'), 1, 6, 2.5],
+        ['contractors', 'handshake', st('Переплата подрядчикам'), st('оплата невыполненных и непринятых работ'), 0.5, 4, 1.5],
+    ];
     $faq = [
+        [st('Что будет на бесплатном разборе?'), st('Онлайн-встреча на 20 минут: узнаем, как сейчас устроены деньги, склад и согласования, покажем программу на похожем примере и вместе посчитаем возможную экономию. Это ни к чему вас не обязывает.')],
         [st('Нужно ли что-то устанавливать?'), st('Нет. Программа работает в браузере на компьютере, планшете и телефоне. Прорабы могут работать через Telegram-бота.')],
         [st('На каких языках работает программа?'), st('На русском, узбекском и таджикском. Каждый сотрудник выбирает свой язык, отчёт руководителю приходит на языке компании.')],
         [st('Кто видит деньги компании?'), st('Только те, кому вы разрешили. Руководитель настраивает доступ к каждому разделу для каждой роли и к каждому объекту.')],
@@ -24,25 +42,22 @@
         [st('Можно ли перенести данные из Excel?'), st('Да. Наши специалисты помогут перенести объекты, контрагентов, остатки склада и продажи бесплатно на тарифах «Бизнес» и «Корпорация».')],
         [st('Что будет после пробного периода?'), st('Вы выбираете тариф и оплачиваете удобным способом: перечисление, Click, Payme или наличные. Все данные сохраняются.')],
         [st('Работает ли программа с долларом?'), st('Да. Кассы и договоры можно вести в сумах (сомони) и долларах, программа пересчитывает по курсу ЦБ или по вашему курсу.')],
-        [st('Можно ли вести несколько объектов и компаний?'), st('Да. Количество объектов зависит от тарифа, на тарифе «Корпорация» — без ограничений.')],
     ];
+    $sent = session('demo_ok');
 @endphp
 @section('content')
 <section class="hero" data-cms="Первый экран">
   <div class="wrap">
     <div class="hero-copy">
-      <span class="eyebrow-pill">{!! ic('badge-check', '', 15) !!}{{ st('ERP-платформа №1 для застройщиков Узбекистана и Таджикистана') }}</span>
-      <h1>{!! st_html('Вся стройка и все деньги компании — <em>в одной системе</em>') !!}</h1>
-      <p class="sub">{{ st('Кассы и валюта, согласование платежей, склад, снабжение, тендеры, договоры, задачи и продажи квартир. Прорабы работают с телефона и через Telegram, а итог дня приходит директору каждый вечер.') }}</p>
+      <span class="eyebrow-pill">{!! ic('hard-hat', '', 15) !!}{{ st('Для застройщиков и подрядчиков Узбекистана и Таджикистана') }}</span>
+      <h1>{!! st_html('Перестаньте терять деньги на стройке <em>незаметно</em>') !!}</h1>
+      <p class="sub">{{ st('Сметы, кассы, склад, подрядчики и все объекты — в одной системе. Каждый платёж проходит согласование, каждый мешок цемента учтён, а итог дня приходит директору в Telegram.') }}</p>
       <div class="cta">
-        @if ($appUrl)
-          <a class="btn btn-p btn-l" href="{{ $appUrl }}">{{ st('Открыть программу') }}{!! ic('arrow-right') !!}</a>
-        @elseif ($regOpen)
-          <a class="btn btn-p btn-l" href="/register">{{ st('Начать бесплатно — 14 дней') }}{!! ic('arrow-right') !!}</a>
-        @endif
-        <a class="btn btn-l" href="{{ $support['telegram'] ? 'https://t.me/'.ltrim($support['telegram'], '@') : '#modules' }}" @if ($support['telegram']) target="_blank" rel="noopener" @endif>{!! ic('circle-play') !!}{{ st('Заказать демонстрацию') }}</a>
+        <a class="btn btn-p btn-l" href="#demo">{!! ic('calendar-clock') !!}{{ st('Получить бесплатный разбор') }}</a>
+        <a class="btn btn-l" href="#math">{!! ic('calculator') !!}{{ st('Посчитать свои потери') }}</a>
       </div>
-      <div class="trust"><span>{!! ic('check', '', 16) !!}{{ st('без карты и договора') }}</span><span>{!! ic('languages', '', 16) !!}{{ st('русский · o‘zbekcha · тоҷикӣ') }}</span><span>{!! ic('headset', '', 16) !!}{{ st('бесплатное внедрение') }}</span></div>
+      <p class="hero-note">{!! ic('clock', '', 15) !!}{{ st('20 минут онлайн — покажем на ваших цифрах, где утекают деньги') }}</p>
+      <div class="trust"><span>{!! ic('check', '', 16) !!}{{ st('14 дней бесплатно') }}</span><span>{!! ic('languages', '', 16) !!}{{ st('русский · o‘zbekcha · тоҷикӣ') }}</span><span>{!! ic('headset', '', 16) !!}{{ st('бесплатное внедрение') }}</span></div>
     </div>
     <div class="mock reveal">
       <div class="win">
@@ -62,43 +77,176 @@
         </div>
       </div>
       <div class="tg-float">
-        <div class="tg-h"><span class="logo-mark" style="width:26px;height:26px">{!! ic('send', '', 14) !!}</span><b>{{ $brand }}</b><small class="muted">14:32</small></div>
-        <div class="tg-b"><b>{{ st('Нужно согласовать оплату') }}</b><br>{{ st('Заявка №248 · Арматура А500, 12 т') }}<br><b>84 600 000 {{ st('сум') }}</b><div class="tg-btns"><span>{{ st('Согласовать') }}</span><span>{{ st('Отклонить') }}</span></div></div>
+        <div class="tg-h"><span class="logo-mark" style="width:26px;height:26px">{!! ic('triangle-alert', '', 14) !!}</span><b>{{ $brand }}</b><small class="muted">14:32</small></div>
+        <div class="tg-b"><b>{{ st('Найден перерасход') }}</b><br>{{ st('Бетон B25: цена на 18% выше сметы') }}<br><b>+38 400 000 {{ st('сум') }}</b><div class="tg-btns"><span>{{ st('Открыть') }}</span><span>{{ st('Тендер') }}</span></div></div>
       </div>
     </div>
   </div>
 </section>
 
-<section class="strip" data-cms="Цифры доверия">
+<section class="strip" data-cms="Цифры">
   <div class="wrap">
-    <div><b data-count="{{ (float) preg_replace('/[^\d.]/', '', st('150+')) }}" data-suf="+">{{ st('150+') }}</b><span>{{ st('строительных компаний') }}</span></div>
-    <div><b data-count="{{ (float) preg_replace('/[^\d.]/', '', st('1200+')) }}" data-suf="+">{{ st('1200+') }}</b><span>{{ st('объектов под управлением') }}</span></div>
-    <div><b>{{ st('99,9%') }}</b><span>{{ st('доступность сервиса') }}</span></div>
-    <div><b>{{ st('24/7') }}</b><span>{{ st('поддержка на вашем языке') }}</span></div>
+    <div><b data-count="{{ count(config('oftob.modules')) }}">{{ count(config('oftob.modules')) }}</b><span>{{ st('модулей в одной системе') }}</span></div>
+    <div><b data-count="3">3</b><span>{{ st('языка интерфейса') }}</span></div>
+    <div><b data-count="14">14</b><span>{{ st('дней бесплатно, без карты') }}</span></div>
+    <div><b>24/7</b><span>{{ st('доступ с телефона и компьютера') }}</span></div>
   </div>
 </section>
 
-<section class="sec sm" data-cms="Логотипы клиентов">
+<section class="sec sm" data-cms="Интеграции">
   <div class="wrap">
-    <p class="logos-t">{{ st('Нам доверяют застройщики и подрядчики') }}</p>
-    <div class="logos">@foreach (array_filter(array_map('trim', explode(',', st('Navruz Qurilish, Samarqand Invest, Dushanbe City, Toshkent Build, Pamir Stroy, Fergana Group')))) as $lg)<span>{!! ic('building-2', '', 18) !!}{{ $lg }}</span>@endforeach</div>
+    <p class="logos-t">{{ st('Работает вместе с привычными сервисами') }}</p>
+    <div class="logos">@foreach ([['send', 'Telegram'], ['key-round', 'Google'], ['file-pen-line', 'Didox'], ['sparkles', 'Gemini'], ['sparkles', 'ChatGPT'], ['sparkles', 'DeepSeek'], ['sparkles', 'Claude']] as [$icn, $lg])<span>{!! ic($icn, '', 18) !!}{{ $lg }}</span>@endforeach</div>
   </div>
 </section>
 
-<section class="sec" data-cms="Проблемы">
+<section class="sec" id="leaks" data-cms="Куда уходят деньги">
   <div class="wrap">
-    <div class="sec-h reveal"><span class="eyebrow">{{ st('Знакомо?') }}</span><h2>{{ st('Деньги уходят, а куда — непонятно') }}</h2><p>{{ st('Типичные проблемы строительной компании, которые решает программа') }}</p></div>
-    <div class="pains">
-      @foreach ([[st('Сколько у нас сейчас денег?'), st('Бухгалтер считает полдня, цифры в кассе и в банке расходятся.'), st('Все кассы и счета в сумах и долларах — на одном экране.')],
-                 [st('Кто разрешил этот платёж?'), st('Деньги уходят по звонку, потом никто не помнит, кто согласовал.'), st('Каждая оплата — через заявку и цепочку согласования с историей.')],
-                 [st('Куда делись материалы?'), st('Цемент закупили, а на объекте его нет. Склад в тетради.'), st('Склад с партиями и QR: видно, что, когда и на какой объект выдано.')]] as [$q, $a, $s])
-      <div class="pain reveal"><div class="q">«{{ $q }}»</div><p class="a">{{ $a }}</p><div class="s">{!! ic('circle-check', '', 17) !!}<span>{{ $s }}</span></div></div>
+    <div class="sec-h reveal"><span class="eyebrow">{{ st('Где утекают деньги') }}</span><h2>{{ st('Деньги стройки уходят не туда — и это видно слишком поздно') }}</h2><p>{{ st('Шесть утечек, которые встречаются почти в каждой строительной компании. Ни одна из них не видна в Excel сразу.') }}</p></div>
+    <div class="leaks">
+      @foreach ($leaks as $i => [$icn, $t, $d, $s])
+      <div class="leak reveal">
+        <div class="leak-top"><span class="leak-ic">{!! ic($icn, '', 20) !!}</span><span class="leak-n">{{ sprintf('%02d', $i + 1) }}</span></div>
+        <h3>{{ $t }}</h3><p>{{ $d }}</p>
+        <div class="leak-fix">{!! ic('circle-check', '', 17) !!}<span>{{ $s }}</span></div>
+      </div>
       @endforeach
     </div>
   </div>
 </section>
 
-<section class="sec alt" id="modules" data-cms="Модули">
+<section class="sec alt" id="day" data-cms="Один день с программой">
+  <div class="wrap split">
+    <div class="reveal">
+      <span class="eyebrow">{{ st('Как это выглядит') }}</span>
+      <h2>{{ st('Один день компании, где каждый сум на виду') }}</h2>
+      <ol class="day">
+        @foreach ([['08:30', 'sunrise', st('Прораб'), st('Отправил в Telegram заявку на арматуру и фото объекта с геометкой')],
+                   ['10:15', 'calculator', st('Бухгалтер'), st('Сверил заявку с лимитом статьи и договором поставщика')],
+                   ['11:00', 'briefcase', st('Директор'), st('Утвердил оплату одной кнопкой, не отрываясь от встречи')],
+                   ['14:40', 'warehouse', st('Склад'), st('Металл принят по QR, остаток обновился сам')],
+                   ['20:00', 'sunset', st('Директор'), st('Получил итог дня: деньги, расходы по объектам и вывод ИИ')]] as [$tm, $icn, $who, $what])
+        <li><span class="d-tm">{{ $tm }}</span><span class="d-ic">{!! ic($icn, '', 17) !!}</span><div><b>{{ $who }}</b><p>{{ $what }}</p></div></li>
+        @endforeach
+      </ol>
+    </div>
+    <div class="reveal">
+      <div class="gain">
+        <span class="gain-ic">{!! ic('target', '', 22) !!}</span>
+        <h3>{{ st('Что меняется уже в первый месяц') }}</h3>
+        <ul class="checks">
+          @foreach ([st('Все объекты и кассы — на одном экране, в реальном времени'), st('Ни одной оплаты без подписи ответственного'), st('Подрядчик получает деньги за принятую работу, а не за обещание'), st('Отчёт по деньгам — за одну кнопку, а не за неделю'), st('Решения по цифрам, а не по ощущениям')] as $c)
+          <li>{!! ic('check', '', 16) !!}<span>{{ $c }}</span></li>
+          @endforeach
+        </ul>
+        <a class="btn btn-p btn-block" href="#math">{!! ic('calculator') !!}{{ st('Сколько это в деньгах?') }}</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="math" data-cms="Калькулятор потерь">
+  <div class="wrap">
+    <div class="sec-h reveal"><span class="eyebrow">{{ st('Посчитайте сами') }}</span><h2>{{ st('Сколько теряет один ваш объект') }}</h2><p>{{ st('Укажите бюджет объекта и поправьте проценты под свою ситуацию. По умолчанию стоят осторожные значения из практики строительных компаний.') }}</p></div>
+    <div class="calc reveal" id="calc" data-plan="{{ $calc['plan'] }}" data-rate="{{ $calc['rate'] }}" data-uzs="{{ $calc['uzs'] }}" data-base="{{ $calc['base'] }}">
+      <div class="calc-in">
+        <div class="calc-budget">
+          <label for="cBudget">{{ st('Бюджет объекта') }}</label>
+          <div class="cb-row">
+            <input id="cBudget" inputmode="numeric" autocomplete="off" value="{{ $calc['base'] === 'tjs' ? '12 000 000' : '12 000 000 000' }}" aria-label="{{ st('Бюджет объекта') }}">
+            <div class="seg" id="cCur" role="group"><button type="button" class="on" data-c="{{ $calc['base'] }}">{{ $calc['base'] === 'tjs' ? st('смн') : st('сум') }}</button><button type="button" data-c="usd">$</button></div>
+          </div>
+          <div class="chips" id="cPresets"></div>
+        </div>
+        <div class="calc-rows">
+          @foreach ($losses as [$k, $icn, $t, $h, $min, $max, $def])
+          <div class="lrow" data-k="{{ $k }}">
+            <span class="l-ic">{!! ic($icn, '', 18) !!}</span>
+            <div class="l-main">
+              <div class="l-top"><b>{{ $t }}</b><span class="l-pct"><span data-pct>{{ str_replace('.', ',', $def) }}</span>%</span></div>
+              <small>{{ $h }}</small>
+              <input type="range" min="{{ $min }}" max="{{ $max }}" step="0.5" value="{{ $def }}" aria-label="{{ $t }}">
+            </div>
+            <b class="l-sum" data-sum>—</b>
+          </div>
+          @endforeach
+        </div>
+      </div>
+      <aside class="calc-out">
+        <span class="co-l">{{ st('Объект теряет') }}</span>
+        <div class="co-big" id="cTotal">—</div>
+        <div class="co-pct"><span id="cPct">9%</span> {{ st('бюджета') }}</div>
+        <div class="co-bar" id="cBar"></div>
+        <div class="co-save">
+          {!! ic('piggy-bank', '', 20) !!}
+          <div><span>{{ st('Если остановить хотя бы половину') }}</span><b id="cSave">—</b></div>
+        </div>
+        <p class="co-roi" id="cRoi" hidden>{{ st('Это в') }} <b id="cRoiX"></b> {{ st('раз больше годовой стоимости программы') }}</p>
+        <a class="btn btn-p btn-block btn-l" href="#demo" id="cGo">{!! ic('calendar-clock') !!}{{ st('Разобрать мои цифры бесплатно') }}</a>
+        <small class="co-note">{{ st('Расчёт ориентировочный. На разборе посчитаем по вашим реальным данным.') }}</small>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<section class="sec alt" id="demo" data-cms="Бесплатный разбор">
+  <div class="wrap">
+    <div class="demo reveal">
+      <div class="demo-pitch">
+        <span class="eyebrow-pill">{!! ic('clock', '', 15) !!}{{ st('Бесплатно · 20 минут · онлайн') }}</span>
+        <h2>{{ st('Покажем, где утекают деньги именно у вас') }}</h2>
+        <ul class="checks">
+          @foreach ([st('Разберём ваши объекты, кассы и согласования'), st('Покажем программу на примере, похожем на вашу компанию'), st('Посчитаем, сколько можно сэкономить уже в этом году'), st('Честно скажем, подходит ли вам программа — без навязывания')] as $c)
+          <li>{!! ic('check', '', 16) !!}<span>{{ $c }}</span></li>
+          @endforeach
+        </ul>
+        @if ($support['phone'] || $support['telegram'])
+        <div class="demo-contact">
+          <span>{{ st('Удобнее сразу поговорить?') }}</span>
+          @if ($support['phone'])<a href="tel:{{ preg_replace('/[^+\d]/', '', $support['phone']) }}">{!! ic('phone', '', 15) !!}{{ $support['phone'] }}</a>@endif
+          @if ($support['telegram'])<a href="https://t.me/{{ ltrim($support['telegram'], '@') }}" target="_blank" rel="noopener">{!! ic('send', '', 15) !!}Telegram</a>@endif
+        </div>
+        @endif
+      </div>
+      <div class="demo-form">
+        <div class="demo-ok" id="demoOk" @if (! $sent) hidden @endif>
+          <span class="ok-ic">{!! ic('circle-check', '', 30) !!}</span>
+          <h3>{{ st('Спасибо! Заявка принята') }}</h3>
+          <p>{{ st('Мы позвоним в течение рабочего дня и договоримся об удобном времени.') }}</p>
+        </div>
+        <form method="post" action="/demo" id="demoForm" novalidate @if ($sent) hidden @endif>
+          @csrf
+          <input type="text" name="website" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <input type="hidden" name="budget" id="dBudget" value="{{ old('budget') }}">
+          <input type="hidden" name="utm" value="{{ request('utm_source') }}">
+          <h3>{{ st('Запись на бесплатный разбор') }}</h3>
+          <label class="f">{{ st('Ваше имя') }}<input name="name" required maxlength="80" value="{{ old('name') }}" autocomplete="name" placeholder="{{ st('Например: Алишер') }}"><em data-err="name">{{ $errors->first('name') }}</em></label>
+          <label class="f">{{ st('Телефон') }}
+            <span class="tel">
+              <span class="sel"><select name="code" aria-label="{{ st('Код страны') }}">
+                @foreach ([['998', 'UZ', '90 123 45 67'], ['992', 'TJ', '90 123 4567'], ['7', 'RU', '912 345 67 89'], ['996', 'KG', '700 123 456']] as [$code, $flag, $ph])
+                <option value="{{ $code }}" data-ph="{{ $ph }}" @selected(old('code', app()->getLocale() === 'tg' ? '992' : '998') === $code)>{{ $flag }} +{{ $code }}</option>
+                @endforeach
+              </select></span>
+              <input name="phone" required inputmode="tel" autocomplete="tel-national" value="{{ old('phone') }}" placeholder="90 123 45 67">
+            </span>
+            <em data-err="phone">{{ $errors->first('phone') }}</em>
+          </label>
+          <label class="f"><span>{{ st('Компания') }} <small>{{ st('(необязательно)') }}</small></span><input name="company" maxlength="120" value="{{ old('company') }}" autocomplete="organization"></label>
+          <div class="f2">
+            <label class="f">{{ st('Что строите') }}<span class="sel"><select name="kind"><option value="">{{ st('Выберите') }}</option>@foreach (\App\Models\SiteLead::KINDS as $k => $n)<option value="{{ $k }}" @selected(old('kind') === $k)>{{ st($n) }}</option>@endforeach</select></span></label>
+            <label class="f">{{ st('Сколько объектов сейчас') }}<span class="sel"><select name="objects"><option value="">{{ st('Выберите') }}</option>@foreach (\App\Models\SiteLead::OBJECTS as $k => $n)<option value="{{ $k }}" @selected(old('objects') === $k)>{{ st($n) }}</option>@endforeach</select></span></label>
+          </div>
+          <label class="f">{{ st('Ваша должность') }}<span class="sel"><select name="role"><option value="">{{ st('Выберите') }}</option>@foreach (\App\Models\SiteLead::ROLES as $k => $n)<option value="{{ $k }}" @selected(old('role') === $k)>{{ st($n) }}</option>@endforeach</select></span></label>
+          <button class="btn btn-p btn-l btn-block" type="submit">{!! ic('calendar-clock') !!}<span>{{ st('Записаться на разбор') }}</span></button>
+          <p class="demo-priv">{!! ic('lock', '', 14) !!}<span>{{ st('Номер нужен только чтобы связаться с вами. Мы не передаём данные третьим лицам.') }} <a href="/privacy">{{ st('Политика конфиденциальности') }}</a></span></p>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="modules" data-cms="Модули">
   <div class="wrap">
     <div class="sec-h reveal"><span class="eyebrow">{{ st('Модули') }}</span><h2>{{ st('Всё для стройки — в одной платформе') }}</h2><p>{{ st('От заявки прораба до отчёта директору. Включайте нужные модули для каждой роли.') }}</p></div>
     <div class="feats">
@@ -109,7 +257,7 @@
   </div>
 </section>
 
-<section class="sec" data-cms="Как работает согласование">
+<section class="sec alt" data-cms="Как работает согласование">
   <div class="wrap">
     <div class="sec-h reveal"><span class="eyebrow">{{ st('Контроль платежей') }}</span><h2>{{ st('Ни одна оплата без согласования') }}</h2><p>{{ st('Вы сами задаёте, кто и в каком порядке утверждает платежи. Всё фиксируется: кто, когда и с каким комментарием.') }}</p></div>
     <div class="flow reveal">
@@ -120,7 +268,7 @@
   </div>
 </section>
 
-<section class="sec alt" id="report" data-cms="Отчёт директору">
+<section class="sec" id="report" data-cms="Отчёт директору">
   <div class="wrap split">
     <div class="reveal">
       <span class="eyebrow">{{ st('Ежедневный отчёт') }}</span>
@@ -147,7 +295,7 @@
   </div>
 </section>
 
-<section class="sec" data-cms="Telegram-бот и телефон">
+<section class="sec alt" data-cms="Telegram-бот и телефон">
   <div class="wrap split rev">
     <div class="reveal">
       <div class="bot-demo">
@@ -170,7 +318,7 @@
   </div>
 </section>
 
-<section class="sec alt" id="security" data-cms="Безопасность">
+<section class="sec" id="security" data-cms="Безопасность">
   <div class="wrap">
     <div class="sec-h reveal"><span class="eyebrow">{{ st('Безопасность') }}</span><h2>{{ st('Ваши данные под надёжной защитой') }}</h2><p>{{ st('Финансы компании — самая чувствительная информация. Мы защищаем её как банк.') }}</p></div>
     <div class="sec-grid">
@@ -186,7 +334,7 @@
   </div>
 </section>
 
-<section class="sec" id="ai" data-cms="Искусственный интеллект">
+<section class="sec alt" id="ai" data-cms="Искусственный интеллект">
   <div class="wrap split rev">
     <div class="chat reveal">
       <div class="u">{{ st('Где у нас перерасход в этом месяце?') }}</div>
@@ -208,7 +356,7 @@
   </div>
 </section>
 
-<section class="sec alt" data-cms="Сравнение">
+<section class="sec" data-cms="Сравнение">
   <div class="wrap">
     <div class="sec-h reveal"><span class="eyebrow">{{ st('Почему выбирают нас') }}</span><h2>{{ st('Больше, чем учёт в Excel или обычная CRM') }}</h2></div>
     <div class="cmp reveal"><table>
@@ -221,20 +369,23 @@
   </div>
 </section>
 
-<section class="sec" data-cms="Отзывы">
+<section class="sec alt" id="roles" data-cms="Для кого">
   <div class="wrap">
-    <div class="sec-h reveal"><span class="eyebrow">{{ st('Отзывы') }}</span><h2>{{ st('Что говорят руководители') }}</h2></div>
-    <div class="quotes">
-      @foreach ([[st('Раньше я узнавал о проблемах с деньгами, когда было уже поздно. Теперь каждый вечер вижу всё в Telegram, а платежи без моего согласования не проходят.'), st('Шерзод Каримов'), st('директор, Navruz Qurilish')],
-                 [st('Склад и снабжение навели порядок за месяц: перестали терять материалы, а тендеры сэкономили нам около 12% на бетоне.'), st('Фарход Назаров'), st('коммерческий директор, Pamir Stroy')],
-                 [st('Прорабы отправляют расходы и фото прямо в Telegram, бухгалтерии больше не нужно собирать чеки по объектам.'), st('Малика Юсупова'), st('главный бухгалтер, Samarqand Invest')]] as [$q, $n, $r])
-        <figure class="quote reveal"><div class="stars">@for ($i = 0; $i < 5; $i++){!! ic('star', '', 15) !!}@endfor</div><blockquote>«{{ $q }}»</blockquote><figcaption><span class="avatar">{{ initials($n) }}</span><div><b>{{ $n }}</b><small>{{ $r }}</small></div></figcaption></figure>
+    <div class="sec-h reveal"><span class="eyebrow">{{ st('Для кого') }}</span><h2>{{ st('Каждый в компании получает своё') }}</h2><p>{{ st('Один вход — и каждый видит только то, что нужно для его работы.') }}</p></div>
+    <div class="roles">
+      @foreach ([['briefcase', st('Владелец и директор'), st('Видит все деньги и объекты, утверждает платежи в Telegram, получает отчёт каждый вечер.')],
+                 ['calculator', st('Бухгалтер и финансист'), st('Кассы и счета, лимиты статей, договоры и долги, прогноз кассового разрыва.')],
+                 ['wallet', st('Кассир'), st('Оплачивает только утверждённые заявки, переводы и обмен валюты по правилам.')],
+                 ['hard-hat', st('Прораб'), st('Заявки, расходы и фотоотчёты с телефона — только по своему объекту.')],
+                 ['truck', st('Снабженец и кладовщик'), st('Заявки на материалы, тендеры, приход и выдача по QR, остатки по складам.')],
+                 ['layout-grid', st('Отдел продаж'), st('Шахматка, бронь, рассрочка, кабинет покупателя и заявки с сайта и соцсетей.')]] as [$icn, $t, $d])
+        <div class="role reveal"><span class="r-ic">{!! ic($icn, '', 18) !!}</span><div><b>{{ $t }}</b><span>{{ $d }}</span></div></div>
       @endforeach
     </div>
   </div>
 </section>
 
-<section class="sec alt" id="pricing" data-cms="Тарифы">
+<section class="sec" id="pricing" data-cms="Тарифы">
   <div class="wrap">
     <div class="sec-h reveal"><span class="eyebrow">{{ st('Тарифы') }}</span><h2>{{ st('Простые и понятные цены') }}</h2><p>{{ st('14 дней бесплатно на любом тарифе. Без скрытых платежей.') }}</p></div>
     <div style="text-align:center"><div class="period" id="period"><button class="on" data-p="m">{{ st('Помесячно') }}</button><button data-p="y">{{ st('За год') }} <span class="save">−17%</span></button></div></div>
@@ -260,7 +411,7 @@
   </div>
 </section>
 
-<section class="sec" id="faq" data-cms="Вопросы и ответы">
+<section class="sec alt" id="faq" data-cms="Вопросы и ответы">
   <div class="wrap">
     <div class="sec-h reveal"><span class="eyebrow">{{ st('Вопросы') }}</span><h2>{{ st('Частые вопросы') }}</h2></div>
     <div class="faq">
@@ -269,11 +420,14 @@
   </div>
 </section>
 
-<section class="sec" style="padding-top:0" data-cms="Призыв в конце">
+<section class="sec" data-cms="Призыв в конце">
   <div class="wrap">
     <div class="cta-band reveal">
-      <div><h2>{{ st('Наведите порядок в деньгах стройки') }}</h2><p>{{ st('Регистрация — 2 минуты. Бесплатно поможем перенести данные и обучим сотрудников.') }}</p></div>
-      @if ($appUrl)<a class="btn btn-p btn-l" href="{{ $appUrl }}">{{ st('Открыть программу') }}{!! ic('arrow-right') !!}</a>@elseif ($regOpen)<a class="btn btn-p btn-l" href="/register">{{ st('Начать бесплатно') }}{!! ic('arrow-right') !!}</a>@endif
+      <div><h2>{{ st('Начните с бесплатного разбора') }}</h2><p>{{ st('20 минут — и вы будете знать, где ваша стройка теряет деньги и сколько можно вернуть.') }}</p></div>
+      <div class="cta">
+        <a class="btn btn-p btn-l" href="#demo">{!! ic('calendar-clock') !!}{{ st('Записаться на разбор') }}</a>
+        @if ($appUrl)<a class="btn btn-l" href="{{ $appUrl }}">{{ st('Открыть программу') }}{!! ic('arrow-right') !!}</a>@elseif ($regOpen)<a class="btn btn-l" href="/register">{{ st('Попробовать 14 дней') }}{!! ic('arrow-right') !!}</a>@endif
+      </div>
     </div>
   </div>
 </section>
@@ -281,7 +435,7 @@
 @push('head')
 <script type="application/ld+json">{!! json_encode(['@context' => 'https://schema.org', '@graph' => [
   ['@type' => 'Organization', 'name' => $brand, 'url' => url('/'), 'logo' => asset('icons/icon-512.png'), 'contactPoint' => array_filter(['@type' => 'ContactPoint', 'telephone' => $support['phone'], 'email' => $support['email'], 'contactType' => 'customer support', 'availableLanguage' => ['Russian', 'Uzbek', 'Tajik']])],
-  ['@type' => 'SoftwareApplication', 'name' => $brand, 'applicationCategory' => 'BusinessApplication', 'operatingSystem' => 'Web, Android, iOS', 'description' => st('ERP и CRM для строительных компаний'),
+  ['@type' => 'SoftwareApplication', 'name' => $brand, 'applicationCategory' => 'BusinessApplication', 'operatingSystem' => 'Web, Android, iOS', 'description' => st('ERP для стройки: контроль денег, склада и подрядчиков'),
    'offers' => ['@type' => 'AggregateOffer', 'priceCurrency' => 'UZS', 'lowPrice' => (float) ($plans->min('price_month') ?? 0), 'offerCount' => $plans->count()]],
   ['@type' => 'FAQPage', 'mainEntity' => array_map(fn ($x) => ['@type' => 'Question', 'name' => $x[0], 'acceptedAnswer' => ['@type' => 'Answer', 'text' => $x[1]]], $faq)],
 ]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) !!}</script>
@@ -293,5 +447,69 @@ document.getElementById('period')?.addEventListener('click', e => {
   document.querySelectorAll('#period button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('.p-price[data-m]').forEach(p => p.firstChild.nodeValue = p.dataset[b.dataset.p] + ' ');
 });
+
+/* ===== Калькулятор потерь ===== */
+(() => {
+  const box = document.getElementById('calc'); if (!box) return;
+  const T = {!! json_encode(['uzs' => st('сум'), 'tjs' => st('смн'), 'mln' => st('млн'), 'mlrd' => st('млрд')], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!};
+  // BASE — валюта посетителя (сум или сомони), RATE — её курс к доллару; цена тарифа PLAN — в сумах (курс UZS)
+  const PLAN = +box.dataset.plan || 0, BASE = box.dataset.base || 'uzs', RATE = +box.dataset.rate || 12800, UZS = +box.dataset.uzs || 12800;
+  const inp = document.getElementById('cBudget'), rows = [...box.querySelectorAll('.lrow')];
+  let cur = BASE;
+  const PRE = { uzs: [5e9, 12e9, 50e9], tjs: [5e6, 12e6, 50e6], usd: [5e5, 1e6, 5e6] };
+  const num = s => +String(s).replace(/[^\d]/g, '') || 0;
+  const grp = n => Math.round(n).toLocaleString('ru-RU').replace(/ /g, ' ');
+  const short = n => { const a = Math.abs(n), u = cur === 'usd';
+    if (u) return '$' + (a >= 1e6 ? (n / 1e6).toFixed(a >= 1e7 ? 1 : 2).replace(/\.?0+$/, '') + 'M' : grp(n));
+    const w = T[cur];
+    return a >= 1e9 ? (n / 1e9).toFixed(2).replace(/\.?0+$/, '').replace('.', ',') + ' ' + T.mlrd + ' ' + w : a >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, '').replace('.', ',') + ' ' + T.mln + ' ' + w : grp(n) + ' ' + w; };
+  const chips = document.getElementById('cPresets');
+  const drawChips = () => { chips.innerHTML = PRE[cur].map(v => `<button type="button" data-v="${v}">${short(v)}</button>`).join(''); };
+  const calc = () => {
+    const B = num(inp.value); let tot = 0, pct = 0; const parts = [];
+    rows.forEach(r => { const rng = r.querySelector('input'), p = +rng.value, s = B * p / 100; tot += s; pct += p; parts.push([r.dataset.k, p]);
+      r.querySelector('[data-pct]').textContent = String(p).replace('.', ',');
+      r.querySelector('[data-sum]').textContent = B ? short(s) : '—';
+      rng.style.setProperty('--p', ((p - rng.min) / (rng.max - rng.min) * 100) + '%'); });
+    document.getElementById('cTotal').textContent = B ? short(tot) : '—';
+    document.getElementById('cPct').textContent = String(Math.round(pct * 10) / 10).replace('.', ',') + '%';
+    document.getElementById('cSave').textContent = B ? short(tot / 2) : '—';
+    document.getElementById('cBar').innerHTML = parts.map(([k, p]) => `<i class="b-${k}" style="flex:${p}"></i>`).join('');
+    // во сколько раз половина потерь больше годовой цены самого доступного тарифа
+    // сравниваем в долларах: половина потерь против годовой цены тарифа
+    const half = tot / 2, saveUsd = cur === 'usd' ? half : half / RATE, yearUsd = PLAN * 12 / UZS, x = yearUsd ? Math.floor(saveUsd / yearUsd) : 0;
+    const roi = document.getElementById('cRoi'); roi.hidden = !(x >= 2); document.getElementById('cRoiX').textContent = x.toLocaleString('ru-RU').replace(/ /g, ' ');
+    document.getElementById('dBudget').value = B ? `${short(B)} → ${short(tot)} (${String(Math.round(pct * 10) / 10).replace('.', ',')}%)` : '';
+  };
+  inp.addEventListener('input', () => { const p = inp.selectionStart, l = inp.value.length; inp.value = num(inp.value) ? grp(num(inp.value)) : ''; const d = inp.value.length - l; try { inp.setSelectionRange(p + d, p + d); } catch (e) { } calc(); });
+  chips.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; inp.value = grp(+b.dataset.v); calc(); });
+  document.getElementById('cCur').addEventListener('click', e => { const b = e.target.closest('button'); if (!b || b.dataset.c === cur) return;
+    const B = num(inp.value); cur = b.dataset.c; document.querySelectorAll('#cCur button').forEach(x => x.classList.toggle('on', x === b));
+    const step = BASE === 'tjs' ? 1e3 : 1e6;
+    inp.value = grp(cur === 'usd' ? Math.round(B / RATE / 1000) * 1000 : Math.round(B * RATE / step) * step); drawChips(); calc(); });
+  rows.forEach(r => r.querySelector('input').addEventListener('input', calc));
+  drawChips(); calc();
+})();
+
+/* ===== Запись на разбор: маска телефона, отправка без перезагрузки ===== */
+(() => {
+  const f = document.getElementById('demoForm'); if (!f) return;
+  const code = f.querySelector('[name=code]'), ph = f.querySelector('[name=phone]');
+  const syncPh = () => { ph.placeholder = code.selectedOptions[0].dataset.ph; };
+  code.addEventListener('change', syncPh); syncPh();
+  ph.addEventListener('input', () => { ph.value = ph.value.replace(/[^\d\s()-]/g, '').slice(0, 18); });
+  f.addEventListener('submit', async e => {
+    e.preventDefault();
+    f.querySelectorAll('[data-err]').forEach(x => x.textContent = '');
+    const btn = f.querySelector('[type=submit]'); btn.disabled = true;
+    try {
+      const r = await fetch(f.action, { method: 'POST', body: new FormData(f), headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+      if (r.status === 422) { const j = await r.json(); Object.entries(j.errors || {}).forEach(([k, v]) => { const el = f.querySelector(`[data-err="${k}"]`); if (el) el.textContent = v[0]; }); btn.disabled = false; return; }
+      if (!r.ok) throw new Error(r.status);
+      f.hidden = true; document.getElementById('demoOk').hidden = false;
+      document.getElementById('demo').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (err) { btn.disabled = false; f.submit(); }   // нет связи по fetch — обычная отправка формы
+  });
+})();
 </script>
 @endpush

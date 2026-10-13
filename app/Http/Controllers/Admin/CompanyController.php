@@ -107,6 +107,26 @@ class CompanyController extends Controller
         return back()->with('ok', __('Оплата записана. Доступ до :d', ['d' => $workspace->paid_until->format('d.m.Y')]));
     }
 
+    /** Заявки с сайта на бесплатный разбор */
+    public function leads(Request $request)
+    {
+        $st = (string) $request->query('status');
+
+        return view('admin.leads', [
+            'list' => \App\Models\SiteLead::when($st !== '', fn ($q) => $q->where('status', $st), fn ($q) => $q->where('status', '!=', 'spam'))->latest('id')->paginate(40)->withQueryString(),
+            'counts' => \App\Models\SiteLead::selectRaw('status, count(*) n')->groupBy('status')->pluck('n', 'status'),
+            'st' => $st,
+        ]);
+    }
+
+    public function leadUpdate(Request $request, \App\Models\SiteLead $lead)
+    {
+        $d = $request->validate(['status' => ['required', Rule::in(array_keys(\App\Models\SiteLead::STATUSES))], 'note' => ['nullable', 'string', 'max:500']]);
+        $lead->update($d);
+
+        return back()->with('ok', __('Сохранено'));
+    }
+
     public function impersonate(Request $request, Workspace $workspace)
     {
         $admin = $workspace->users()->where('role', 'admin')->orderBy('id')->first() ?? $workspace->users()->orderBy('id')->first();

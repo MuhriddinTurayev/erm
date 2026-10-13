@@ -5,9 +5,11 @@
     $on = fn ($p) => $path === $p || ($p !== '/admin' && str_starts_with($path, $p.'/')) ? 'on' : '';
     if ($u->isSuperAdmin()) {
         $req = $u->adminCan('companies') ? \App\Models\Workspace::whereNotNull('plan_request')->count() : 0;
+        $newLeads = $u->adminCan('companies') ? \App\Models\SiteLead::where('status', 'new')->count() : 0;
         $nav = [
             [__('Платформа'), array_values(array_filter([
                 ['/admin', 'layout-dashboard', __('Обзор')],
+                $u->adminCan('companies') ? ['/admin/leads', 'inbox', __('Заявки с сайта'), $newLeads] : null,
                 $u->adminCan('companies') ? ['/admin/companies', 'building-2', __('Компании'), $req] : null,
                 $u->adminCan('payments') ? ['/admin/payments', 'credit-card', __('Оплаты')] : null,
             ]))],

@@ -12,10 +12,79 @@ class SiteController extends Controller
 {
     public function home()
     {
+        $plans = Plan::active()->get();
+
         return view('site.home', [
-            'plans' => Plan::active()->get(),
+            'plans' => $plans,
             'ai' => AiProvider::where('is_active', true)->pluck('driver')->unique()->values(),
+            // калькулятор потерь: цена самого доступного тарифа и курс доллара — чтобы сравнить потери с ценой программы
+            // таджикскому посетителю — в сомони, остальным — в сумах
+            'calc' => ['plan' => (float) ($plans->where('price_month', '>', 0)->min('price_month') ?? 0), 'uzs' => \App\Services\Erp\Money::cbRate('UZS'),
+                'base' => app()->getLocale() === 'tg' ? 'tjs' : 'uzs', 'rate' => app()->getLocale() === 'tg' ? \App\Services\Erp\Money::cbRate('TJS') : \App\Services\Erp\Money::cbRate('UZS')],
         ]);
+    }
+
+    /** Запись на бесплатный разбор с сайта: заявка видна администратору платформы, приходит в Telegram */
+    public function demo(\Illuminate\Http\Request $request)
+    {
+        // ловушка для ботов: это поле человек не видит и не заполняет
+        if (trim((string) $request->input('website')) !== '') {
+            return $this->demoDone($request);
+        }
+        $v = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'name' => ['required', 'string', 'min:2', 'max:80'],
+            'code' => ['required', \Illuminate\Validation\Rule::in(['998', '992', '7', '996', '993', '994'])],
+            'phone' => ['required', 'string', 'max:24'],
+            'company' => ['nullable', 'string', 'max:120'],
+            'kind' => ['nullable', \Illuminate\Validation\Rule::in(array_keys(\App\Models\SiteLead::KINDS))],
+            'objects' => ['nullable', \Illuminate\Validation\Rule::in(array_keys(\App\Models\SiteLead::OBJECTS))],
+            'role' => ['nullable', \Illuminate\Validation\Rule::in(array_keys(\App\Models\SiteLead::ROLES))],
+            'budget' => ['nullable', 'string', 'max:40'],
+        ], [], ['name' => st('Ваше имя'), 'phone' => st('Телефон')]);
+        $digits = preg_replace('/\D/', '', (string) $request->input('phone'));
+        $v->after(function ($v) use ($digits) {
+            if (strlen($digits) < 7 || strlen($digits) > 12) {
+                $v->errors()->add('phone', st('Проверьте номер телефона'));
+            }
+        });
+        if ($v->fails()) {
+            return $request->expectsJson() ? response()->json(['errors' => $v->errors()], 422) : redirect('/#demo')->withErrors($v)->withInput();
+        }
+        $d = $v->validated();
+        $phone = '+'.$d['code'].' '.$digits;
+        // повторная отправка с того же номера в течение 10 минут — не дублируем заявку
+        if (! \App\Models\SiteLead::where('phone', $phone)->where('created_at', '>=', now()->subMinutes(10))->exists()) {
+            $lead = \App\Models\SiteLead::create(['name' => trim($d['name']), 'phone' => $phone, 'company' => $d['company'] ?? null, 'kind' => $d['kind'] ?? null,
+                'objects' => $d['objects'] ?? null, 'role' => $d['role'] ?? null, 'budget' => $d['budget'] ?? null, 'locale' => app()->getLocale(),
+                'source' => mb_substr((string) ($request->input('utm') ?: parse_url((string) $request->headers->get('referer'), PHP_URL_HOST)), 0, 120) ?: null, 'ip' => $request->ip()]);
+            $this->notifyLead($lead);
+        }
+
+        return $this->demoDone($request);
+    }
+
+    private function demoDone(\Illuminate\Http\Request $request)
+    {
+        return $request->expectsJson() ? response()->json(['ok' => true]) : redirect('/#demo')->with('demo_ok', true);
+    }
+
+    /** Новая заявка — администраторам платформы в Telegram (у кого он привязан) */
+    private function notifyLead(\App\Models\SiteLead $l): void
+    {
+        if (! \App\Services\Telegram::enabled()) {
+            return;
+        }
+        $e = fn ($s) => htmlspecialchars((string) $s, ENT_QUOTES);
+        $text = '🆕 <b>'.__('Заявка с сайта').'</b>'."\n".$e($l->name).' · '.$e($l->phone).($l->company ? "\n🏢 ".$e($l->company) : '')
+            .($l->kind ? "\n🏗 ".$e(__(\App\Models\SiteLead::KINDS[$l->kind] ?? $l->kind)) : '').($l->objects ? ' · '.$e(__(\App\Models\SiteLead::OBJECTS[$l->objects] ?? $l->objects)) : '')
+            .($l->role ? "\n👤 ".$e(__(\App\Models\SiteLead::ROLES[$l->role] ?? $l->role)) : '').($l->budget ? "\n🧮 ".$e($l->budget) : '');
+        $admins = \App\Models\User::whereIn('role', ['superadmin', 'padmin'])->where('is_active', true)->whereNotNull('telegram_chat_id')->get()->filter(fn ($u) => $u->adminCan('companies'));
+        foreach ($admins as $u) {
+            try {
+                \App\Services\Telegram::message($u->telegram_chat_id, $text, [[['text' => __('Открыть'), 'url' => url('/admin/leads')]]]);
+            } catch (\Throwable) {
+            }
+        }
     }
 
     /** Политика конфиденциальности и условия: свой текст из админки или стандартный */

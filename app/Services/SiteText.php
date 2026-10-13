@@ -47,11 +47,12 @@ class SiteText
                 continue;
             }
             $sec = __('Шапка и общее');
-            foreach (preg_split('/\R/', file_get_contents($f)) as $line) {
+            // только настоящие переводы строк: «\R» без /u считал байт 0x85 внутри кириллицы («х» = D1 85) переносом и рвал тексты
+            foreach (preg_split('/\r\n|\n|\r/', file_get_contents($f)) as $line) {
                 if (preg_match('/data-cms="([^"]+)"/u', $line, $m)) {
                     $sec = $m[1];
                 }
-                if (preg_match_all('/(?<![\w>$])st\(\'((?:[^\'\\\\]|\\\\.)*)\'/u', $line, $mm)) {
+                if (preg_match_all('/(?<![\w>$])st(?:_html)?\(\'((?:[^\'\\\\]|\\\\.)*)\'/u', $line, $mm)) {
                     foreach ($mm[1] as $k) {
                         $k = stripslashes($k);
                         $out[$sec][$k] = true;

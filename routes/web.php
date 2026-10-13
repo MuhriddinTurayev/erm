@@ -22,6 +22,7 @@ Route::get('/terms', fn () => app(SiteController::class)->page('terms'));
 Route::get('/sitemap.xml', [SiteController::class, 'sitemap']);
 Route::get('/robots.txt', [SiteController::class, 'robots']);
 Route::get('/manifest.webmanifest', [SiteController::class, 'manifest']);
+Route::post('/demo', [SiteController::class, 'demo'])->middleware('throttle:6,1');   // запись на бесплатный разбор
 
 /* ---------- Вход и регистрация ---------- */
 Route::middleware('guest')->group(function () {
@@ -265,6 +266,11 @@ Route::middleware(['auth', 'role:superadmin'])->prefix('admin')->group(function 
         Route::post('/companies/{workspace}/impersonate', [Admin\CompanyController::class, 'impersonate']);
         Route::post('/companies/{workspace}/users/{user}/role', [Admin\AdminsController::class, 'companyRole']);
         Route::delete('/companies/{workspace}', [Admin\CompanyController::class, 'destroy'])->middleware('perm:owner');
+    });
+    // заявки с сайта на бесплатный разбор
+    Route::middleware('perm:companies')->group(function () {
+        Route::get('/leads', [Admin\CompanyController::class, 'leads']);
+        Route::post('/leads/{lead}', [Admin\CompanyController::class, 'leadUpdate']);
     });
     Route::middleware('perm:payments')->group(function () {
         Route::post('/companies/{workspace}/pay', [Admin\CompanyController::class, 'pay']);
