@@ -24,7 +24,9 @@ class SetLocale
             $lang = $request->session()->get('locale') ?: $user?->locale ?: $user?->workspace?->locale;
         }
 
-        App::setLocale(in_array($lang, $supported, true) ? $lang : 'ru');
+        // язык по умолчанию — из настроек сервера (APP_LOCALE), если он поддерживается
+        $default = in_array(config('app.locale'), $supported, true) ? config('app.locale') : 'ru';
+        App::setLocale(in_array($lang, $supported, true) ? $lang : $default);
 
         return $next($request);
     }

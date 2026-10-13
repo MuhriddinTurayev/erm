@@ -1,0 +1,56 @@
+# Oftob_Sohtumon на сервере: свой контейнер программы и свой контейнер MySQL в отдельной сети Docker.
+# Другие проекты на сервере не затрагиваются. Настройки — в файле .env рядом (его создаёт deploy/install.sh).
+#   запуск:     docker compose up -d --build
+#   журнал:     docker compose logs -f app
+#   команды:    docker compose exec app php artisan ...
+name: oftob
+
+services:
+  app:
+    build: .
+    image: oftob-app:latest
+    container_name: oftob-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+    ports:
+      # по умолчанию программа доступна на порту 8090 сервера; за прокси с доменом — OFTOB_BIND=127.0.0.1
+      - "${OFTOB_BIND:-0.0.0.0}:${OFTOB_PORT:-8090}:80"
+    volumes:
+      - storage:/var/www/html/storage            # файлы компаний: 3D, чеки, фото, вложения; журналы
+      - uploads:/var/www/html/public/uploads     # картинки сайта и блога
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [oftob]
+
+  db:
+    image: mysql:8.0
+    container_name: oftob-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-oftob}
+      MYSQL_USER: ${DB_USERNAME:-oftob}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD не задан в .env}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD не задан в .env}
+      TZ: Asia/Tashkent
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--max-allowed-packet=64M"]
+    volumes:
+      - db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+    networks: [oftob]
+
+volumes:
+  storage:
+  uploads:
+  db:
+
+networks:
+  oftob:
