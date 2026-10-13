@@ -4,7 +4,7 @@
 set -euo pipefail
 DIR="${DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 cd "$DIR"
-if docker compose version >/dev/null 2>&1; then DC="docker compose"; else DC="docker-compose"; fi
+if docker compose version >/dev/null 2>&1; then DC="docker compose -p oftob"; else DC="docker-compose -p oftob"; fi
 
 echo "==> Резервная копия перед обновлением"
 bash "$DIR/deploy/backup.sh" || echo "  (копия не создана — продолжаю)"

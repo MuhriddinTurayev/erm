@@ -58,8 +58,8 @@ So‘ng `certbot --nginx -d erp.misol.uz`. `.env` da `APP_URL=https://erp.misol.
 | Zaxira nusxa (baza + fayllar) | `bash /opt/oftob/deploy/backup.sh` → `/opt/oftob-backups` |
 | Har kecha avtomatik nusxa | `(crontab -l; echo "0 3 * * * bash /opt/oftob/deploy/backup.sh >/dev/null 2>&1") \| crontab -` |
 | Jurnal | `cd /opt/oftob && docker compose logs -f app` |
-| Artisan buyrug‘i | `cd /opt/oftob && docker compose exec app php artisan ...` |
-| Platforma egasini buyruq bilan yaratish | `docker compose exec app php artisan oftob:user email parol --role=superadmin` |
+| Artisan buyrug‘i | `cd /opt/oftob && docker compose exec app artisan ...` |
+| Platforma egasini buyruq bilan yaratish | `docker compose exec app artisan oftob:user email parol --role=superadmin` |
 
 ## Muhim
 

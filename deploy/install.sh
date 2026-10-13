@@ -13,7 +13,7 @@ say() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 die() { printf '\n\033[1;31mОшибка: %s\033[0m\n' "$*" >&2; exit 1; }
 
 command -v docker >/dev/null || die "Docker не установлен"
-if docker compose version >/dev/null 2>&1; then DC="docker compose"; elif command -v docker-compose >/dev/null; then DC="docker-compose"; else die "Нет docker compose (плагин compose)"; fi
+if docker compose version >/dev/null 2>&1; then DC="docker compose -p oftob"; elif command -v docker-compose >/dev/null; then DC="docker-compose -p oftob"; else die "Нет docker compose (плагин compose)"; fi
 command -v git >/dev/null || { say "Ставлю git"; apt-get update -qq && apt-get install -y -qq git; }
 command -v openssl >/dev/null || { apt-get update -qq && apt-get install -y -qq openssl; }
 
@@ -36,7 +36,9 @@ fi
 # 3) настройки: секреты генерируются один раз и хранятся только на сервере
 if [ ! -f .env ]; then
     say "Создаю настройки (.env) со случайными паролями"
-    IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    # внешний IP сервера: адрес, с которого сервер выходит в интернет (не адрес сети Docker)
+    IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}' | head -1)"
+    [ -n "$IP" ] || IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
     if [ -n "$DOMAIN" ]; then URL="https://$DOMAIN"; BIND="127.0.0.1"; SECURE=true; else URL="http://$IP:$PORT"; BIND="0.0.0.0"; SECURE=false; fi
     cat > .env <<EOF
 # Oftob_Sohtumon — настройки сервера (не публиковать!)
@@ -95,16 +97,32 @@ done
 
 if [ "${DEMO:-0}" = "1" ]; then
     say "Создаю демо-компании (пароль у всех Demo2026!)"
-    $DC exec -T app php artisan oftob:demo --no-interaction || true
+    $DC exec -T app artisan oftob:demo --no-interaction || true
 fi
 
-# 5) готово
+# 5) владелец платформы: если его ещё нет — создаём с надёжным паролем (показывается один раз)
 set -a; . ./.env; set +a
+OWNERS="$($DC exec -T db sh -c 'mysql -N -s -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "select count(*) from users where role=\"superadmin\"" 2>/dev/null' | tr -d '\r' || true)"
+ADMIN_EMAIL="${ADMIN_EMAIL:-admin@oftob.uz}"
+ADMIN_PASS=""
+if [ "$OWNERS" = "0" ]; then
+    ADMIN_PASS="$(openssl rand -base64 15 | tr -d '/+=\n')"
+    if ! $DC exec -T app artisan oftob:user "$ADMIN_EMAIL" "$ADMIN_PASS" --role=superadmin --name="Владелец платформы" >/dev/null; then
+        ADMIN_PASS=""
+        echo "  Владельца создать не удалось — откройте $APP_URL/setup?key=$SETUP_KEY (если пользователей нет) или выполните:"
+        echo "  cd $DIR && $DC exec app artisan oftob:user email пароль --role=superadmin"
+    fi
+fi
+
+# 6) готово
 say "Готово!"
 echo "  Программа:          $APP_URL"
-USERS="$($DC exec -T db sh -c 'mysql -N -s -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "select count(*) from users" 2>/dev/null' | tr -d '\r' || true)"
-if [ "$USERS" = "0" ]; then
-    echo "  Создать владельца:  $APP_URL/setup?key=$SETUP_KEY"
+if [ -n "$ADMIN_PASS" ]; then
+    echo "  Владелец платформы: $ADMIN_EMAIL"
+    echo "  Пароль:             $ADMIN_PASS   (сохраните; сменить — в разделе «Безопасность»)"
+fi
+if [ "${DEMO:-0}" = "1" ]; then
+    echo "  Демо-входы:         direktor@navruz.demo, direktor@mosgrad.demo, direktor@pamir.demo — пароль Demo2026!"
 fi
 echo "  Каталог:            $DIR   (настройки — $DIR/.env)"
 echo "  Обновление:         bash $DIR/deploy/update.sh"

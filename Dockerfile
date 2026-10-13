@@ -25,8 +25,9 @@ COPY docker/php.ini /usr/local/etc/php/conf.d/zz-oftob.ini
 COPY docker/php-fpm.conf /usr/local/etc/php-fpm.d/zz-oftob.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/oftob.conf
 COPY docker/entrypoint.sh /usr/local/bin/oftob-entrypoint
+COPY docker/artisan.sh /usr/local/bin/artisan
 
-RUN chmod +x /usr/local/bin/oftob-entrypoint \
+RUN chmod +x /usr/local/bin/oftob-entrypoint /usr/local/bin/artisan \
     && rm -f .env \
     && php artisan package:discover --ansi \
     && mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs storage/app/private public/uploads \
