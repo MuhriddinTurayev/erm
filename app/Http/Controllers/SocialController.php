@@ -59,19 +59,32 @@ class SocialController extends Controller
             if (User::where('google_id', $info['sub'])->where('id', '!=', auth()->id())->exists()) {
                 return redirect('/security')->withErrors(['google' => __('Этот Google-аккаунт уже привязан к другому пользователю')]);
             }
-            auth()->user()->forceFill(['google_id' => $info['sub']])->save();
+            $me = auth()->user();
+            $me->forceFill(['google_id' => $info['sub']] + (mb_strtolower($info['email']) === $me->email && ! $me->email_verified_at ? ['email_verified_at' => now()] : []))->save();
 
             return redirect('/security')->with('ok', __('Google привязан: :e', ['e' => $info['email']]));
         }
-        $user = User::where('google_id', $info['sub'])->first() ?? User::where('email', mb_strtolower($info['email']))->first();
-        if (! $user) {
+        $user = User::where('google_id', $info['sub'])->first();
+        if ($user) {
+            return $this->finish($request, $user, 'google');
+        }
+        $byEmail = User::byEmail($info['email']);
+        if (! $byEmail) {
             // аккаунта нет — регистрация компании с данными из Google
             $request->session()->put('google_profile', ['sub' => $info['sub'], 'email' => mb_strtolower($info['email']), 'name' => $info['name'] ?? '']);
 
             return redirect('/register')->with('ok', __('Аккаунт с :e не найден. Зарегистрируйте компанию — пароль не нужен, вход будет через Google.', ['e' => $info['email']]));
         }
+        /*
+         * Аккаунт с таким email есть, но этот Google к нему не привязан. Автоматически не входим:
+         * адрес мог вписать руководитель с опечаткой (чужой ящик), к аккаунту уже привязан другой Google,
+         * а вход в аккаунт платформы по одному лишь email — путь к захвату. Привязка — только после входа по паролю.
+         */
+        if ($byEmail->google_id || $byEmail->isSuperAdmin() || ! $byEmail->email_verified_at) {
+            return redirect('/login')->withErrors(['email' => __('Этот Google ещё не привязан к аккаунту :e. Войдите по паролю и привяжите Google в разделе «Безопасность».', ['e' => $byEmail->email])]);
+        }
 
-        return $this->finish($request, $user, 'google', ['google_id' => $user->google_id ?: $info['sub']]);
+        return $this->finish($request, $byEmail, 'google', ['google_id' => $info['sub']]);
     }
 
     /** Telegram Login Widget: данные подписаны токеном бота */

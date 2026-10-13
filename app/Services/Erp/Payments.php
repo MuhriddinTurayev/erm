@@ -21,6 +21,17 @@ class Payments
 {
     public static function create(Workspace $ws, User $by, array $d): PaymentRequest
     {
+        // договор задаёт контрагента; заблокированному контрагенту заявку не создаём
+        if (! empty($d['contract_id'])) {
+            $c = \App\Models\Contract::of($ws->id)->findOrFail($d['contract_id']);
+            $d['counterparty_id'] = $c->counterparty_id;
+        }
+        if (! empty($d['counterparty_id'])) {
+            $cp = \App\Models\Counterparty::of($ws->id)->findOrFail($d['counterparty_id']);
+            if ($cp->status === 'blocked') {
+                throw new \DomainException(__('Контрагент «:n» заблокирован: :r', ['n' => $cp->name, 'r' => $cp->status_reason ?: '—']));
+            }
+        }
         $pr = DB::transaction(function () use ($ws, $by, $d) {
             $num = (int) PaymentRequest::of($ws->id)->lockForUpdate()->max('number') + 1;
             // автор заявки не согласует сам себя: его роль в цепочке пропускается
@@ -69,18 +80,28 @@ class Payments
 
     public static function decide(PaymentRequest $pr, User $u, bool $approve, ?string $comment = null): bool
     {
-        if (! self::canDecide($u, $pr)) {
+        // решение принимается под блокировкой: нажатие в Telegram и на сайте одновременно не продвинет заявку дважды
+        $done = DB::transaction(function () use (&$pr, $u, $approve, $comment) {
+            $fresh = PaymentRequest::whereKey($pr->id)->lockForUpdate()->first();
+            if (! $fresh || ! self::canDecide($u, $fresh)) {
+                return false;
+            }
+            $pr = $fresh;
+            Approval::create(['payment_request_id' => $pr->id, 'step' => $pr->step, 'user_id' => $u->id, 'decision' => $approve ? 'approve' : 'reject', 'comment' => $comment]);
+            if (! $approve) {
+                $pr->status = 'rejected';
+            } elseif ($u->isAdmin() || $pr->step + 1 >= count((array) $pr->chain)) {
+                $pr->status = 'approved';   // руководитель утверждает окончательно
+            } else {
+                $pr->step++;
+            }
+            $pr->save();
+
+            return true;
+        });
+        if (! $done) {
             return false;
         }
-        Approval::create(['payment_request_id' => $pr->id, 'step' => $pr->step, 'user_id' => $u->id, 'decision' => $approve ? 'approve' : 'reject', 'comment' => $comment]);
-        if (! $approve) {
-            $pr->status = 'rejected';
-        } elseif ($u->isAdmin() || $pr->step + 1 >= count((array) $pr->chain)) {
-            $pr->status = 'approved';   // руководитель утверждает окончательно
-        } else {
-            $pr->step++;
-        }
-        $pr->save();
         AuditLog::create(['workspace_id' => $pr->workspace_id, 'user_id' => $u->id, 'action' => $approve ? 'pay.edit' : 'pay.del',
             'summary' => 'Заявка №'.$pr->number.': '.($approve ? ($pr->status === 'approved' ? 'утверждена' : 'согласована, далее — '.__(config('oftob.roles.'.self::currentRole($pr)))) : 'отклонена').($comment ? ' · '.$comment : '')]);
         self::refreshCards($pr);
@@ -96,18 +117,26 @@ class Payments
     /** Оплатить одобренную заявку из кассы */
     public static function pay(Workspace $ws, User $by, PaymentRequest $pr, int $deskId, ?string $date = null): void
     {
-        abort_unless($pr->status === 'approved' && $pr->workspace_id === $ws->id, 422);
+        abort_unless((int) $pr->workspace_id === (int) $ws->id, 404);
         $desk = \App\Models\CashDesk::of($ws->id)->findOrFail($deskId);
-        $amount = $pr->amount;
-        if ($desk->currency !== $pr->currency) {   // заявка в $, касса в сумах — и наоборот
-            $base = Money::toBase($ws, $pr->amount, $pr->currency);
-            $amount = round($base / Money::rate($ws, $desk->currency), 2);
-        }
-        DB::transaction(function () use ($ws, $by, $pr, $desk, $amount, $date) {
-            $op = Cash::add($ws, $by, ['cash_desk_id' => $desk->id, 'type' => 'out', 'amount' => $amount, 'date' => $date, 'category_id' => $pr->category_id,
-                'project_id' => $pr->project_id, 'counterparty_id' => $pr->counterparty_id, 'contract_id' => $pr->contract_id, 'payment_request_id' => $pr->id,
-                'note' => 'Заявка №'.$pr->number.' · '.$pr->purpose]);
-            $pr->forceFill(['status' => 'paid', 'cash_op_id' => $op->id])->save();
+        DB::transaction(function () use ($ws, $by, $pr, $desk, $date) {
+            // блокируем заявку и проверяем статус ещё раз: двойное нажатие или два кассира одновременно — оплата одна
+            $fresh = PaymentRequest::whereKey($pr->id)->lockForUpdate()->first();
+            if (! $fresh || $fresh->status !== 'approved') {
+                throw new \DomainException(__('Заявка уже оплачена или ещё не утверждена'));
+            }
+            if ($fresh->counterparty_id && \App\Models\Counterparty::whereKey($fresh->counterparty_id)->value('status') === 'blocked') {
+                throw new \DomainException(__('Контрагент заблокирован — оплата запрещена'));
+            }
+            $amount = $fresh->amount;
+            if ($desk->currency !== $fresh->currency) {   // заявка в $, касса в сумах — и наоборот
+                $base = Money::toBase($ws, $fresh->amount, $fresh->currency);
+                $amount = round($base / Money::rate($ws, $desk->currency), 2);
+            }
+            $op = Cash::add($ws, $by, ['cash_desk_id' => $desk->id, 'type' => 'out', 'amount' => $amount, 'date' => $date, 'category_id' => $fresh->category_id,
+                'project_id' => $fresh->project_id, 'counterparty_id' => $fresh->counterparty_id, 'contract_id' => $fresh->contract_id, 'payment_request_id' => $fresh->id,
+                'note' => 'Заявка №'.$fresh->number.' · '.$fresh->purpose]);
+            $fresh->forceFill(['status' => 'paid', 'cash_op_id' => $op->id])->save();
         });
         self::tellAuthor($pr->fresh());
     }

@@ -26,7 +26,7 @@
     @include('admin.plan-form', ['p' => $p])
     <div class="flex mt"><button class="btn btn-p">{{ __('Сохранить') }}</button></div>
   </form>
-  <form method="post" action="/admin/plans/{{ $p->id }}" class="mt" onsubmit="return confirm(@js(__('Удалить тариф?')))">@csrf @method('DELETE')<button class="btn btn-s btn-d">{{ __('Удалить тариф') }}</button></form>
+  <form method="post" action="/admin/plans/{{ $p->id }}" class="mt" data-confirm="{{ __('Удалить тариф?') }}">@csrf @method('DELETE')<button class="btn btn-s btn-d">{{ __('Удалить тариф') }}</button></form>
 </details>
 @endforeach
 

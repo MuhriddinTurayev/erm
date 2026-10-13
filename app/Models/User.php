@@ -29,6 +29,20 @@ class User extends Authenticatable
         ];
     }
 
+    /** Email всегда в нижнем регистре: вход не зависит от того, как его набрали */
+    protected function email(): \Illuminate\Database\Eloquent\Casts\Attribute
+    {
+        return \Illuminate\Database\Eloquent\Casts\Attribute::make(set: fn ($v) => $v === null ? null : mb_strtolower(trim((string) $v)));
+    }
+
+    /** Найти по email без учёта регистра */
+    public static function byEmail(?string $email): ?self
+    {
+        $e = mb_strtolower(trim((string) $email));
+
+        return $e === '' ? null : static::where('email', $e)->first() ?? static::whereRaw('lower(email) = ?', [$e])->first();
+    }
+
     public function workspace(): BelongsTo
     {
         return $this->belongsTo(Workspace::class);

@@ -118,6 +118,9 @@ class SalesController extends ErpController
         $d = $request->validate(['amount' => ['required', 'numeric', 'min:1'], 'date' => ['required', 'date'], 'way' => ['nullable', 'string', 'max:40']]);
         $ws = $this->ws();
         $a = Apartments::find(StateWriter::project($ws, $pid), $aptId) ?? abort(404);
+        if ($a['status'] === 'reserve') {
+            return back()->withErrors(['amount' => __('Квартира не в продаже — сначала поставьте бронь или продажу')])->with('open', $aptId);
+        }
         $payId = Str::lower(Str::random(8));
         StateWriter::mutate($ws->id, function (array &$data) use ($pid, $aptId, $d, $a, $payId) {
             foreach ($data['projects'] as &$p) {
@@ -167,9 +170,14 @@ class SalesController extends ErpController
     /** Ссылка на кабинет покупателя */
     public function buyerLink(Request $request, string $pid, string $aptId)
     {
+        $this->canSell();
         $this->checkProject($pid);
         $ws = $this->ws();
-        $bl = BuyerLink::firstOrCreate(['workspace_id' => $ws->id, 'project_id' => $pid, 'apt_id' => $aptId], ['token' => Str::lower(Str::random(24))]);
+        try {
+            $bl = \App\Services\Deals::link($ws, $pid, $aptId);
+        } catch (\DomainException $e) {
+            return back()->withErrors(['buyer' => $e->getMessage()])->with('open', $aptId);
+        }
 
         return back()->with('ok', __('Ссылка для покупателя: :u', ['u' => $bl->url()]))->with('open', $aptId);
     }

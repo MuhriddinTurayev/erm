@@ -69,8 +69,9 @@
         if (bad) { bad.classList.add('ui-err'); bad.focus(); bad.title = W('req'); return; }
         done(out);
       });
-      // Enter в однострочном поле — отправка; в textarea — перенос строки
-      document.body.appendChild(el);
+      // открытое модальное окно <dialog> лежит «поверх всего» и блокирует остальную страницу — тогда показываемся внутри него
+      const host = [...document.querySelectorAll('dialog[open]')].pop() || document.body;
+      host.appendChild(el);
       const first = form.querySelector('input:not([readonly]),select,textarea') || form.querySelector('input') || form.querySelector('button[type=submit]');
       setTimeout(() => { first.focus(); if (first.select && first.tagName === 'INPUT') first.select(); }, 20);
     });

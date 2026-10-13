@@ -55,6 +55,7 @@ class WorkController extends ErpController
         $d['project_id'] = $this->checkProject($d['project_id'] ?? null);
         if (! empty($d['id'])) {
             $t = Task::of($ws->id)->findOrFail($d['id']);
+            $this->mine($t);
             abort_unless($u->isAdmin() || $t->author_id === $u->id, 403);
             $t->update($d);
         } else {
@@ -95,7 +96,7 @@ class WorkController extends ErpController
     {
         $u = $this->editor();
         $n = 0;
-        foreach (Task::of($this->ws()->id)->whereIn('id', (array) $request->input('ids', []))->where('status', 'review')->get() as $t) {
+        foreach (Task::of($this->ws()->id)->whereIn('id', (array) $request->input('ids', []))->where('status', 'review')->tap(fn ($q) => $this->scopeProjects($q))->get() as $t) {
             if ($u->isAdmin() || $t->author_id === $u->id) {
                 $t->update(['status' => 'done', 'progress' => 100, 'done_at' => now(), 'approved_by' => $u->id]);
                 $n++;
@@ -154,6 +155,7 @@ class WorkController extends ErpController
         $ws = $this->ws();
         if ($request->boolean('quick')) {   // кнопка «Взять в работу» / «Выполнено»
             $so = ServiceOrder::of($ws->id)->findOrFail((int) $request->input('id'));
+            $this->mine($so);
             $st = $request->validate(['status' => ['required', Rule::in(['work', 'done'])]])['status'];
             AuditLog::create(['workspace_id' => $ws->id, 'user_id' => $u->id, 'action' => 'service.edit', 'summary' => 'Сервис №'.$so->number.': статус '.$so->status.' → '.$st]);
             $so->update(['status' => $st]);
@@ -168,6 +170,7 @@ class WorkController extends ErpController
         $d['amount'] = (float) ($d['amount'] ?? 0);
         if (! empty($d['id'])) {
             $so = ServiceOrder::of($ws->id)->findOrFail($d['id']);
+            $this->mine($so);
             $old = $so->status;
             $so->update(array_merge($d, ['status' => $d['status'] ?? $so->status]));
             AuditLog::create(['workspace_id' => $ws->id, 'user_id' => $u->id, 'action' => 'service.edit',

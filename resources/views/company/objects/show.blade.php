@@ -223,7 +223,7 @@ const RH = @json($roleHelp); document.getElementById('acc-role')?.addEventListen
       if (kind.value === 'exterior' && document.getElementById('up-attach').value) fd.append('attach', document.getElementById('up-attach').value);
       let r, tries = 0;
       do { r = await fetch('/company/objects/{{ $pid }}/media', { method: 'POST', body: fd, headers: { Accept: 'application/json' } }).catch(() => null); } while ((!r || r.status >= 500) && ++tries < 3);
-      if (!r || !r.ok) { let m = @json(__('Ошибка загрузки')); try { const j = await r.json(); m = j.error || j.message || m; } catch (e) {} alert(m); location.reload(); return; }
+      if (!r || !r.ok) { let m = @json(__('Ошибка загрузки')); try { const j = await r.json(); m = j.error || j.message || m; } catch (e) {} await ui.alert(m); location.reload(); return; }
       const p = Math.round((i + 1) / total * 100); document.getElementById('up-pct').textContent = p + '%'; document.getElementById('up-bar').style.width = p + '%';
     }
     location.href = '?tab=media';

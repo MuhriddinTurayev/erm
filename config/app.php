@@ -15,6 +15,9 @@ return [
 
     'name' => env('APP_NAME', 'Laravel'),
 
+    // Первый запуск (/setup) с чужого компьютера — только с этим ключом: https://сайт/setup?key=...
+    'setup_key' => env('SETUP_KEY', ''),
+
     /*
     |--------------------------------------------------------------------------
     | Application Environment

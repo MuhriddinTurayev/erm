@@ -9,7 +9,7 @@ class SubscriptionPayment extends Model
 {
     public const METHODS = ['transfer' => 'Перечисление', 'cash' => 'Наличные', 'card' => 'Карта', 'click' => 'Click', 'payme' => 'Payme', 'other' => 'Другое'];
 
-    protected $fillable = ['workspace_id', 'plan_id', 'amount', 'currency', 'months', 'method', 'note', 'paid_at', 'created_by'];
+    protected $fillable = ['workspace_id', 'plan_id', 'amount', 'currency', 'months', 'method', 'note', 'idem', 'paid_at', 'created_by'];
 
     protected function casts(): array
     {

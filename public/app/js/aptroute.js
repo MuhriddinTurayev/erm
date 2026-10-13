@@ -79,5 +79,5 @@ function aptRouteHtml(p, a) {
 ACT.aptRouteCopy = () => {
   const p = P(), a = genApts(p).find(x => x.id === pageArgs.id), Rt = aptRoute(p, a);
   const txt = `${p.name}\n${T('Квартира')} №${a.num}, ${a.rooms}-${T('комн.')}, ${a.area} м², ${a.floor} ${T('этаж')}, ${T('подъезд')} ${a.section}\n\n` + Rt.steps.map(([ic, t, d], i) => `${i + 1}. ${ic} ${T(t)} — ${T(d)}`).join('\n');
-  (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => toast('Маршрут скопирован — отправьте клиенту в WhatsApp или Telegram'), () => prompt('', txt));
+  (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => toast('Маршрут скопирован — отправьте клиенту в WhatsApp или Telegram'), () => ui.copy(T('Скопируйте маршрут'), txt));
 };

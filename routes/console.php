@@ -18,7 +18,7 @@ Artisan::command('oftob:user {email} {password} {--name=Руководитель
 
         return 1;
     }
-    if (User::where('email', $email)->exists()) {
+    if (User::byEmail($email)) {
         $this->error('Такой email уже есть');
 
         return 1;

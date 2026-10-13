@@ -76,7 +76,7 @@ PAGES.legal = {
   }
 };
 ACT.lgTab = d => { pageArgs = { tab: d.tab }; rerender(); };
-ACT.lgDel = d => { if (!confirm(T('Удалить запись?'))) return; const p = P(); p.legal[d.k] = p.legal[d.k].filter(x => x.id !== d.id); save(); rerender(); };
+ACT.lgDel = async d => { if (!await ui.confirm(T('Удалить запись?'))) return; const p = P(); p.legal[d.k] = p.legal[d.k].filter(x => x.id !== d.id); save(); rerender(); };
 ACT.lgDoc = d => { const c = P().legal.cases[+d.i], k = /Покупатель/.test(c.side) ? (c.aptId ? 'buyer' : 'answer') : /Поставщик/.test(c.side) ? 'supplier' : /Подрядчик/.test(c.side) ? 'contractor' : 'answer'; pageArgs = { tab: 'docs', tpl: k, ci: d.i }; rerender(); };
 ACT.lgAskCase = d => { const c = P().legal.cases[+d.i]; aiAsk(`${T('Спорная ситуация')}: ${c.side} «${c.party}», ${T('предмет')}: ${c.subject}, ${T('сумма')}: ${money(c.amount)}, ${T('стадия')}: ${Object.fromEntries(CASE_STAGE)[c.stage]}. ${c.note || ''} ${T('Оцени позицию компании, риски, какие доказательства собрать и пошаговый план действий со сроками.')}`, 'lawyer'); };
 ACT.lgAiDoc = () => aiAsk(T('Проверь этот юридический документ, исправь ошибки, усили позицию компании и укажи, что нужно дописать:') + '\n\n' + $('#docText').value, 'lawyer');

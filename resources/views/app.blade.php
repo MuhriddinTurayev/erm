@@ -16,6 +16,7 @@
 <link rel="stylesheet" href="{{ asset('assets/tokens.css') }}?v={{ @filemtime(public_path('assets/tokens.css')) }}">
 <link rel="stylesheet" href="{{ $v('css/style.css') }}">
 <link rel="stylesheet" href="{{ $v('css/theme.css') }}">
+<script src="{{ asset('assets/dialog.js') }}?v={{ @filemtime(public_path('assets/dialog.js')) }}" defer></script>
 <link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"><meta name="theme-color" content="#1d4ed8">
 <script>if ('serviceWorker' in navigator && location.protocol === 'https:') addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));</script>
 </head>

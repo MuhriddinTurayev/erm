@@ -24,6 +24,17 @@ class TelegramBot
 {
     public function __construct(private ExpenseService $expenses, private AiService $ai) {}
 
+    /**
+     * Обновление пришло впервые? Telegram повторяет доставку вебхука при медленном ответе,
+     * опрос мог получить то же самое — один update_id обрабатываем только один раз (сутки помним).
+     */
+    public static function firstTime(array $u): bool
+    {
+        $id = $u['update_id'] ?? null;
+
+        return $id === null || \Illuminate\Support\Facades\Cache::add('tg-upd:'.$id, 1, now()->addDay());
+    }
+
     public function handle(array $u): void
     {
         try {
@@ -283,6 +294,12 @@ class TelegramBot
         }
         $this->as($user, function () use ($user, $chat, $data, $q) {
             $ws = $user->workspace;
+            // подписка закончилась или компания заблокирована — кнопки (согласования, оплаты) не работают
+            if (! $ws || ! $ws->hasAccess()) {
+                Telegram::answer($q['id'], __('Срок подписки истёк. Продлите тариф, чтобы продолжить работу.'));
+
+                return;
+            }
             [$cmd, $arg] = array_pad(explode(':', $data, 2), 2, '');
             if ($cmd === 'obj') {
                 if (! isset(StateWriter::projects($ws, $user->allowedObjects())[$arg])) {

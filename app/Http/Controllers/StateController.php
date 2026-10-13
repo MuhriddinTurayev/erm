@@ -54,16 +54,26 @@ class StateController extends Controller
             if (StateAccess::exceedsLimit($ws, $stored, $next)) {
                 return response()->json(['error' => __('По вашему тарифу можно вести не больше :n объектов. Перейдите на тариф выше.', ['n' => $ws->maxObjects()]), 'limit' => true], 403);
             }
-            $ws->data = $user->allowedObjects() === null ? $data : json_encode($next, JSON_UNESCAPED_UNICODE);
+            // сделки по квартирам: номер сделки, освобождённая квартира — оплаты прежнего покупателя в историю
+            $old = json_decode((string) $stored, true);
+            $events = \App\Services\Deals::normalize($next, is_array($old) ? $old : null);
+            $ws->data = json_encode($next, JSON_UNESCAPED_UNICODE);
             $ws->version = $base + 1;
             $ws->save();
+            \App\Services\Deals::applyLinks($wsId, $events);
             try {
                 AuditDiff::record($wsId, $user->id, $stored, $ws->data);
             } catch (\Throwable $e) {
                 report($e);   // история не должна мешать сохранению
             }
+            // сервер что-то поправил (права, сделки) — программа получает итоговые данные и показывает их
+            $res = ['version' => (int) $ws->version];
+            $visible = StateAccess::forUser($ws->data, $user);
+            if ((json_decode((string) $visible, true)['projects'] ?? null) !== $decoded['projects']) {
+                $res['data'] = $visible;
+            }
 
-            return response()->json(['version' => (int) $ws->version]);
+            return response()->json($res);
         });
     }
 }

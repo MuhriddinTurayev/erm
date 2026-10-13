@@ -28,12 +28,10 @@ class PartyController extends ErpController
             ->groupBy('counterparty_id')->get()->keyBy('counterparty_id')->all();
     }
 
-    /** Долг по договорам: сумма договора − оплачено (плюс — мы должны, минус — нам должны) */
+    /** Остаток по договору в валюте компании: считается в валюте договора, поэтому долларовый договор, оплаченный долларами, закрыт при любом курсе */
     private function contractDebt(Contract $c, $ws): float
     {
-        $paid = (float) $c->ops()->where('type', $c->direction === 'out' ? 'out' : 'in')->sum('amount_base');
-
-        return Money::toBase($ws, $c->amount, $c->currency) - $paid;
+        return \App\Services\Erp\Contracts::debtBase($ws, $c);
     }
 
     public function index(Request $request)
@@ -47,7 +45,7 @@ class PartyController extends ErpController
             ->when(array_key_exists('folder', $f) && $f['folder'] !== null, fn ($q) => $f['folder'] === '' ? $q->whereNull('folder') : $q->where('folder', $f['folder']))
             ->orderByRaw("status = 'check' desc")->orderBy('name')->paginate(60)->withQueryString();
         $debts = [];
-        foreach (Contract::of($ws->id)->where('status', 'active')->get() as $c) {
+        foreach (Contract::of($ws->id)->where('status', 'active')->tap(fn ($q) => $this->scopeProjects($q))->get() as $c) {
             $debts[$c->counterparty_id] = ($debts[$c->counterparty_id] ?? 0) + ($c->direction === 'out' ? 1 : -1) * $this->contractDebt($c, $ws);
         }
 
@@ -62,12 +60,13 @@ class PartyController extends ErpController
     {
         $this->mine($cp);
         $ws = $this->ws();
-        $contracts = $cp->contracts()->latest('date')->get()->each(fn ($c) => $c->debt = $this->contractDebt($c, $ws));
+        // сотрудник объекта видит договоры, оплаты и заявки только своих объектов
+        $contracts = $cp->contracts()->tap(fn ($q) => $this->scopeProjects($q))->latest('date')->get()->each(fn ($c) => $c->debt = $this->contractDebt($c, $ws));
 
         return view('company.erp.party', [
             'ws' => $ws, 'cp' => $cp, 'contracts' => $contracts, 'projects' => $this->projects(),
-            'ops' => CashOp::of($ws->id)->where('counterparty_id', $cp->id)->with(['desk', 'category'])->latest('date')->limit(100)->get(),
-            'requests' => PaymentRequest::of($ws->id)->where('counterparty_id', $cp->id)->latest('id')->limit(30)->get(),
+            'ops' => CashOp::of($ws->id)->where('counterparty_id', $cp->id)->tap(fn ($q) => $this->scopeProjects($q, 'cash_ops.project_id'))->with(['desk', 'category'])->latest('date')->limit(100)->get(),
+            'requests' => PaymentRequest::of($ws->id)->where('counterparty_id', $cp->id)->tap(fn ($q) => $this->scopeProjects($q))->latest('id')->limit(30)->get(),
             'same' => $cp->inn ? Counterparty::of($ws->id)->where('inn', $cp->inn)->where('id', '!=', $cp->id)->get() : collect(),
             'currencies' => Money::currencies($ws),
         ] + $this->thread('counterparty', $cp->id));
@@ -217,6 +216,14 @@ class PartyController extends ErpController
         $u = $this->editor();
         $d = $request->validate($this->contractRules($this->ws()));
         $d['project_id'] = $this->checkProject($d['project_id'] ?? null);
+        $cp = Counterparty::find($d['counterparty_id']);
+        if ($cp->status === 'blocked' && (int) $cp->id !== (int) $c->counterparty_id) {
+            return back()->withInput()->withErrors(['counterparty_id' => __('Контрагент заблокирован: :r', ['r' => $cp->status_reason])]);
+        }
+        // у договора с оплатами валюту не меняем: иначе оплаченное пересчитается неверно
+        if ($d['currency'] !== $c->currency && $c->ops()->exists()) {
+            return back()->withInput()->withErrors(['currency' => __('По договору уже есть оплаты — валюту изменить нельзя')]);
+        }
         $changes = [];
         foreach (['amount' => 'сумма', 'status' => 'статус', 'due_date' => 'срок', 'subject' => 'предмет'] as $k => $label) {
             $old = $c->$k instanceof \DateTimeInterface ? $c->$k->format('Y-m-d') : (string) $c->$k;

@@ -74,7 +74,7 @@ class Accounts
     {
         $login = trim($login);
         if (str_contains($login, '@')) {
-            $u = User::where('email', mb_strtolower($login))->first();
+            $u = User::byEmail($login);
 
             return $u && Hash::check($password, $u->password) ? $u : null;
         }

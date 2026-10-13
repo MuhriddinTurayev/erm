@@ -74,8 +74,59 @@ class Cash
      */
     public static function add(Workspace $ws, User $by, array $d): CashOp
     {
+        return DB::transaction(fn () => self::addLocked($ws, $by, $d));
+    }
+
+    /** Остаток кассы с блокировкой строки кассы до конца транзакции (две операции одновременно не уведут кассу в минус) */
+    public static function lockedBalance(Workspace $ws, int $deskId): float
+    {
+        $desk = CashDesk::of($ws->id)->whereKey($deskId)->lockForUpdate()->firstOrFail();
+        $s = CashOp::of($ws->id)->where('cash_desk_id', $desk->id)->selectRaw("sum(case when type='in' then amount else -amount end) s")->value('s');
+
+        return round((float) $desk->opening + (float) $s, 2);
+    }
+
+    /** Курс операции: в валюте компании — 1; в другой — официальный или введённый (не дальше допустимого от официального) */
+    public static function checkedRate(Workspace $ws, User $by, string $currency, $rate): float
+    {
+        if ($currency === Money::base($ws)) {
+            return 1.0;
+        }
+        $rate = (float) $rate;
+        if ($rate <= 0) {
+            return Money::rate($ws, $currency);
+        }
+        $pct = $by->isAdmin() ? 50 : 15;
+        if (! Money::rateOk($ws, $currency, $rate, $pct)) {
+            throw new \DomainException(__('Курс :r слишком отличается от официального (:o). Проверьте курс — допустимо отклонение до :p%.',
+                ['r' => $rate, 'o' => round(Money::rate($ws, $currency), 2), 'p' => $pct]));
+        }
+
+        return $rate;
+    }
+
+    private static function addLocked(Workspace $ws, User $by, array $d): CashOp
+    {
         $desk = CashDesk::of($ws->id)->findOrFail($d['cash_desk_id']);
-        $rate = (float) ($d['rate'] ?? 0) ?: Money::rate($ws, $desk->currency);
+        if (! $desk->is_active) {
+            throw new \DomainException(__('Касса «:n» в архиве — операции по ней не проводятся', ['n' => $desk->name]));
+        }
+        // связанные записи — только своей компании
+        foreach (['counterparty_id' => \App\Models\Counterparty::class, 'contract_id' => Contract::class, 'category_id' => FinCategory::class, 'payment_request_id' => PaymentRequest::class] as $k => $cls) {
+            if (! empty($d[$k]) && ! $cls::where('workspace_id', $ws->id)->whereKey($d[$k])->exists()) {
+                throw new \DomainException(__('Запись не найдена'));
+            }
+        }
+        $amount = round((float) $d['amount'], 2);
+        if ($amount <= 0) {
+            throw new \DomainException(__('Сумма должна быть больше нуля'));
+        }
+        $bal = self::lockedBalance($ws, $desk->id);
+        if ($d['type'] === 'out' && $amount > $bal + 0.001) {
+            throw new \DomainException(__('В кассе «:n» только :s', ['n' => $desk->name, 's' => Money::fmt($bal, $desk->currency)]));
+        }
+        $rate = self::checkedRate($ws, $by, $desk->currency, $d['rate'] ?? null);
+        $d['amount'] = $amount;
         $op = CashOp::create([
             'workspace_id' => $ws->id, 'cash_desk_id' => $desk->id, 'type' => $d['type'], 'date' => $d['date'] ?? $ws->localNow()->toDateString(),
             'amount' => round((float) $d['amount'], 2), 'rate' => $rate, 'amount_base' => Money::toBase($ws, (float) $d['amount'], $desk->currency, $rate),
@@ -133,14 +184,21 @@ class Cash
     {
         $a = CashDesk::of($ws->id)->findOrFail($from);
         $b = CashDesk::of($ws->id)->findOrFail($to);
+        if ($a->id === $b->id) {
+            throw new \DomainException(__('Выберите разные кассы'));
+        }
         $key = Str::lower(Str::random(12));
-        // курс сделки: сколько валюты компании за 1 USD
-        $usd = $rate ?: Money::usdRate($ws);
+        // курс сделки: сколько валюты компании за 1 USD — не дальше допустимого от официального
+        $usd = ($a->currency !== $b->currency || $a->currency === 'USD') ? self::checkedRate($ws, $by, 'USD', $rate) : 1.0;
         $received = $amount;
         if ($a->currency !== $b->currency) {
             $received = $a->currency === 'USD' ? $amount * $usd : $amount / $usd;
         }
         return DB::transaction(function () use ($ws, $by, $a, $b, $amount, $received, $usd, $key, $note, $date) {
+            // блокируем обе кассы в одном порядке (по id), чтобы встречные переводы не зависли
+            foreach (collect([$a->id, $b->id])->sort() as $id) {
+                self::lockedBalance($ws, $id);
+            }
             $base = ['date' => $date, 'transfer_key' => $key, 'note' => $note];
             $o1 = self::add($ws, $by, $base + ['cash_desk_id' => $a->id, 'type' => 'out', 'amount' => $amount, 'rate' => $a->currency === 'USD' ? $usd : 1]);
             $o2 = self::add($ws, $by, $base + ['cash_desk_id' => $b->id, 'type' => 'in', 'amount' => round($received, 2), 'rate' => $b->currency === 'USD' ? $usd : 1]);
@@ -258,9 +316,9 @@ class Cash
         }
         // остатки по договорам, где платим мы
         foreach (Contract::of($ws->id)->where('status', 'active')->where('direction', 'out')->whereNotNull('due_date')->with('counterparty')->get() as $c) {
-            $paid = (float) $c->ops()->where('type', 'out')->sum('amount_base');
-            $left = Money::toBase($ws, $c->amount, $c->currency) - $paid
-                - (float) PaymentRequest::where('contract_id', $c->id)->where('status', 'approved')->sum('amount');
+            // уже одобренные заявки по договору учтены выше — их не считаем второй раз (в валюте компании по их валюте)
+            $approved = PaymentRequest::where('contract_id', $c->id)->where('status', 'approved')->get()->sum(fn ($r) => Money::toBase($ws, (float) $r->amount, $r->currency));
+            $left = Contracts::debtBase($ws, $c) - $approved;
             if ($left > 0 && ($i = $idx(Carbon::parse($c->due_date))) !== null) {
                 $rows[$i]['out'] += $left;
                 $rows[$i]['items_out'][] = __('Договор').' '.$c->number.' · '.$c->counterparty?->name;

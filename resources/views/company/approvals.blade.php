@@ -25,7 +25,7 @@
     @if ($admin)
     <div class="flex">
       <form method="post" action="/company/approvals/{{ $e->id }}">@csrf<input type="hidden" name="action" value="approve"><button class="btn btn-p btn-s">{!! ic('check') !!}{{ __('Подтвердить') }}</button></form>
-      <form method="post" action="/company/approvals/{{ $e->id }}" data-q="{{ __('Причина отказа') }}" onsubmit="var r=prompt(this.dataset.q);if(r===null)return false;this.reason.value=r;">@csrf<input type="hidden" name="action" value="reject"><input type="hidden" name="reason"><button class="btn btn-s btn-d">{!! ic('x') !!}{{ __('Отклонить') }}</button></form>
+      <form method="post" action="/company/approvals/{{ $e->id }}" data-prompt="{{ __('Причина отказа') }}" data-prompt-field="reason">@csrf<input type="hidden" name="action" value="reject"><input type="hidden" name="reason"><button class="btn btn-s btn-d">{!! ic('x') !!}{{ __('Отклонить') }}</button></form>
     </div>
     @endif
   </div>

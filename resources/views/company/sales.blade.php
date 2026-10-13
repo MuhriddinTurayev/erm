@@ -135,9 +135,9 @@
       + ints.map(x => `<a class="btn btn-s" href="/company/objects/${PID}/3d?m=${x.id}" target="_blank">${T.t3}: ${esc(x.title)}</a>`).join('');
     dlg.dataset.apt = a.id; dlg.showModal();
   }
-  document.addEventListener('click', e => {
+  document.addEventListener('click', async e => {
     const b = e.target.closest('[data-apt]'); if (b) { e.preventDefault(); open(b.dataset.apt); return; }
-    const d = e.target.closest('[data-del]'); if (d && confirm(T.del)) { const f = document.getElementById('ap-del'); f.action = `/company/sales/${PID}/apt/${dlg.dataset.apt}/pay/${d.dataset.del}`; f.submit(); }
+    const d = e.target.closest('[data-del]'); if (d && await ui.confirm(T.del)) { const f = document.getElementById('ap-del'); f.action = `/company/sales/${PID}/apt/${dlg.dataset.apt}/pay/${d.dataset.del}`; f.submit(); }
     const l = e.target.closest('[data-link]'); if (l) { const f = document.getElementById('ap-link'); f.action = `/company/sales/${PID}/apt/${l.dataset.link}/link`; f.submit(); }
   });
   @if (session('open')) open(@json(session('open'))); @endif

@@ -23,5 +23,5 @@
 @endsection
 @push('head')
 <script type="application/ld+json">{!! json_encode(['@context' => 'https://schema.org', '@type' => 'Article', 'headline' => $post->t('title'), 'datePublished' => $post->published_at?->toAtomString(),
-  'dateModified' => $post->updated_at?->toAtomString(), 'image' => $post->cover ? url($post->cover) : null, 'publisher' => ['@type' => 'Organization', 'name' => $brand]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !!}</script>
+  'dateModified' => $post->updated_at?->toAtomString(), 'image' => $post->cover ? url($post->cover) : null, 'publisher' => ['@type' => 'Organization', 'name' => $brand]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) !!}</script>
 @endpush

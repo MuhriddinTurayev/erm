@@ -70,7 +70,15 @@ const leadBy = id => P().leads.find(l => l.id === id);
 function leadLog(l, text) { (l.log = l.log || []).push({ d: today(), t: text }); }
 const LEAD_TODO = { new: 'Перезвонить, уточнить пожелания', contact: 'Пригласить на показ', meet: 'Показ квартир в офисе продаж', shown: 'Отправить расчёт рассрочки', booked: 'Подписать договор' };
 ACT.leadMove = (d, el) => { const l = leadBy(d.id); l.status = d.st; leadLog(l, '→ ' + LEAD_NAME[d.st]); if (LEAD_TODO[d.st]) { l.nextText = LEAD_TODO[d.st]; if (!l.nextDate || l.nextDate < today()) l.nextDate = addDays(today(), 1); } save(); rerender(); };
-ACT.leadLost = d => { const l = leadBy(d.id); const why = prompt(T('Причина отказа?') + '\n' + LOST_WHY.map((w, i) => `${i + 1}. ${T(w)}`).join('\n'), '1'); if (why == null) return; l.why = LOST_WHY[+why - 1] || why; l.status = 'lost'; leadLog(l, '✕ Отказ: ' + l.why); save(); rerender(); };
+ACT.leadLost = async d => {
+  const l = leadBy(d.id);
+  // причина отказа — из списка или своя (раньше — системное окно браузера с номерами)
+  const r = await ui.form(T('Причина отказа?'), [
+    { name: 'why', type: 'select', label: 'Причина', value: LOST_WHY[0], options: [...LOST_WHY.map(w => [w, w]), ['', 'Другое']] },
+    { name: 'other', label: 'Своя причина', placeholder: 'Например: уехал в другой город' },
+  ], { ok: T('Отметить отказ') });
+  if (!r) return; const why = r.why || r.other; if (!why) return toast('Укажите причину');
+  l.why = why; l.status = 'lost'; leadLog(l, '✕ Отказ: ' + l.why); save(); rerender(); };
 ACT.leadPick = d => { const l = leadBy(d.id); closeModal(); go('apt', { lead: l.id, rooms: l.rooms ? String(l.rooms) : '', st: 'free', side: l.side || '', pmax: l.budget ? String(l.budget) : '' }); };
 ACT.leadCsv = () => { const p = P(); download('lidy.csv', csv([['Дата', 'Клиент', 'Телефон', 'Источник', 'Ищет', 'Этап', 'Следующее действие', 'Менеджер', 'Причина отказа'], ...p.leads.map(l => [fdate(l.created), l.name, l.phone, l.src, leadWant(l), LEAD_NAME[l.status], l.nextDate ? fdate(l.nextDate) + ' ' + (l.nextText || '') : '', l.manager || '', l.why || ''])]), 'text/csv'); };
 ACT.leadNew = () => leadModal(null);
@@ -106,7 +114,7 @@ ACT.leadSave = d => {
   save(); closeModal(); rerender(); toast(isNew ? 'Лид добавлен' : 'Сохранено');
 };
 ACT.leadLogAdd = d => { const t = $('#ldLog').value.trim(); if (!t) return; const l = leadBy(d.id); leadLog(l, t); save(); leadModal(l); };
-ACT.leadDel = d => { if (!confirm(T('Удалить лид?'))) return; P().leads = P().leads.filter(l => l.id !== d.id); save(); closeModal(); rerender(); };
+ACT.leadDel = async d => { if (!await ui.confirm(T('Удалить лид?'))) return; P().leads = P().leads.filter(l => l.id !== d.id); save(); closeModal(); rerender(); };
 ACT.leadAi = d => { const l = leadBy(d.id); closeModal(); aiAsk(`${T('Клиент')}: ${l.name}, ${T('источник')} ${l.src}, ${T('этап')} «${LEAD_NAME[l.status]}». ${T('Ищет')}: ${leadWant(l) || '—'}. ${T('Заметка')}: ${l.note || '—'}. ${T('История')}: ${(l.log || []).map(e => e.t).join('; ')}. ${T('Подбери 2–3 подходящие свободные квартиры из нашего проекта, подскажи, что сказать клиенту, как работать с возражениями и какой следующий шаг, чтобы довести до задатка.')}`); };
 function leadsDemo(p) {
   const R = rng(321), t = today(), names = ['Шахзод Алимов', 'Ольга Ким', 'Бекзод Норов', 'Дилноза Хамидова', 'Рустам Юлдашев', 'Анна Пак', 'Жамшид Каримов', 'Малика Турсунова', 'Сардор Рахимов', 'Елена Цой', 'Улугбек Сафаров', 'Гульнора Исмаилова', 'Тимур Абдуллаев', 'Наргиза Юсупова', 'Фаррух Мирзаев', 'Зарина Ахмедова'];
@@ -133,8 +141,10 @@ async function cnApi(path, body) {
 async function inboxPoll(manual) {
   if (!viaServer() || inboxBusy || !DB) return; inboxBusy = true;
   try {
-    const j = await cnApi('/api/inbox?since=' + (DB.settings.inboxSeq || 0)); let added = 0, upd = 0;
+    let added = 0, upd = 0, j, guard = 0;
     const p = P();
+    do {   // заявок больше лимита — забираем следующими порциями (раньше лишние терялись)
+    j = await cnApi('/api/inbox?since=' + (DB.settings.inboxSeq || 0));
     for (const it of j.items) {
       const ch = CH[it.ch] || ['📥', it.ch], src = it.ch === 'site' ? (LEAD_SRC.includes(it.src) ? it.src : 'Сайт') : ch[1];
       const line = `${ch[0]} ${src}${it.kind === 'form' ? ' · форма' : ''}: ${it.text || ''}`.trim();
@@ -150,6 +160,7 @@ async function inboxPoll(manual) {
       }
     }
     DB.settings.inboxSeq = j.seq;
+    } while (j.more && ++guard < 20);
     if (added || upd) {
       save(); toast(added ? `📥 ${T('Новых заявок')}: ${added}` : `💬 ${T('Новые сообщения от клиентов')}: ${upd}`);
       const busy = !$('#modal').classList.contains('hidden') || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '');
@@ -221,7 +232,7 @@ ACT.cnPoll = async () => { await inboxPoll(true); cnLoad(); };
 ACT.cnCopy = d => { const v = $('#' + d.id).textContent; (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(() => toast('Скопировано'), () => toast(v)); };
 ACT.cnSaveUrl = async () => { const v = $('#cnUrl').value.trim(); if (v && !/^https:\/\//.test(v)) return toast('Адрес должен начинаться с https://'); await cnApi('/api/connect', { publicUrl: v }); cnLoad(); toast('Сохранено'); };
 ACT.cnSaveKeys = async () => { const s = $('#cnSecret').value.trim(), t = $('#cnToken').value.trim(); if (!s && !t) return toast('Вставьте ключ'); await cnApi('/api/connect', { appSecret: s, pageToken: t }); cnLoad(); toast('Ключи сохранены на этом компьютере'); };
-ACT.cnRegen = async d => { if (!confirm(T('Создать новый ключ? Старый перестанет работать — его нужно будет заменить в настройках Meta или сайта.'))) return; await cnApi('/api/connect', { regen: d.k }); cnLoad(); };
+ACT.cnRegen = async d => { if (!await ui.confirm(T('Создать новый ключ? Старый перестанет работать — его нужно будет заменить в настройках Meta или сайта.'))) return; await cnApi('/api/connect', { regen: d.k }); cnLoad(); };
 ACT.cnCheck = async () => {
   const r = $('#cnCheckRes'); r.textContent = T('Проверяю…'); const j = await cnApi('/api/connect/check', {}).catch(() => ({ ok: false, error: T('Нет связи с сервером') }));
   r.innerHTML = j.ok ? `<span class="good">✓ ${T('Страница')}: <b class="notr">${esc(j.page)}</b>${j.ig ? ` · Instagram: <b class="notr">@${esc(j.ig)}</b>` : ''} · ${j.subscribed ? T('Подписка') + ': ' + esc(j.subscribed) : T('Страница ещё не подписана')}</span>` : `<span class="bad">✕ <span class="notr">${esc(j.error)}</span></span>`;

@@ -63,7 +63,9 @@ async function gpsSync() {
 async function gpsPoll() {
   if (!viaServer() || GPS.busy || !DB) return; GPS.busy = true;
   try {
-    const j = await (await fetch('/api/geo/events?since=' + (DB.settings.geoSeq || 0))).json(); const msgs = [];
+    const msgs = []; let j, guard = 0, got = 0;
+    do {   // отметок больше лимита — следующими порциями (раньше лишние терялись)
+    j = await (await fetch('/api/geo/events?since=' + (DB.settings.geoSeq || 0))).json(); got += j.items.length;
     for (const e of j.items) {
       const p = DB.projects.find(x => x.id === e.pid); if (!p || p.geoEv.some(x => x.seq === e.seq)) continue;
       p.geoEv.push({ seq: e.seq, t: e.t, sid: e.sid, type: e.type, lat: e.lat, lng: e.lng, acc: e.acc, dist: e.dist, on: e.on });
@@ -74,7 +76,8 @@ async function gpsPoll() {
       if (e.type === 'ping' && e.on === false) msgs.push(`⚠️ ${nm}: ${T('ушёл с объекта')} (${gpsDist(e.dist)})`);
     }
     DB.settings.geoSeq = j.seq;
-    if (j.items.length) {
+    } while (j.more && ++guard < 20);
+    if (got) {
       save(); if (msgs.length) toast(msgs.slice(-2).join(' · '));
       const busy = !$('#modal').classList.contains('hidden') || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '');
       if (curPage === 'attend' && !busy) rerender();
@@ -169,7 +172,9 @@ PAGES.attend = {
 };
 ACT.gpsConnect = () => go('leads', { tab: 'connect' });
 function gpsParse(s) { const m = String(s).match(/(-?\d{1,2}\.\d{3,})[,\s/]+(-?\d{1,3}\.\d{3,})/); return m ? [m[1], m[2]] : null; }
+const gpsCanZone = () => !window.OFTOB || window.OFTOB.isAdmin;   // GPS-зону объекта меняет только руководитель
 ACT.gpsSave = () => {
+  if (!gpsCanZone()) return toast('Координаты объекта меняет только руководитель');
   const p = P(), url = $('#gpsUrl').value.trim(), raw = $('#gpsLat').value.trim();
   let u = url ? gpsParse(url) : null; if (url && !u) return toast('В ссылке не найдены координаты');
   if (!u && /\d[.,]\d+\s*[,;\s]\s*-?\d/.test(raw) && !$('#gpsLng').value.trim()) u = gpsParse(raw.replace(/(\d),(\d)/g, '$1.$2'));
@@ -179,14 +184,15 @@ ACT.gpsSave = () => {
   save(); gpsSync(); rerender(); toast('Координаты объекта сохранены');
 };
 ACT.gpsHere = () => {
+  if (!gpsCanZone()) return toast('Координаты объекта меняет только руководитель');
   if (!navigator.geolocation) return toast('Геолокация недоступна');
   toast('Определяю местоположение…');
   navigator.geolocation.getCurrentPosition(c => { $('#gpsLat').value = c.coords.latitude.toFixed(6); $('#gpsLng').value = c.coords.longitude.toFixed(6); $('#gpsUrl').value = ''; ACT.gpsSave(); },
     () => toast('Не удалось получить местоположение — разрешите доступ к геолокации'), { enableHighAccuracy: true, timeout: 20000 });
 };
 ACT.gpsTs = d => { const p = P(); let n = 0; [...new Set(gpsShifts(p).filter(s => s.date === d.date && s.out).map(s => s.sid))].forEach(sid => { if (gpsToTs(p, d.date, sid)) n++; }); save(); rerender(); toast(n ? `${T('Часы перенесены в табель')}: ${n}` : 'Нет закрытых смен за этот день'); };
-ACT.gpsCopy = d => { const v = gpsLink(P().staff.find(s => s.id === d.id)); (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(() => toast('Ссылка скопирована'), () => prompt('', v)); };
-ACT.gpsNewTok = async d => { if (!confirm(T('Сделать новую ссылку? Старая перестанет работать.'))) return; const s = P().staff.find(x => x.id === d.id); if (s.wtok) (DB.settings.gpsRevoke = DB.settings.gpsRevoke || []).push(s.wtok); s.wtok = gpsTok(); save(); await gpsSync(); rerender(); toast('Новая ссылка готова'); };
+ACT.gpsCopy = d => { const v = gpsLink(P().staff.find(s => s.id === d.id)); (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(() => toast('Ссылка скопирована'), () => ui.copy(T('Скопируйте ссылку'), v)); };
+ACT.gpsNewTok = async d => { if (!await ui.confirm(T('Сделать новую ссылку? Старая перестанет работать.'))) return; const s = P().staff.find(x => x.id === d.id); if (s.wtok) (DB.settings.gpsRevoke = DB.settings.gpsRevoke || []).push(s.wtok); s.wtok = gpsTok(); save(); await gpsSync(); rerender(); toast('Новая ссылка готова'); };
 ACT.gpsQr = d => {
   const s = P().staff.find(x => x.id === d.id), link = gpsLink(s);
   openModal(`<h2>📱 ${esc(s.name)}</h2><p class="small">Сотрудник наводит камеру телефона на код и открывает ссылку. Дальше: «Пришёл» утром и «Ушёл» вечером. Нужно разрешить доступ к местоположению.</p><div id="gpsQrBox" class="gps-qr"></div><div class="small notr" style="word-break:break-all">${esc(link)}</div>`);

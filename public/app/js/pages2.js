@@ -73,7 +73,7 @@ ACT.staffSave = () => {
   P().staff.push({ id: uid(), name, role: $('#sRole').value, phone: $('#sPhone').value, rate: num($('#sRate').value), active: true, hired: today() });
   save(); closeModal(); rerender(); toast('Сотрудник добавлен');
 };
-ACT.staffDel = d => { const p = P(), s = p.staff.find(x => x.id === d.id); if (!confirm(`Удалить сотрудника «${s.name}» и его табель? (Лучше снять галочку «Работает»)`)) return; p.staff = p.staff.filter(x => x.id !== d.id); delete p.ts[d.id]; save(); rerender(); };
+ACT.staffDel = async d => { const p = P(), s = p.staff.find(x => x.id === d.id); if (!await ui.confirm(`Удалить сотрудника «${s.name}» и его табель? (Лучше снять галочку «Работает»)`)) return; p.staff = p.staff.filter(x => x.id !== d.id); delete p.ts[d.id]; save(); rerender(); };
 ACT.payStaff = d => {
   const p = P(), s = p.staff.find(x => x.id === d.id), due = Math.round(earned(p, s, d.month).sum - paidFor(p, s.id, d.month));
   openModal(`<h2>Выплата зарплаты</h2><p>${esc(s.name)} · ${esc(s.role)} · ${monthName(d.month)}</p><div class="form">
@@ -87,7 +87,7 @@ ACT.payDo = d => {
   const id = uid(), tx = addTx(p, { date, type: 'out', cat: ITR_ROLES.has(s.role) ? 'Зарплата ИТР' : 'Зарплата рабочих', amount, who: s.name, desc: `Зарплата за ${monthName(d.month)}`, link: { kind: 'pay', id } });
   p.pays.push({ id, staffId: s.id, month: d.month, date, amount, txId: tx.id }); save(); closeModal(); rerender(); toast('Выплата проведена');
 };
-ACT.payDel = d => { const p = P(), x = p.pays.find(z => z.id === d.id); if (!x || !confirm('Отменить выплату?')) return; p.pays = p.pays.filter(z => z.id !== d.id); p.tx = p.tx.filter(t => t.id !== x.txId); save(); rerender(); };
+ACT.payDel = async d => { const p = P(), x = p.pays.find(z => z.id === d.id); if (!x || !await ui.confirm('Отменить выплату?')) return; p.pays = p.pays.filter(z => z.id !== d.id); p.tx = p.tx.filter(t => t.id !== x.txId); save(); rerender(); };
 ACT.tsFill = d => {
   const p = P(), [y, m] = d.month.split('-').map(Number), dim = new Date(y, m, 0).getDate(), t = today(); let n = 0;
   p.staff.filter(s => s.active !== false).forEach(s => {
@@ -96,7 +96,7 @@ ACT.tsFill = d => {
   });
   save(); rerender(); toast(`Заполнено ${n} записей`);
 };
-ACT.tsClear = d => { if (!confirm('Очистить табель за ' + monthName(d.month) + '?')) return; const p = P(); for (const sid in p.ts) for (const ds in p.ts[sid]) if (ds.startsWith(d.month)) delete p.ts[sid][ds]; save(); rerender(); };
+ACT.tsClear = async d => { if (!await ui.confirm('Очистить табель за ' + monthName(d.month) + '?')) return; const p = P(); for (const sid in p.ts) for (const ds in p.ts[sid]) if (ds.startsWith(d.month)) delete p.ts[sid][ds]; save(); rerender(); };
 ACT.staffCsv = d => { const p = P(); download(`zarplata_${d.month}.csv`, csv([['ФИО', 'Должность', 'Телефон', 'Ставка/ч', 'Часов', 'Начислено', 'Выплачено', 'К выплате'], ...p.staff.map(s => { const e = earned(p, s, d.month), pd = paidFor(p, s.id, d.month); return [s.name, s.role, s.phone, s.rate, e.h, Math.round(e.sum), pd, Math.round(e.sum - pd)]; })]), 'text/csv'); };
 
 /* ---------- Техника и топливо ---------- */
@@ -153,7 +153,7 @@ PAGES.fleet = {
 };
 ACT.resetMach = () => { P().mach = {}; save(); rerender(); };
 ACT.vehAdd = () => { P().fleet.push({ id: uid(), name: 'Новая машина', type: 'Самосвал', plate: '', mode: 'km', norm: 35, driver: '', own: true, rent: 0 }); save(); rerender(); };
-ACT.vehDel = d => { const p = P(); if (!confirm('Удалить машину из автопарка?')) return; p.fleet = p.fleet.filter(v => v.id !== d.id); save(); rerender(); };
+ACT.vehDel = async d => { const p = P(); if (!await ui.confirm('Удалить машину из автопарка?')) return; p.fleet = p.fleet.filter(v => v.id !== d.id); save(); rerender(); };
 ACT.fuelAll = () => { pageArgs.month = ''; rerender(); };
 ACT.fuelAdd = () => {
   const p = P(), vid = $('#fVeh').value, v = p.fleet.find(x => x.id === vid); if (!v) return toast('Сначала добавьте машину');
@@ -163,7 +163,7 @@ ACT.fuelAdd = () => {
   if (liters) txId = addTx(p, { date, type: 'out', cat: 'Техника и топливо', amount: Math.round(liters * price), who: 'АЗС', desc: `Топливо: ${v.name}, ${liters} л`, link: { kind: 'fuel', id } }).id;
   p.fuel.push({ id, date, vid, qty, liters, price, txId }); save(); rerender(); toast('Записано' + (txId ? ' и проведено в бухгалтерии' : ''));
 };
-ACT.fuelDel = d => { const p = P(), f = p.fuel.find(x => x.id === d.id); if (!f || !confirm('Удалить запись?')) return; p.fuel = p.fuel.filter(x => x.id !== d.id); p.tx = p.tx.filter(t => t.id !== f.txId); save(); rerender(); };
+ACT.fuelDel = async d => { const p = P(), f = p.fuel.find(x => x.id === d.id); if (!f || !await ui.confirm('Удалить запись?')) return; p.fuel = p.fuel.filter(x => x.id !== d.id); p.tx = p.tx.filter(t => t.id !== f.txId); save(); rerender(); };
 
 /* ---------- График работ ---------- */
 PAGES.schedule = {
@@ -195,7 +195,7 @@ PAGES.schedule = {
   }
 };
 ACT.stageAdd = () => { const p = P(); p.stages.push({ id: uid(), name: 'Новый этап', start: today(), dur: 30, progress: 0, resp: '' }); save(); rerender(); };
-ACT.stageDel = d => { if (!confirm('Удалить этап?')) return; P().stages.splice(+d.i, 1); save(); rerender(); };
+ACT.stageDel = async d => { if (!await ui.confirm('Удалить этап?')) return; P().stages.splice(+d.i, 1); save(); rerender(); };
 ACT.stageShift = () => { const p = P(), sp = projSpan(p), sh = daysBetween(sp.start, p.startDate); if (!sh) return toast('График уже начинается с даты начала проекта'); p.stages.forEach(s => s.start = addDays(s.start, sh)); save(); rerender(); toast(`График сдвинут на ${sh} дн.`); };
 
 /* ---------- Бухгалтерия ---------- */
@@ -247,7 +247,7 @@ function unlinkTx(p, t) {
   if (t.link.kind === 'fuel') { const f = p.fuel.find(x => x.id === t.link.id); if (f) f.txId = null, f.liters = 0; }
   if (t.link.kind === 'apt') { const o = p.apts[t.link.id]; if (o && o.payments) o.payments = o.payments.filter(x => x.id !== t.link.payId); }
 }
-ACT.txDel = d => { const p = P(), t = p.tx.find(x => x.id === d.id); if (!t || !confirm(`Удалить операцию на ${money(t.amount)}?` + (t.link ? '\nСвязанная запись (зарплата/топливо/оплата квартиры) тоже будет отменена.' : ''))) return; unlinkTx(p, t); p.tx = p.tx.filter(x => x.id !== d.id); save(); rerender(); };
+ACT.txDel = async d => { const p = P(), t = p.tx.find(x => x.id === d.id); if (!t || !await ui.confirm(`Удалить операцию на ${money(t.amount)}?` + (t.link ? '\nСвязанная запись (зарплата/топливо/оплата квартиры) тоже будет отменена.' : ''))) return; unlinkTx(p, t); p.tx = p.tx.filter(x => x.id !== d.id); save(); rerender(); };
 ACT.txReset = () => { pageArgs = {}; rerender(); };
 ACT.txCsv = () => { const p = P(); download('buhgalteriya.csv', csv([['Дата', 'Тип', 'Статья', 'Описание', 'Контрагент', 'Сумма'], ...p.tx.slice().sort((a, b) => a.date.localeCompare(b.date)).map(t => [fdate(t.date), t.type === 'in' ? 'Поступление' : 'Расход', t.cat, t.desc, t.who, t.type === 'in' ? t.amount : -t.amount])]), 'text/csv'); };
 
@@ -313,12 +313,23 @@ ACT.apt = d => {
   ${mo && rest > 0 ? `<p class="small muted">${esc(o.plan)}: ежемесячный платёж ≈ <b>${money(rest / mo)}</b></p>` : ''}
   <table class="mt"><tbody>${pays.map(x => `<tr><td>${fdate(x.date)}</td><td class="n ok">${money(x.amount)}</td><td><button class="x" data-act="aptPayDel" data-id="${a.id}" data-pay="${x.id}">✕</button></td></tr>`).join('') || '<tr><td class="muted">Оплат пока нет</td></tr>'}</tbody></table>
   <div class="flex mt"><input class="txt" type="date" id="mPayDate" value="${today()}"><input class="txt" type="number" id="mPayAmt" placeholder="Сумма оплаты" value="${rest > 0 ? (mo ? Math.round(rest / mo) : rest) : ''}"><button data-act="aptPay" data-id="${a.id}">+ Внести оплату</button></div>
-  <p class="small muted">Оплата автоматически проводится в бухгалтерии как поступление.</p>`);
+  <p class="small muted">Оплата автоматически проводится в бухгалтерии как поступление.</p>
+  ${(o.history || []).length ? `<h3 class="mt">${T('Прежние сделки')}</h3><table><tbody>${o.history.slice().reverse().map(h => `<tr><td class="small">${fdate(h.closed)}</td><td>${esc(h.buyer || '—')}${h.phone ? ' · ' + esc(h.phone) : ''}</td><td class="n">${money(h.paid || 0)}</td></tr>`).join('')}</tbody></table><p class="small muted">${T('Оплаты прежних покупателей не учитываются у нового. Задаток, который вернули, оформите расходом.')}</p>` : ''}`);
 };
 function aptObj(p, id) { return p.apts[id] = p.apts[id] || {}; }
+/* Квартира освободилась — сделка закрыта: покупатель и его оплаты уходят в историю квартиры, следующий покупатель начинает с нуля
+   (так же делает сервер; деньги в бухгалтерии объекта остаются — возврат задатка оформляется расходом) */
+function aptArchive(o) {
+  const pays = o.payments || [];
+  if (pays.length || o.buyer || o.phone) {
+    o.history = (o.history || []).concat([{ deal: o.deal, buyer: o.buyer || '', phone: o.phone || '', plan: o.plan || '', payments: pays, paid: pays.reduce((s, x) => s + (+x.amount || 0), 0), closed: today() }]).slice(-20);
+  }
+  o.payments = []; delete o.deal; o.buyer = ''; o.phone = ''; o.plan = '';
+}
 ACT.aptSave = d => {
   const p = P(), a = genApts(p).find(x => x.id === d.id), o = aptObj(p, d.id), price = num($('#mPrice').value);
   o.status = $('#mStatus').value; o.buyer = $('#mBuyer').value.trim(); o.phone = $('#mPhone').value.trim(); o.plan = $('#mPlan').value; o.note = $('#mNote').value;
+  if (o.status === 'free' || o.status === 'reserve') aptArchive(o);
   if (price && price !== a.basePrice) o.price = price; else delete o.price;
   save(); closeModal(); rerender(); toast('Сохранено');
 };
@@ -330,7 +341,7 @@ ACT.aptPay = d => {
   const tx = addTx(p, { date, type: 'in', cat: a.rooms ? 'Продажа квартир' : 'Продажа коммерции', amount: amt, who: o.buyer || '', desc: `Оплата кв. №${a.num}`, link: { kind: 'apt', id: a.id, payId: id } });
   o.payments.push({ id, date, amount: amt, txId: tx.id }); save(); rerender(); ACT.apt(d); toast('Оплата проведена');
 };
-ACT.aptPayDel = d => { const p = P(), o = p.apts[d.id]; const x = o.payments.find(z => z.id === d.pay); if (!confirm('Удалить оплату?')) return; o.payments = o.payments.filter(z => z.id !== d.pay); p.tx = p.tx.filter(t => t.id !== x.txId); save(); rerender(); ACT.apt(d); };
+ACT.aptPayDel = async d => { const p = P(), o = p.apts[d.id]; const x = o.payments.find(z => z.id === d.pay); if (!await ui.confirm('Удалить оплату?')) return; o.payments = o.payments.filter(z => z.id !== d.pay); p.tx = p.tx.filter(t => t.id !== x.txId); save(); rerender(); ACT.apt(d); };
 ACT.aptDesign = d => { closeModal(); go('design', { apt: d.id }); };
 ACT.priceCsv = () => { const p = P(); download('prais-list.csv', csv([['№', 'Подъезд', 'Этаж', 'Комнат', 'Площадь', 'Цена', 'Цена за м²', 'Статус'], ...genApts(p).map(a => [a.num, a.section, a.floor, a.rooms || 'коммерция', a.area, a.price, Math.round(a.price / a.area), ST_NAME[a.status]])]), 'text/csv'); };
 
@@ -417,17 +428,17 @@ PAGES.settings = {
 };
 ACT.projOpen = d => { DB.currentId = d.id; save(); go('home'); };
 ACT.projCopy = d => { const src = DB.projects.find(x => x.id === d.id), c = JSON.parse(JSON.stringify(src)); c.id = uid(); c.name = src.name + ' (копия)'; DB.projects.push(c); save(); rerender(); toast('Копия создана'); };
-ACT.projDel = d => {
+ACT.projDel = async d => {
   if (DB.projects.length < 2) return toast('Нельзя удалить единственный проект');
-  const x = DB.projects.find(z => z.id === d.id); if (!confirm(`Удалить проект «${x.name}» со всеми данными? Это нельзя отменить.`)) return;
+  const x = DB.projects.find(z => z.id === d.id); if (!await ui.confirm(`Удалить проект «${x.name}» со всеми данными? Это нельзя отменить.`)) return;
   DB.projects = DB.projects.filter(z => z.id !== d.id); if (DB.currentId === d.id) DB.currentId = DB.projects[0].id; save(); render();
 };
 ACT.exportJson = () => download(`stroycrm_${today()}.json`, JSON.stringify(DB, null, 1), 'application/json');
-ACT.resetAll = () => { if (!confirm('Удалить ВСЕ данные и загрузить демо-проект? Сначала сохраните резервную копию!')) return; localStorage.removeItem(STORE_KEY); load(); go('home'); };
+ACT.resetAll = async () => { if (!await ui.confirm('Удалить ВСЕ данные и загрузить демо-проект? Сначала сохраните резервную копию!')) return; localStorage.removeItem(STORE_KEY); load(); go('home'); };
 function importJson(file) {
   const r = new FileReader();
-  r.onload = () => {
-    try { const d = JSON.parse(r.result); if (!d.projects || !d.settings) throw new Error('неверный формат'); if (!confirm('Заменить текущие данные загруженной копией?')) return; DB = d; DB.projects.forEach(migrate); if (!P()) DB.currentId = DB.projects[0].id; save(); go('dashboard'); toast('Данные загружены'); }
+  r.onload = async () => {
+    try { const d = JSON.parse(r.result); if (!d.projects || !d.settings) throw new Error('неверный формат'); if (!await ui.confirm('Заменить текущие данные загруженной копией?', { danger: true, ok: T('Заменить') })) return; DB = d; DB.projects.forEach(migrate); if (!P()) DB.currentId = DB.projects[0].id; save(); go('dashboard'); toast('Данные загружены'); }
     catch (e) { toast('Ошибка файла: ' + e.message); }
   };
   r.readAsText(file);

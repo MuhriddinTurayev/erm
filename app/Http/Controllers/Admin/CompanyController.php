@@ -79,12 +79,30 @@ class CompanyController extends Controller
             'method' => ['required', Rule::in(array_keys(SubscriptionPayment::METHODS))],
             'paid_at' => ['required', 'date'],
             'note' => ['nullable', 'string', 'max:250'],
+            'idem' => ['nullable', 'string', 'max:64'],   // ключ формы: повторная отправка той же формы не запишет оплату дважды
         ]);
         $plan = Plan::findOrFail($data['plan_id']);
-        SubscriptionPayment::create($data + ['workspace_id' => $workspace->id, 'currency' => $plan->currency, 'created_by' => $request->user()->id]);
-        $workspace->plan_id = $plan->id;
-        $workspace->plan_request = null;
-        $workspace->extend((int) $data['months']);
+        $dup = \Illuminate\Support\Facades\DB::transaction(function () use ($data, $plan, $workspace, $request) {
+            $ws = Workspace::whereKey($workspace->id)->lockForUpdate()->first();
+            if (! empty($data['idem']) && SubscriptionPayment::where('idem', $data['idem'])->exists()) {
+                return true;
+            }
+            // без ключа (старая страница) — такая же оплата за последние 10 минут считается повтором
+            if (empty($data['idem']) && ! $request->boolean('force') && SubscriptionPayment::where('workspace_id', $ws->id)->where('plan_id', $plan->id)
+                ->where('months', $data['months'])->where('amount', $data['amount'])->whereDate('paid_at', $data['paid_at'])->where('created_at', '>=', now()->subMinutes(10))->exists()) {
+                return true;
+            }
+            SubscriptionPayment::create($data + ['workspace_id' => $ws->id, 'currency' => $plan->currency, 'created_by' => $request->user()->id]);
+            $ws->plan_id = $plan->id;
+            $ws->plan_request = null;
+            $ws->extend((int) $data['months']);
+
+            return false;
+        });
+        $workspace->refresh();
+        if ($dup) {
+            return back()->with('warn', __('Эта оплата уже записана — доступ не продлевался повторно. Доступ до :d', ['d' => $workspace->paid_until?->format('d.m.Y') ?? '—']));
+        }
 
         return back()->with('ok', __('Оплата записана. Доступ до :d', ['d' => $workspace->paid_until->format('d.m.Y')]));
     }
@@ -106,8 +124,13 @@ class CompanyController extends Controller
     public function destroy(Request $request, Workspace $workspace)
     {
         $request->validate(['confirm' => ['required', 'in:'.$workspace->name]], ['confirm.in' => __('Введите точное название компании для подтверждения')]);
+        $id = $workspace->id;
         $workspace->users()->delete();
         $workspace->delete();
+        // файлы компании (3D, чеки, фото, вложения) — тоже удаляем, чтобы не остались на диске
+        foreach (['media', 'att', 'receipts', 'logs', 'inbox'] as $dir) {
+            \Illuminate\Support\Facades\Storage::disk('local')->deleteDirectory($dir.'/'.$id);
+        }
 
         return redirect('/admin/companies')->with('ok', __('Компания удалена'));
     }

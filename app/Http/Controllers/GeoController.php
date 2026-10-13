@@ -103,26 +103,39 @@ class GeoController extends Controller
 
     /* ---------- для программы (после входа) ---------- */
     /** Программа сообщает, у кого какие ссылки и где находятся объекты */
+    /**
+     * Программа сообщает ссылки сотрудников и координаты объектов.
+     * Права: «только просмотр» ничего не меняет; ссылки сотрудников — только по своим объектам;
+     * GPS-зону объекта (где засчитывается приход) меняет только руководитель — иначе её можно сдвинуть и отмечаться из дома.
+     */
     public function sync(Request $request)
     {
+        $user = $request->user();
         $ws = $this->ws()->id;
-        $workers = collect($request->input('workers', []))->filter(fn ($w) => is_array($w) && preg_match('/^[a-f0-9]{16,64}$/', (string) ($w['t'] ?? '')));
-        DB::transaction(function () use ($ws, $workers, $request) {
+        $only = $user->allowedObjects();
+        $mine = fn ($pid) => $only === null || in_array((string) $pid, $only, true);
+        $canEdit = $user->canEdit();
+        $workers = collect($canEdit ? $request->input('workers', []) : [])
+            ->filter(fn ($w) => is_array($w) && preg_match('/^[a-f0-9]{16,64}$/', (string) ($w['t'] ?? '')) && $mine($w['pid'] ?? ''));
+        DB::transaction(function () use ($ws, $workers, $request, $canEdit, $user, $mine) {
             foreach ($workers as $w) {
                 $ex = WorkerToken::where('token', $w['t'])->first();
-                if ($ex && (int) $ex->workspace_id !== (int) $ws) {
-                    continue; // чужой ключ не трогаем
+                if ($ex && ((int) $ex->workspace_id !== (int) $ws || ! $mine($ex->project_id))) {
+                    continue; // чужой ключ (или ключ чужого объекта) не трогаем
+                }
+                if (! \App\Services\StateWriter::project($this->ws(), (string) $w['pid'])) {
+                    continue;
                 }
                 WorkerToken::updateOrCreate(['token' => $w['t']], [
                     'workspace_id' => $ws, 'project_id' => mb_substr((string) $w['pid'], 0, 40), 'staff_id' => mb_substr((string) $w['sid'], 0, 40),
                     'name' => mb_substr((string) ($w['name'] ?? ''), 0, 80), 'role' => mb_substr((string) ($w['role'] ?? ''), 0, 60),
                 ]);
             }
-            $revoke = array_filter((array) $request->input('revoke', []), 'is_string');
+            $revoke = $canEdit ? array_filter((array) $request->input('revoke', []), 'is_string') : [];
             if ($revoke) {
-                WorkerToken::where('workspace_id', $ws)->whereIn('token', $revoke)->delete();
+                WorkerToken::where('workspace_id', $ws)->whereIn('token', $revoke)->get()->filter(fn ($t) => $mine($t->project_id))->each->delete();
             }
-            foreach ((array) $request->input('sites', []) as $pid => $s) {
+            foreach ($user->isAdmin() ? (array) $request->input('sites', []) : [] as $pid => $s) {
                 if (! is_array($s) || ! is_numeric($s['lat'] ?? null) || ! is_numeric($s['lng'] ?? null)) {
                     continue;
                 }
@@ -138,11 +151,19 @@ class GeoController extends Controller
     public function events(Request $request)
     {
         $ws = $this->ws()->id;
+        $only = $request->user()->allowedObjects();
         $since = (int) $request->query('since', 0);
-        $items = Checkin::where('workspace_id', $ws)->where('id', '>', $since)->orderBy('id')->limit(2000)->get();
+        $limit = 2000;
+        // граница берётся до выборки: отметка, пришедшая во время запроса, достанется следующему запросу, а не потеряется
+        $top = (int) (Checkin::where('workspace_id', $ws)->max('id') ?? 0);
+        $items = Checkin::where('workspace_id', $ws)->where('id', '>', $since)->where('id', '<=', $top)->when($only !== null, fn ($q) => $q->whereIn('project_id', $only))
+            ->orderBy('id')->limit($limit)->get();
+        // seq — последний отданный номер: если отметок больше лимита, остальные придут следующим запросом (раньше терялись)
+        $more = $items->count() >= $limit;
 
         return response()->json([
-            'seq' => (int) (Checkin::where('workspace_id', $ws)->max('id') ?? 0),
+            'seq' => $more ? (int) $items->last()->id : max($since, $top),
+            'more' => $more,
             'items' => $items->map->toClient()->values(),
         ]);
     }

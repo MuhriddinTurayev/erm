@@ -111,12 +111,31 @@ class ExpenseService
             'summary' => ($e->source === 'telegram' ? 'Telegram: ' : '').'расход −'.number_format($e->amount, 0, '.', ' ').' · '.$e->cat.($e->desc ? ' · '.$e->desc : '').($e->who ? ' · '.$e->who : '')]);
     }
 
-    public function approve(Expense $e, User $by): bool
+    /**
+     * Занять решение по расходу: только один из одновременных запросов (Telegram и сайт, двойное нажатие) получит true.
+     * Атомарное обновление pending → $status, поэтому расход не попадёт в бухгалтерию дважды.
+     */
+    private function claim(Expense $e, string $status, User $by, ?string $reason = null): bool
     {
-        if ($e->status !== 'pending') {
+        if ((int) $by->workspace_id !== (int) $e->workspace_id || ! $by->isAdmin()) {
             return false;
         }
-        $this->post($e, $by);
+
+        return Expense::whereKey($e->id)->where('status', 'pending')
+            ->update(['status' => $status, 'decided_by' => $by->id, 'decided_at' => now(), 'reason' => $reason, 'updated_at' => now()]) === 1;
+    }
+
+    public function approve(Expense $e, User $by): bool
+    {
+        if (! $this->claim($e, 'approving', $by)) {
+            return false;
+        }
+        try {
+            $this->post($e->fresh(), $by);
+        } catch (\Throwable $ex) {
+            Expense::whereKey($e->id)->update(['status' => 'pending', 'decided_by' => null, 'decided_at' => null]);   // не провелось — вернуть на согласование
+            throw $ex;
+        }
         $this->afterDecision($e->fresh(), $by);
 
         return true;
@@ -124,10 +143,10 @@ class ExpenseService
 
     public function reject(Expense $e, User $by, ?string $reason = null): bool
     {
-        if ($e->status !== 'pending') {
+        if (! $this->claim($e, 'rejected', $by, $reason)) {
             return false;
         }
-        $e->forceFill(['status' => 'rejected', 'decided_by' => $by->id, 'decided_at' => now(), 'reason' => $reason])->save();
+        $e = $e->fresh();
         AuditLog::create(['workspace_id' => $e->workspace_id, 'user_id' => $by->id, 'project' => StateWriter::projects(Workspace::find($e->workspace_id))[$e->project_id] ?? '',
             'action' => 'exp.reject', 'summary' => 'Отклонён расход −'.number_format($e->amount, 0, '.', ' ').' · '.$e->desc.($reason ? ' · '.$reason : '')]);
         $this->afterDecision($e->fresh(), $by);

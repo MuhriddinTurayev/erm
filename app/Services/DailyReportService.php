@@ -21,12 +21,21 @@ class DailyReportService
     {
         return $this->inLocale($ws, function () use ($ws, $date, $withAi) {
             $stats = CompanyStats::build($ws, $date);
-            $summary = null;
-            if ($withAi && $ws->report_ai && $ws->aiAllowed()) {
+            // отчёт за день ищем по дате (в SQLite дата хранится с временем — поиск по строке «Y-m-d» его не находил и падал на уникальном ключе)
+            $r = DailyReport::where('workspace_id', $ws->id)->whereDate('date', $stats['date'])->first();
+            $summary = $r?->ai_summary;
+            // ИИ — платный запрос: не чаще одного раза за день на компанию, даже если отчёт пересобирают или отправка не удалась
+            if ($withAi && ! $summary && $ws->report_ai && $ws->aiAllowed()
+                && \Illuminate\Support\Facades\Cache::add('report-ai:'.$ws->id.':'.$stats['date'], 1, now()->addDay())) {
                 $summary = $this->aiSummary($ws, $stats);
             }
+            if ($r) {
+                $r->fill(['stats' => $stats, 'ai_summary' => $summary])->save();
 
-            return DailyReport::updateOrCreate(['workspace_id' => $ws->id, 'date' => $stats['date']], ['stats' => $stats, 'ai_summary' => $summary]);
+                return $r;
+            }
+
+            return DailyReport::create(['workspace_id' => $ws->id, 'date' => $stats['date'], 'stats' => $stats, 'ai_summary' => $summary]);
         });
     }
 
@@ -159,6 +168,10 @@ class DailyReportService
             }
             $date = $now->toDateString();
             if (DailyReport::where('workspace_id', $ws->id)->whereDate('date', $date)->whereNotNull('sent_at')->exists()) {
+                return;
+            }
+            // после ошибки — пауза 30 минут, а не новая попытка каждую минуту
+            if (! \Illuminate\Support\Facades\Cache::add('report-try:'.$ws->id.':'.$date, 1, now()->addMinutes(30))) {
                 return;
             }
             try {

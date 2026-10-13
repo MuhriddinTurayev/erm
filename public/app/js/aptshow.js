@@ -200,8 +200,8 @@ ACT.aptBook = d => {
   if (ld) { ld.status = sold ? 'deal' : 'booked'; ld.aptId = a.id; ld.nextDate = sold ? '' : o.bookedUntil; ld.nextText = sold ? '' : 'Подписать договор до окончания брони'; leadLog(ld, `Задаток ${money(dep)} за кв. №${a.num}`); }
   save(); closeModal(); rerender(); toast(sold ? 'Продажа оформлена, задаток проведён' : 'Квартира забронирована, задаток проведён'); setTimeout(() => ACT.aptDocs({ id: a.id }), 200);
 };
-ACT.aptSell = d => { const o = aptObj(P(), d.id); if (!confirm(T('Отметить квартиру как проданную? (договор купли-продажи подписан)'))) return; o.status = 'sold'; const ld = P().leads.find(l => l.aptId === d.id); if (ld) { ld.status = 'deal'; ld.nextDate = ''; leadLog(ld, 'Сделка: договор подписан'); } save(); rerender(); toast('Квартира продана'); };
-ACT.aptUnbook = d => { const p = P(), o = aptObj(p, d.id); if (!confirm(T('Снять бронь? Задаток останется в платежах — верните его покупателю или удалите платёж.'))) return; o.status = 'free'; delete o.bookedUntil; save(); rerender(); };
+ACT.aptSell = async d => { const o = aptObj(P(), d.id); if (!await ui.confirm(T('Отметить квартиру как проданную? (договор купли-продажи подписан)'))) return; o.status = 'sold'; const ld = P().leads.find(l => l.aptId === d.id); if (ld) { ld.status = 'deal'; ld.nextDate = ''; leadLog(ld, 'Сделка: договор подписан'); } save(); rerender(); toast('Квартира продана'); };
+ACT.aptUnbook = async d => { const p = P(), o = aptObj(p, d.id); if (!await ui.confirm(T('Снять бронь? Покупатель и его оплаты перейдут в историю квартиры, следующий покупатель начнёт с нуля. Задаток верните покупателю — оформите расход.'), { danger: true, ok: T('Снять бронь') })) return; o.status = 'free'; delete o.bookedUntil; aptArchive(o); save(); rerender(); };
 ACT.aptDocs = d => {
   const p = P(), a = genApts(p).find(x => x.id === d.id), o = a.o, dep = (o.payments || []).find(x => x.id === o.depositId) || (o.payments || [])[0];
   if (!dep) return toast('Нет задатка по этой квартире');

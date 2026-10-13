@@ -21,10 +21,15 @@ class StateWriter
             if (! is_array($data) || ! is_array($data['projects'] ?? null)) {
                 throw new \RuntimeException('No CRM data');
             }
+            $before = $data;
             $res = $fn($data);
-            $ws->data = json_encode($data, JSON_UNESCAPED_UNICODE);
-            $ws->version = (int) $ws->version + 1;
-            $ws->save();
+            $events = Deals::normalize($data, $before);   // сделки по квартирам: номер сделки, закрытые — в историю
+            if ($data !== $before) {   // ничего не изменилось — версию не поднимаем
+                $ws->data = json_encode($data, JSON_UNESCAPED_UNICODE);
+                $ws->version = (int) $ws->version + 1;
+                $ws->save();
+            }
+            Deals::applyLinks($workspaceId, $events);
 
             return $res;
         });

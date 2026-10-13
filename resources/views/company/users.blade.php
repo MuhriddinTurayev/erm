@@ -38,7 +38,7 @@
             </form>
           </details>
           @unless ($self)
-          <form method="post" action="/company/users/{{ $u->id }}" onsubmit="return confirm(@js(__('Удалить пользователя :e?', ['e' => $u->email])))" style="display:inline">@csrf @method('DELETE')<button class="icon-btn btn-d" style="width:32px;height:32px" title="{{ __('Удалить') }}">{!! ic('trash-2', '', 16) !!}</button></form>
+          <form method="post" action="/company/users/{{ $u->id }}" data-confirm="{{ __('Удалить пользователя :e?', ['e' => $u->email]) }}" style="display:inline">@csrf @method('DELETE')<button class="icon-btn btn-d" style="width:32px;height:32px" title="{{ __('Удалить') }}">{!! ic('trash-2', '', 16) !!}</button></form>
           @endunless
         </td>
       </tr>

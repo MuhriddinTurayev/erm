@@ -34,8 +34,9 @@
     <button class="btn btn-p mt">{{ __('Сохранить') }}</button>
   </form>
 
-  <form method="post" action="/admin/companies/{{ $w->id }}/pay" class="card">
+  <form method="post" action="/admin/companies/{{ $w->id }}/pay" class="card" onsubmit="this.querySelector('[type=submit]').disabled = true">
     @csrf
+    <input type="hidden" name="idem" value="{{ \Illuminate\Support\Str::uuid() }}">{{-- повторная отправка формы не запишет оплату дважды --}}
     <div class="card-h"><h3>{!! ic('credit-card') !!}{{ __('Записать оплату и продлить') }}</h3></div>
     @php $pp = $reqPlan ?? $w->plan; $mm = (int) ($req[1] ?? 1); @endphp
     <div class="form" style="grid-template-columns:1fr 1fr">

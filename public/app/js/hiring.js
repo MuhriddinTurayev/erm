@@ -53,7 +53,7 @@ PAGES.hiring = {
   }
 };
 ACT.vacPick = d => { pageArgs.vrole = d.role; rerender(); };
-ACT.vacClose = d => { const p = P(), s = p.staff.find(x => isVacancy(x) && x.role === d.role && x.active !== false); if (!s || !confirm(T('Закрыть одну вакансию?') + ' ' + d.role)) return; p.staff = p.staff.filter(x => x !== s); save(); rerender(); };
+ACT.vacClose = async d => { const p = P(), s = p.staff.find(x => isVacancy(x) && x.role === d.role && x.active !== false); if (!s || !await ui.confirm(T('Закрыть одну вакансию?') + ' ' + d.role)) return; p.staff = p.staff.filter(x => x !== s); save(); rerender(); };
 ACT.vacAdd = () => openModal(`<h2>Новая вакансия</h2><div class="form mt">
   <label class="fld"><span>Профессия</span><select id="vRole">${opts(ROLES, 'Бетонщик')}</select></label>
   <label class="fld"><span>Сколько человек нужно</span><input class="txt" type="number" id="vN" value="1" min="1"></label>
@@ -75,7 +75,7 @@ ACT.candSave = () => {
   save(); closeModal(); rerender(); toast('Кандидат добавлен');
 };
 ACT.candMove = d => { const c = P().cands.find(x => x.id === d.id); if (!c) return; c.status = d.st; c.date = today(); save(); rerender(); };
-ACT.candDel = d => { if (!confirm(T('Удалить кандидата?'))) return; const p = P(); p.cands = p.cands.filter(x => x.id !== d.id); save(); rerender(); };
+ACT.candDel = async d => { if (!await ui.confirm(T('Удалить кандидата?'))) return; const p = P(); p.cands = p.cands.filter(x => x.id !== d.id); save(); rerender(); };
 ACT.candHire = d => {
   const p = P(), c = p.cands.find(x => x.id === d.id); if (!c) return;
   let s = p.staff.find(x => isVacancy(x) && x.role === c.role && x.active !== false);

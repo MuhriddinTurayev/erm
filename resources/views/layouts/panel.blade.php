@@ -136,8 +136,7 @@ document.addEventListener('click', e => {
 });
 // отметить все
 document.addEventListener('change', e => { if (e.target.matches('[data-all]')) document.querySelectorAll(e.target.dataset.all).forEach(c => c.checked = e.target.checked); });
-// подтверждение
-document.addEventListener('submit', e => { const q = e.target.dataset.confirm; if (q && !confirm(q)) e.preventDefault(); });
+// подтверждение (data-confirm, data-prompt) — свои диалоги: assets/dialog.js
 </script>
 @stack('scripts')
 </body>

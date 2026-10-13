@@ -273,7 +273,7 @@ PAGES.labour = {
       <tr class="tot"><td>Итого ИТР</td><td class="n">${L.itrCount}</td><td></td><td></td><td class="n">${money(L.itrCost)}</td></tr></tbody></table></div></div>`;
   }
 };
-ACT.resetLab = () => { if (!confirm('Сбросить выработку, сроки и ставки к нормативам?')) return; const p = P(); p.labour = {}; p.itr = {}; save(); rerender(); };
+ACT.resetLab = async () => { if (!await ui.confirm('Сбросить выработку, сроки и ставки к нормативам?')) return; const p = P(); p.labour = {}; p.itr = {}; save(); rerender(); };
 
 /* ---------- Смета ---------- */
 PAGES.smeta = {

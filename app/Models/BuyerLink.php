@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /** Ссылка на личный кабинет покупателя квартиры */
 class BuyerLink extends Model
 {
-    protected $fillable = ['token', 'workspace_id', 'project_id', 'apt_id', 'tg_chat_id', 'last_reminded'];
+    protected $fillable = ['token', 'workspace_id', 'project_id', 'apt_id', 'deal', 'tg_chat_id', 'last_reminded'];
 
     protected function casts(): array
     {

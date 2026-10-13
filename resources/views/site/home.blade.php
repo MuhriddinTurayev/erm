@@ -32,7 +32,7 @@
   <div class="wrap">
     <div class="hero-copy">
       <span class="eyebrow-pill">{!! ic('badge-check', '', 15) !!}{{ st('ERP-платформа №1 для застройщиков Узбекистана и Таджикистана') }}</span>
-      <h1>{!! st('Вся стройка и все деньги компании — <em>в одной системе</em>') !!}</h1>
+      <h1>{!! st_html('Вся стройка и все деньги компании — <em>в одной системе</em>') !!}</h1>
       <p class="sub">{{ st('Кассы и валюта, согласование платежей, склад, снабжение, тендеры, договоры, задачи и продажи квартир. Прорабы работают с телефона и через Telegram, а итог дня приходит директору каждый вечер.') }}</p>
       <div class="cta">
         @if ($appUrl)
@@ -284,7 +284,7 @@
   ['@type' => 'SoftwareApplication', 'name' => $brand, 'applicationCategory' => 'BusinessApplication', 'operatingSystem' => 'Web, Android, iOS', 'description' => st('ERP и CRM для строительных компаний'),
    'offers' => ['@type' => 'AggregateOffer', 'priceCurrency' => 'UZS', 'lowPrice' => (float) ($plans->min('price_month') ?? 0), 'offerCount' => $plans->count()]],
   ['@type' => 'FAQPage', 'mainEntity' => array_map(fn ($x) => ['@type' => 'Question', 'name' => $x[0], 'acceptedAnswer' => ['@type' => 'Answer', 'text' => $x[1]]], $faq)],
-]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !!}</script>
+]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) !!}</script>
 @endpush
 @push('scripts')
 <script>

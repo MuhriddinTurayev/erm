@@ -23,7 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/lead',
             'api/w/*',
         ]);
-        $middleware->web(prepend: [\App\Http\Middleware\FixEncoding::class], append: [SetLocale::class]);
+        $middleware->web(prepend: [\App\Http\Middleware\FixEncoding::class, \App\Http\Middleware\NormalizeEmail::class], append: [SetLocale::class]);
         $middleware->alias(['role' => Role::class, 'subscription' => Subscription::class, 'module' => Module::class, 'perm' => AdminPerm::class]);
         $middleware->redirectGuestsTo('/login');
         $middleware->redirectUsersTo(fn () => auth()->user()?->isSuperAdmin() ? '/admin' : '/crm');

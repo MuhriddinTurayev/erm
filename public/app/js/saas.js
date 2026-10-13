@@ -12,7 +12,7 @@ const seesMoney = () => !SAAS || SAAS.seesMoney !== false;
 if (SAAS && !seesMoney()) document.body.classList.add('no-money');
 
 /* ---------- Лимит объектов по тарифу ---------- */
-const isDemoProj = p => !!p.demo || /демо|demo/i.test(p.name || '');
+const isDemoProj = p => !!p.demo;   // только пометка: название «demo» лимит тарифа не обходит
 const objCount = () => DB.projects.filter(p => !isDemoProj(p)).length;
 function canAddObject() {
   if (!SAAS) return true;

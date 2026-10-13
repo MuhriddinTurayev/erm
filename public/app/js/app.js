@@ -76,10 +76,17 @@ $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeM
 ACT.go = d => go(d.page);
 ACT.menu = () => document.body.classList.toggle('menu');
 ACT.closeModal = closeModal;
-ACT.newProject = () => {
+ACT.newProject = async () => {
   if (!canAddObject()) return;
-  const name = prompt('Название нового проекта (жилого комплекса):', 'ЖК «'); if (!name) return;
-  const p = newProject(name.trim(), today()); DB.projects.push(p); DB.currentId = p.id; save(); go('project'); toast('Проект создан — заполните параметры здания');
+  // своя форма вместо системного окна браузера: название, адрес и дата начала
+  const f = await ui.form(T('Новый объект'), [
+    { name: 'name', label: 'Название объекта (жилого комплекса)', placeholder: T('Например: ЖК «Новый Город»'), required: true },
+    { name: 'address', label: 'Адрес', placeholder: T('Город, район, улица') },
+    { name: 'start', type: 'date', label: 'Дата начала', value: today(), required: true },
+  ], { ok: T('Создать объект') });
+  if (!f || !f.name) return;
+  const p = newProject(f.name.slice(0, 120), f.start || today()); p.address = (f.address || '').slice(0, 200);
+  DB.projects.push(p); DB.currentId = p.id; save(); go('project'); toast('Объект создан — заполните параметры здания');
 };
 window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h && h !== curPage && PAGES[h]) go(h); });
 

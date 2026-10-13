@@ -29,7 +29,7 @@
       <td class="n"><small>{{ number_format((int) ($u?->tin ?? 0), 0, '.', ' ') }} / {{ number_format((int) ($u?->tout ?? 0), 0, '.', ' ') }}</small></td>
       <td class="right nowrap">
         <form method="post" action="/admin/ai/{{ $p->id }}/test" style="display:inline">@csrf<button class="btn btn-s">{!! ic('zap') !!}{{ __('Проверить') }}</button></form>
-        <form method="post" action="/admin/ai/{{ $p->id }}" style="display:inline" onsubmit="return confirm(@js(__('Удалить подключение?')))">@csrf @method('DELETE')<button class="btn btn-s btn-d">✕</button></form>
+        <form method="post" action="/admin/ai/{{ $p->id }}" style="display:inline" data-confirm="{{ __('Удалить подключение?') }}">@csrf @method('DELETE')<button class="btn btn-s btn-d">✕</button></form>
       </td>
     </tr>
     <tr><td colspan="6" style="padding-top:0">

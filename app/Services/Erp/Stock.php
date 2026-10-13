@@ -54,11 +54,34 @@ class Stock
     {
         $r = StockMove::of($ws->id)->where('item_id', $itemId)->where('type', 'in')->where('qty', '>', 0)->selectRaw('sum(qty*price) s, sum(qty) q')->first();
 
-        return $r && $r->q > 0 ? round($r->s / $r->q, 2) : (float) Item::find($itemId)?->price;
+        return $r && $r->q > 0 ? round($r->s / $r->q, 2) : (float) Item::of($ws->id)->find($itemId)?->price;
+    }
+
+    /** Склад и поставщик — только своей компании (защита на уровне сервиса, а не только формы) */
+    private static function own(Workspace $ws, array $d): void
+    {
+        foreach (['warehouse_id', 'to_warehouse_id'] as $k) {
+            if (! empty($d[$k]) && ! Warehouse::of($ws->id)->whereKey($d[$k])->exists()) {
+                throw new \DomainException(__('Склад не найден'));
+            }
+        }
+        if (! empty($d['counterparty_id']) && ! \App\Models\Counterparty::of($ws->id)->whereKey($d['counterparty_id'])->exists()) {
+            throw new \DomainException(__('Контрагент не найден'));
+        }
+    }
+
+    /** Блокировка товара до конца транзакции: две выдачи одновременно не уведут остаток в минус */
+    private static function lockItem(Workspace $ws, int $itemId): Item
+    {
+        return Item::of($ws->id)->whereKey($itemId)->lockForUpdate()->firstOrFail();
     }
 
     public static function receive(Workspace $ws, User $by, array $d): StockMove
     {
+        self::own($ws, $d);
+        if ((float) $d['qty'] <= 0) {
+            throw new \DomainException(__('Количество должно быть больше нуля'));
+        }
         $item = Item::of($ws->id)->findOrFail($d['item_id']);
         $m = StockMove::create(['workspace_id' => $ws->id, 'item_id' => $item->id, 'warehouse_id' => $d['warehouse_id'], 'type' => 'in', 'qty' => abs((float) $d['qty']),
             'price' => (float) ($d['price'] ?? 0), 'batch' => $d['batch'] ?? ('P'.now()->format('ymd').'-'.Str::upper(Str::random(3))), 'counterparty_id' => $d['counterparty_id'] ?? null,
@@ -74,15 +97,22 @@ class Stock
     /** Выдача на объект; не больше остатка */
     public static function issue(Workspace $ws, User $by, array $d): StockMove
     {
-        $item = Item::of($ws->id)->findOrFail($d['item_id']);
+        self::own($ws, $d);
         $qty = abs((float) $d['qty']);
-        $left = self::qty($ws, $item->id, (int) $d['warehouse_id'], $d['batch'] ?? null);
-        if ($qty > $left + 0.0005) {
-            throw new \DomainException(__('На складе только :q :u', ['q' => self::n($left), 'u' => $item->unit]));
+        if ($qty <= 0) {
+            throw new \DomainException(__('Количество должно быть больше нуля'));
         }
-        $m = StockMove::create(['workspace_id' => $ws->id, 'item_id' => $item->id, 'warehouse_id' => $d['warehouse_id'], 'type' => 'out', 'qty' => -$qty,
-            'price' => self::avgPrice($ws, $item->id), 'batch' => $d['batch'] ?? null, 'project_id' => $d['project_id'] ?? null, 'note' => $d['note'] ?? null,
-            'date' => $d['date'] ?? now()->toDateString(), 'user_id' => $by->id]);
+        [$item, $m] = DB::transaction(function () use ($ws, $by, $d, $qty) {
+            $item = self::lockItem($ws, (int) $d['item_id']);
+            $left = self::qty($ws, $item->id, (int) $d['warehouse_id'], $d['batch'] ?? null);
+            if ($qty > $left + 0.0005) {
+                throw new \DomainException(__('На складе только :q :u', ['q' => self::n($left), 'u' => $item->unit]));
+            }
+
+            return [$item, StockMove::create(['workspace_id' => $ws->id, 'item_id' => $item->id, 'warehouse_id' => $d['warehouse_id'], 'type' => 'out', 'qty' => -$qty,
+                'price' => self::avgPrice($ws, $item->id), 'batch' => $d['batch'] ?? null, 'project_id' => $d['project_id'] ?? null, 'note' => $d['note'] ?? null,
+                'date' => $d['date'] ?? now()->toDateString(), 'user_id' => $by->id])];
+        });
         self::log($ws, $by, 'del', 'Выдача: '.$item->name.' −'.self::n($qty).' '.$item->unit.($m->project_id ? ' → '.(StateWriter::projects($ws)[$m->project_id] ?? '') : '').($m->note ? ' · '.$m->note : ''), $m->project_id);
 
         return $m;
@@ -90,15 +120,23 @@ class Stock
 
     public static function transfer(Workspace $ws, User $by, array $d): string
     {
+        self::own($ws, $d);
         $item = Item::of($ws->id)->findOrFail($d['item_id']);
         $qty = abs((float) $d['qty']);
-        $left = self::qty($ws, $item->id, (int) $d['warehouse_id'], $d['batch'] ?? null);
-        if ($qty > $left + 0.0005) {
-            throw new \DomainException(__('На складе только :q :u', ['q' => self::n($left), 'u' => $item->unit]));
+        if ($qty <= 0) {
+            throw new \DomainException(__('Количество должно быть больше нуля'));
         }
         $to = Warehouse::of($ws->id)->findOrFail($d['to_warehouse_id']);
+        if ((int) $to->id === (int) $d['warehouse_id']) {
+            throw new \DomainException(__('Выберите другой склад'));
+        }
         $key = Str::lower(Str::random(10));
         DB::transaction(function () use ($ws, $by, $d, $item, $qty, $to, $key) {
+            self::lockItem($ws, $item->id);
+            $left = self::qty($ws, $item->id, (int) $d['warehouse_id'], $d['batch'] ?? null);
+            if ($qty > $left + 0.0005) {
+                throw new \DomainException(__('На складе только :q :u', ['q' => self::n($left), 'u' => $item->unit]));
+            }
             $base = ['workspace_id' => $ws->id, 'item_id' => $item->id, 'type' => 'transfer', 'price' => self::avgPrice($ws, $item->id), 'batch' => $d['batch'] ?? null,
                 'transfer_key' => $key, 'note' => $d['note'] ?? null, 'date' => $d['date'] ?? now()->toDateString(), 'user_id' => $by->id];
             StockMove::create($base + ['warehouse_id' => $d['warehouse_id'], 'qty' => -$qty]);
@@ -112,13 +150,24 @@ class Stock
     /** Инвентаризация: привести остаток к фактическому */
     public static function adjust(Workspace $ws, User $by, int $itemId, int $warehouseId, float $fact, ?string $note): void
     {
+        self::own($ws, ['warehouse_id' => $warehouseId]);
+        if ($fact < 0) {
+            throw new \DomainException(__('Фактический остаток не может быть меньше нуля'));
+        }
         $item = Item::of($ws->id)->findOrFail($itemId);
-        $diff = round($fact - self::qty($ws, $itemId, $warehouseId), 3);
+        $diff = DB::transaction(function () use ($ws, $by, $itemId, $warehouseId, $fact, $note) {
+            self::lockItem($ws, $itemId);
+            $diff = round($fact - self::qty($ws, $itemId, $warehouseId), 3);
+            if (abs($diff) >= 0.0005) {
+                StockMove::create(['workspace_id' => $ws->id, 'item_id' => $itemId, 'warehouse_id' => $warehouseId, 'type' => 'adjust', 'qty' => $diff,
+                    'price' => self::avgPrice($ws, $itemId), 'note' => $note ?: 'Инвентаризация', 'date' => now()->toDateString(), 'user_id' => $by->id]);
+            }
+
+            return $diff;
+        });
         if (abs($diff) < 0.0005) {
             return;
         }
-        StockMove::create(['workspace_id' => $ws->id, 'item_id' => $itemId, 'warehouse_id' => $warehouseId, 'type' => 'adjust', 'qty' => $diff,
-            'price' => self::avgPrice($ws, $itemId), 'note' => $note ?: 'Инвентаризация', 'date' => now()->toDateString(), 'user_id' => $by->id]);
         self::log($ws, $by, 'edit', 'Инвентаризация: '.$item->name.' '.($diff > 0 ? '+' : '').self::n($diff).' '.$item->unit);
     }
 

@@ -71,6 +71,8 @@ async function svPush() {
     }
     if (!r.ok) throw new Error(r.status);
     const j = await r.json(); SV.version = j.version;
+    // сервер поправил данные (права сотрудника, сделки по квартирам) — показываем итог, если за это время ничего не меняли
+    if (j.data && !svTouched.size) svApply(j.data);
     svSet(SV_DIRTY, svTouched.size ? String(SV.version) : null);
     svMark('✓ сохранено на сервере');
   } catch (e) {
@@ -89,6 +91,18 @@ function svMerge(j, mine) {
   S.projects.forEach(migrate); DB = S;
   svSet(STORE_KEY, JSON.stringify(DB));
 }
+/* Принять данные с сервера целиком (текущий объект и язык — свои) */
+function svApply(raw) {
+  let S; try { S = JSON.parse(raw); } catch (e) { return false; }
+  if (!S || !Array.isArray(S.projects) || !S.projects.length) return false;
+  const cur = DB.currentId; S.settings = S.settings || {}; S.settings.lang = DB.settings.lang; S.settings.serverWs = SV.ws;
+  ['inboxSeq', 'geoSeq'].forEach(k => { if (DB.settings[k] > (S.settings[k] || 0)) S.settings[k] = DB.settings[k]; });
+  S.currentId = S.projects.some(p => p.id === cur) ? cur : S.projects[0].id; S.projects.forEach(migrate);
+  DB = S; svSet(STORE_KEY, JSON.stringify(DB));
+  const busy = !$('#modal').classList.contains('hidden') || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '');
+  if (!busy) rerender(); else SV.needRender = true;
+  return true;
+}
 /* 4. Изменения других пользователей подтягиваются каждые 15 секунд */
 async function svPull() {
   if (!SV || svPushing || svTouched.size || document.hidden || !DB) return;
@@ -97,13 +111,8 @@ async function svPull() {
     if (!(v > SV.version)) return;
     const j = await (await fetch('/api/state')).json();
     if (svTouched.size || svPushing) return;
-    let S; try { S = JSON.parse(j.data); } catch (e) { return; }
-    if (!S || !Array.isArray(S.projects) || !S.projects.length) return;
-    const cur = DB.currentId; S.settings = S.settings || {}; S.settings.lang = DB.settings.lang; S.settings.serverWs = SV.ws;
-    S.currentId = S.projects.some(p => p.id === cur) ? cur : S.projects[0].id; S.projects.forEach(migrate);
-    DB = S; SV.version = j.version; svSet(STORE_KEY, JSON.stringify(DB));
-    const busy = !$('#modal').classList.contains('hidden') || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '');
-    if (!busy) rerender(); else SV.needRender = true;
+    if (!svApply(j.data)) return;
+    SV.version = j.version;
     svMark('✓ данные обновлены');
   } catch (e) { }
 }

@@ -68,10 +68,11 @@ class PaymentController extends ErpController
             'category_id' => ['nullable', Rule::exists('fin_categories', 'id')->where('workspace_id', $ws->id)], 'due_date' => ['nullable', 'date'],
         ]);
         $d['project_id'] = $this->checkProject($d['project_id'] ?? null);
-        if (! empty($d['contract_id']) && empty($d['counterparty_id'])) {
-            $d['counterparty_id'] = Contract::find($d['contract_id'])->counterparty_id;
+        try {
+            $pr = Payments::create($ws, $u, $d);
+        } catch (\DomainException $e) {
+            return back()->withInput()->withErrors(['counterparty_id' => $e->getMessage()]);
         }
-        $pr = Payments::create($ws, $u, $d);
 
         return redirect('/company/payments/'.$pr->id)->with('ok', $pr->status === 'approved' ? __('Заявка утверждена') : __('Заявка отправлена на согласование'));
     }
@@ -100,8 +101,16 @@ class PaymentController extends ErpController
         $this->mine($pr);
         $u = $this->editor();
         abort_unless($u->isAdmin() || in_array($u->role, ['accountant', 'cashier'], true), 403);
-        $d = $request->validate(['cash_desk_id' => ['required', 'integer'], 'date' => ['required', 'date']]);
-        Payments::pay($this->ws(), $u, $pr, (int) $d['cash_desk_id'], $d['date']);
+        $ws = $this->ws();
+        $d = $request->validate(['cash_desk_id' => ['required', Rule::exists('cash_desks', 'id')->where('workspace_id', $ws->id)], 'date' => ['required', 'date']]);
+        if ($pid = CashDesk::of($ws->id)->whereKey($d['cash_desk_id'])->value('project_id')) {
+            $this->checkProject($pid);   // касса объекта — только для его сотрудников
+        }
+        try {
+            Payments::pay($ws, $u, $pr, (int) $d['cash_desk_id'], $d['date']);
+        } catch (\DomainException $e) {
+            return back()->withErrors(['cash_desk_id' => $e->getMessage()]);
+        }
 
         return back()->with('ok', __('Оплачено'));
     }
@@ -109,10 +118,18 @@ class PaymentController extends ErpController
     public function cancel(PaymentRequest $pr)
     {
         $this->mine($pr);
-        abort_unless(in_array($pr->status, ['pending', 'approved'], true) && (auth()->user()->isAdmin() || $pr->user_id === auth()->id()), 403);
-        $pr->update(['status' => 'cancelled']);
+        $ok = \Illuminate\Support\Facades\DB::transaction(function () use ($pr) {
+            $fresh = PaymentRequest::whereKey($pr->id)->lockForUpdate()->first();
+            abort_unless($fresh && (auth()->user()->isAdmin() || $fresh->user_id === auth()->id()), 403);
+            if (! in_array($fresh->status, ['pending', 'approved'], true)) {
+                return false;   // уже оплачена или решена — отменять нечего
+            }
+            $fresh->update(['status' => 'cancelled']);
 
-        return back()->with('ok', __('Заявка отменена'));
+            return true;
+        });
+
+        return back()->with($ok ? 'ok' : 'warn', $ok ? __('Заявка отменена') : __('Заявка уже оплачена или отклонена'));
     }
 
     /** Настройка цепочки согласования (руководитель) */

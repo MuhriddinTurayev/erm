@@ -188,10 +188,13 @@ class Workspace extends Model
         return is_array($d) && is_array($d['projects'] ?? null) ? $d['projects'] : [];
     }
 
-    /** Демо-объект не считается в лимит тарифа */
+    /**
+     * Демо-объект не считается в лимит тарифа. Только по пометке, которую нельзя поставить самому
+     * (раньше хватало назвать объект «demo», и лимит тарифа обходился).
+     */
     public static function isDemo(array $p): bool
     {
-        return ! empty($p['demo']) || (bool) preg_match('/демо|demo/iu', (string) ($p['name'] ?? ''));
+        return ! empty($p['demo']);
     }
 
     public static function countObjects(array $projects): int

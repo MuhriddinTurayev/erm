@@ -60,10 +60,13 @@ class PublicController extends Controller
     {
         $bl = BuyerLink::where('token', $token)->firstOrFail();
         $ws = $bl->workspace;
+        abort_unless($ws && $ws->hasAccess(), 404);
         $p = StateWriter::project($ws, $bl->project_id);
         abort_unless($p, 404);
         $a = Apartments::find($p, $bl->apt_id);
         abort_unless($a && in_array($a['status'], ['sold', 'booked'], true), 404);
+        // ссылка открывает только свою сделку: после продажи квартиры другому покупателю прежняя ссылка не работает
+        abort_unless($bl->deal && $bl->deal === \App\Services\Deals::current($p, $bl->apt_id), 404);
 
         return [$bl, $ws, $p, $a];
     }

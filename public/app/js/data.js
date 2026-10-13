@@ -56,7 +56,7 @@ function demoProject() {
   const R = rng(20261009), ri = (a, b) => Math.floor(a + R() * (b - a + 1)), pick = a => a[Math.floor(R() * a.length)];
   const start = addDays(today(), -220);
   const p = newProject('ЖК «Новый Город» (демо)', start);
-  p.address = 'ул. Строителей, участок 15'; p.status = 'Строительство';
+  p.address = 'ул. Строителей, участок 15'; p.status = 'Строительство'; p.demo = true;
   const t = today();
   p.stages.forEach(s => { const done = daysBetween(s.start, t) / s.dur; s.progress = Math.max(0, Math.min(100, Math.round(done * 100 * (0.85 + R() * 0.2) / 5) * 5)); });
   const resp = ['Каримов А.', 'Петров С.', 'Юсупов Б.'];

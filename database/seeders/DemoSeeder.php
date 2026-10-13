@@ -483,7 +483,7 @@ class DemoSeeder extends Seeder
         $p = collect($ws->fresh()->projects())->firstWhere('id', $p1);
         foreach (Apartments::list($p) as $apt) {
             if ($apt['status'] === 'sold' && $apt['plan'] && str_contains($apt['plan'], 'Рассрочка')) {
-                $bl = BuyerLink::create(['workspace_id' => $ws->id, 'project_id' => $p1, 'apt_id' => $apt['id'], 'token' => Str::lower(Str::random(24))]);
+                $bl = \App\Services\Deals::link($ws->fresh(), $p1, $apt['id']);   // ссылка привязана к текущей сделке
                 $this->creds[$ws->name]['buyer'] = $bl->url().'  ('.$apt['buyer'].', '.$apt['num'].')';
                 break;
             }

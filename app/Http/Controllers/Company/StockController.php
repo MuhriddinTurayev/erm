@@ -59,25 +59,43 @@ class StockController extends ErpController
         $ws = $this->ws();
         $d = $request->validate(['id' => ['nullable', 'integer'], 'name' => ['required', 'string', 'max:160'], 'unit' => ['required', 'string', 'max:16'],
             'sku' => ['nullable', 'string', 'max:40'], 'group' => ['nullable', 'string', 'max:60'], 'min_qty' => ['nullable', 'numeric', 'min:0'], 'price' => ['nullable', 'numeric', 'min:0']]);
+        // начальный остаток — только на свой склад (своей компании и своего объекта)
+        $start = $request->validate(['qty' => ['nullable', 'numeric', 'min:0'], 'warehouse_id' => ['nullable', Rule::exists('warehouses', 'id')->where('workspace_id', $ws->id)]]);
         $d['min_qty'] = (float) ($d['min_qty'] ?? 0);
         $d['price'] = (float) ($d['price'] ?? 0);
         if (! empty($d['id'])) {
             Item::of($ws->id)->findOrFail($d['id'])->update($d);
         } else {
+            if (! empty($start['warehouse_id']) && (float) ($start['qty'] ?? 0) > 0) {
+                $this->myWarehouse((int) $start['warehouse_id']);
+            }
             $item = Item::create($d + ['workspace_id' => $ws->id]);
-            if ($request->filled('qty') && $request->filled('warehouse_id')) {
-                Stock::receive($ws, $request->user(), ['item_id' => $item->id, 'warehouse_id' => (int) $request->input('warehouse_id'), 'qty' => (float) $request->input('qty'), 'price' => $d['price'], 'note' => 'Начальный остаток']);
+            if (! empty($start['warehouse_id']) && (float) ($start['qty'] ?? 0) > 0) {
+                Stock::receive($ws, $request->user(), ['item_id' => $item->id, 'warehouse_id' => (int) $start['warehouse_id'], 'qty' => (float) $start['qty'], 'price' => $d['price'], 'note' => 'Начальный остаток']);
             }
         }
 
         return back()->with('ok', __('Сохранено'));
     }
 
+    /** Склад своей компании, доступный пользователю (склад объекта — только сотрудникам этого объекта) */
+    private function myWarehouse(int $id): Warehouse
+    {
+        $w = Warehouse::of($this->ws()->id)->findOrFail($id);
+        if ($w->project_id) {
+            $this->checkProject($w->project_id);
+        }
+
+        return $w;
+    }
+
     public function warehouseSave(Request $request)
     {
         abort_unless($request->user()->isAdmin(), 403);
         $ws = $this->ws();
-        $d = $request->validate(['id' => ['nullable', 'integer'], 'name' => ['required', 'string', 'max:80'], 'project_id' => ['nullable', 'string', 'max:40'], 'keeper_id' => ['nullable', 'integer']]);
+        $d = $request->validate(['id' => ['nullable', 'integer'], 'name' => ['required', 'string', 'max:80'], 'project_id' => ['nullable', 'string', 'max:40'],
+            'keeper_id' => ['nullable', Rule::exists('users', 'id')->where('workspace_id', $ws->id)]]);
+        $d['project_id'] = $this->checkProject($d['project_id'] ?? null);
         $d['is_active'] = ! $request->has('archive');
         ! empty($d['id']) ? Warehouse::of($ws->id)->findOrFail($d['id'])->update($d) : Warehouse::create($d + ['workspace_id' => $ws->id]);
 
@@ -95,9 +113,18 @@ class StockController extends ErpController
             'warehouse_id' => ['required', Rule::exists('warehouses', 'id')->where('workspace_id', $ws->id)],
             'to_warehouse_id' => ['nullable', 'required_if:op,transfer', 'different:warehouse_id', Rule::exists('warehouses', 'id')->where('workspace_id', $ws->id)],
             'qty' => ['required', 'numeric', 'min:0'], 'price' => ['nullable', 'numeric', 'min:0'], 'batch' => ['nullable', 'string', 'max:40'],
-            'project_id' => ['nullable', 'string', 'max:40'], 'counterparty_id' => ['nullable', 'integer'], 'note' => ['nullable', 'string', 'max:300'], 'date' => ['nullable', 'date'],
+            'project_id' => ['nullable', 'string', 'max:40'], 'note' => ['nullable', 'string', 'max:300'], 'date' => ['nullable', 'date'],
+            // поставщик — только из контрагентов своей компании
+            'counterparty_id' => ['nullable', Rule::exists('counterparties', 'id')->where('workspace_id', $ws->id)],
         ]);
         $d['project_id'] = $this->checkProject($d['project_id'] ?? null);
+        $this->myWarehouse((int) $d['warehouse_id']);
+        if (! empty($d['to_warehouse_id'])) {
+            $this->myWarehouse((int) $d['to_warehouse_id']);
+        }
+        if ($d['op'] === 'in' && ! empty($d['counterparty_id']) && \App\Models\Counterparty::whereKey($d['counterparty_id'])->value('status') === 'blocked') {
+            return back()->withInput()->withErrors(['counterparty_id' => __('Контрагент заблокирован — приход от него не принимаем')]);
+        }
         try {
             match ($d['op']) {
                 'in' => Stock::receive($ws, $u, $d),
@@ -111,7 +138,11 @@ class StockController extends ErpController
 
         // материал привезли — сразу заявка на оплату поставщику (бухгалтер и руководитель согласуют, кассир оплатит)
         if ($d['op'] === 'in' && $request->boolean('make_pr')) {
-            $pr = $this->payFor($ws, $u, [[(int) $d['item_id'], (float) $d['qty'], (float) ($d['price'] ?? 0)]], $d['counterparty_id'] ?? null, (int) $d['warehouse_id'], $d['note'] ?? null);
+            try {
+                $pr = $this->payFor($ws, $u, [[(int) $d['item_id'], (float) $d['qty'], (float) ($d['price'] ?? 0)]], $d['counterparty_id'] ?? null, (int) $d['warehouse_id'], $d['note'] ?? null);
+            } catch (\DomainException $e) {
+                return back()->with('warn', __('Приход проведён, но заявка на оплату не создана: :e', ['e' => $e->getMessage()]));
+            }
             if ($pr) {
                 return back()->with('ok', __('Приход проведён. Создана заявка на оплату №:n — ушла на согласование.', ['n' => $pr->number]));
             }
@@ -135,7 +166,7 @@ class StockController extends ErpController
         if ($sum <= 0) {
             return null;
         }
-        $wh = Warehouse::find($warehouseId);
+        $wh = Warehouse::of($ws->id)->find($warehouseId);
 
         return \App\Services\Erp\Payments::create($ws, $u, ['amount' => round($sum, 2), 'currency' => \App\Services\Erp\Money::base($ws),
             'purpose' => mb_substr('Оплата за материал: '.implode(', ', $names).($note ? ' · '.$note : ''), 0, 300), 'project_id' => $wh?->project_id,
@@ -163,8 +194,9 @@ class StockController extends ErpController
             ->tap(fn ($q) => $this->scopeProjects($q))->latest('id')->paginate(30)->withQueryString();
 
         return view('company.erp.supply', ['ws' => $ws, 'list' => $list, 'st' => $st, 'projects' => $this->projects(), 'bal' => Stock::balances($ws),
-            'items' => Item::of($ws->id)->orderBy('name')->get(), 'whs' => Warehouse::of($ws->id)->where('is_active', true)->get(), 'counterparties' => $this->counterparties(),
-            'counts' => SupplyRequest::of($ws->id)->select('status', DB::raw('count(*) n'))->groupBy('status')->pluck('n', 'status')]);
+            'items' => Item::of($ws->id)->orderBy('name')->get(), 'whs' => Warehouse::of($ws->id)->where('is_active', true)->tap(fn ($q) => $this->scopeProjects($q))->get(),
+            'counterparties' => $this->counterparties(),
+            'counts' => SupplyRequest::of($ws->id)->tap(fn ($q) => $this->scopeProjects($q))->select('status', DB::raw('count(*) n'))->groupBy('status')->pluck('n', 'status')]);
     }
 
     public function supplyStore(Request $request)
@@ -225,10 +257,16 @@ class StockController extends ErpController
         } elseif ($a === 'receive') {
             abort_unless(in_array($sr->status, ['approved', 'ordered', 'partial'], true), 403);
             $d = $request->validate(['warehouse_id' => ['required', Rule::exists('warehouses', 'id')->where('workspace_id', $ws->id)], 'qty' => ['array'], 'qty.*' => ['nullable', 'numeric', 'min:0']]);
+            $this->myWarehouse((int) $d['warehouse_id']);
             Stock::receiveSupply($ws, $u, $sr, $d['qty'] ?? [], (int) $d['warehouse_id']);
             if ($request->boolean('make_pr')) {
                 $lines = $sr->lines->map(fn ($l) => [$l->item_id, (float) ($d['qty'][$l->id] ?? 0), (float) $l->price])->all();
-                if ($pr = $this->payFor($ws, $u, $lines, $sr->counterparty_id, (int) $d['warehouse_id'], 'заявка на снабжение №'.$sr->number)) {
+                try {
+                    $pr = $this->payFor($ws, $u, $lines, $sr->counterparty_id, (int) $d['warehouse_id'], 'заявка на снабжение №'.$sr->number);
+                } catch (\DomainException $e) {
+                    return back()->with('warn', __('Приход проведён, но заявка на оплату не создана: :e', ['e' => $e->getMessage()]));
+                }
+                if ($pr) {
                     return back()->with('ok', __('Приход проведён. Создана заявка на оплату №:n — ушла на согласование.', ['n' => $pr->number]));
                 }
             }
@@ -248,7 +286,7 @@ class StockController extends ErpController
 
         return view('company.erp.tenders', ['ws' => $ws, 'projects' => $this->projects(),
             'list' => Tender::of($ws->id)->with(['bids.counterparty', 'user'])->withCount('bids')->tap(fn ($q) => $this->scopeProjects($q))->latest('id')->paginate(30),
-            'supply' => SupplyRequest::of($ws->id)->whereIn('status', ['approved', 'new'])->latest('id')->get()]);
+            'supply' => SupplyRequest::of($ws->id)->whereIn('status', ['approved', 'new'])->tap(fn ($q) => $this->scopeProjects($q))->latest('id')->get()]);
     }
 
     public function tender(Tender $t)

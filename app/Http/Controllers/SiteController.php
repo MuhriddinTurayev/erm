@@ -25,7 +25,7 @@ class SiteController extends Controller
         $pages = json_decode((string) PlatformSetting::get('pages'), true) ?: [];
         $custom = $pages[$slug][app()->getLocale()] ?? ($pages[$slug]['ru'] ?? '');
 
-        return view('site.page', ['slug' => $slug, 'custom' => $custom ? \Illuminate\Support\Str::markdown($custom, ['html_input' => 'strip']) : null]);
+        return view('site.page', ['slug' => $slug, 'custom' => $custom ? \Illuminate\Support\Str::markdown($custom, ['html_input' => 'strip', 'allow_unsafe_links' => false]) : null]);
     }
 
     public function blog()

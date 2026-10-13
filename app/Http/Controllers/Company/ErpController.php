@@ -46,9 +46,18 @@ abstract class ErpController extends Controller
         return $u;
     }
 
+    /**
+     * Запись своей компании и (для сотрудника объекта) своего объекта.
+     * Прораб одного объекта не откроет по ссылке договор, заявку, задачу или фото другого объекта.
+     */
     protected function mine($model): void
     {
         abort_unless($model && (int) $model->workspace_id === (int) $this->ws()->id, 404);
+        $only = auth()->user()->allowedObjects();
+        $pid = $model->getAttribute('project_id');
+        if ($only !== null && $pid !== null && $pid !== '' && ! in_array((string) $pid, $only, true)) {
+            abort(404);
+        }
     }
 
     protected function counterparties()
@@ -81,6 +90,7 @@ abstract class ErpController extends Controller
     public function comment(Request $request, string $type, int $id)
     {
         $this->subject($type, $id);
+        $this->editor();
         $d = $request->validate(['text' => ['required', 'string', 'max:2000']]);
         Comment::create(['workspace_id' => $this->ws()->id, 'subject' => $type, 'subject_id' => $id, 'user_id' => $request->user()->id, 'text' => $d['text']]);
 
@@ -105,6 +115,7 @@ abstract class ErpController extends Controller
     public function file(Attachment $att)
     {
         $this->mine($att);
+        $this->subject($att->subject, (int) $att->subject_id);   // файл видит тот, кто видит саму запись
         abort_unless(Storage::disk('local')->exists($att->path), 404);
 
         return response()->file(Storage::disk('local')->path($att->path), [
@@ -116,6 +127,7 @@ abstract class ErpController extends Controller
     public function fileDelete(Attachment $att)
     {
         $this->mine($att);
+        $this->subject($att->subject, (int) $att->subject_id);
         abort_unless(auth()->user()->isAdmin() || $att->user_id === auth()->id(), 403);
         Storage::disk('local')->delete($att->path);
         $att->delete();

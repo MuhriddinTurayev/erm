@@ -236,5 +236,5 @@ PAGES.prep = {
 };
 ACT.prepAdd = () => { P().prepExtra.push({ name: 'Новая работа', unit: 'компл', qty: 1, price: 0, days: 5, status: 'todo' }); save(); rerender(); };
 ACT.prepDel = d => { P().prepExtra.splice(+d.i, 1); save(); rerender(); };
-ACT.prepAllDone = () => { if (!confirm('Отметить все подготовительные работы как выполненные?')) return; const p = P(); prepDefs(p).forEach(([k]) => { (p.prep[k] = p.prep[k] || {}).status = 'done'; }); p.prepExtra.forEach(e => e.status = 'done'); save(); rerender(); };
+ACT.prepAllDone = async () => { if (!await ui.confirm('Отметить все подготовительные работы как выполненные?')) return; const p = P(); prepDefs(p).forEach(([k]) => { (p.prep[k] = p.prep[k] || {}).status = 'done'; }); p.prepExtra.forEach(e => e.status = 'done'); save(); rerender(); };
 ACT.prepCsv = () => { const C = prepCalc(P()); download('podgotovka.csv', csv([['Раздел', 'Работа', 'Объём', 'Ед.', 'Цена', 'Сумма', 'Дней', 'Статус', 'Ответственный'], ...C.rows.map(r => [r.group, r.name, r.qty, r.unit, r.price, Math.round(r.sum), r.days, Object.fromEntries(PREP_STATUS)[r.status], r.resp])]), 'text/csv'); };

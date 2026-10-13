@@ -34,7 +34,7 @@ class OpsController extends Controller
 
     public function decide(Request $request, Expense $expense, ExpenseService $svc)
     {
-        abort_unless($request->user()->isAdmin() && $expense->workspace_id === $this->ws()->id, 403);
+        abort_unless($request->user()->isAdmin() && (int) $expense->workspace_id === (int) $this->ws()->id, 403);
         $ok = $request->input('action') === 'approve' ? $svc->approve($expense, $request->user()) : $svc->reject($expense, $request->user(), $request->input('reason'));
 
         return back()->with($ok ? 'ok' : 'warn', $ok ? __('Сохранено') : __('Уже решено'));
@@ -56,9 +56,12 @@ class OpsController extends Controller
         return response()->json(['id' => $e->id, 'status' => $e->status]);
     }
 
-    public function apiPending()
+    public function apiPending(Request $request)
     {
-        return response()->json(['pending' => Expense::where('workspace_id', $this->ws()->id)->where('status', 'pending')->count()]);
+        $only = $request->user()->allowedObjects();
+
+        return response()->json(['pending' => Expense::where('workspace_id', $this->ws()->id)->where('status', 'pending')
+            ->when($only !== null, fn ($q) => $q->whereIn('project_id', $only))->count()]);
     }
 
     /* ---------- журнал работ ---------- */
@@ -90,9 +93,18 @@ class OpsController extends Controller
 
     /* ---------- файлы ---------- */
 
+    /** Сотрудник объекта видит чеки и фото только своих объектов */
+    private function ownProject(Request $request, ?string $pid): bool
+    {
+        $only = $request->user()->allowedObjects();
+
+        return $only === null || ($pid !== null && in_array((string) $pid, $only, true));
+    }
+
     public function receipt(Request $request, Expense $expense)
     {
-        abort_unless($expense->workspace_id === $this->ws()->id && $expense->receipt && Storage::disk('local')->exists($expense->receipt), 404);
+        abort_unless((int) $expense->workspace_id === (int) $this->ws()->id && $this->ownProject($request, $expense->project_id)
+            && $expense->receipt && Storage::disk('local')->exists($expense->receipt), 404);
 
         return response()->file(Storage::disk('local')->path($expense->receipt), ['Cache-Control' => 'private, max-age=86400']);
     }
@@ -100,7 +112,7 @@ class OpsController extends Controller
     public function logPhoto(Request $request, SiteLog $log, int $i)
     {
         $path = $log->photos[$i] ?? null;
-        abort_unless($log->workspace_id === $this->ws()->id && $path && Storage::disk('local')->exists($path), 404);
+        abort_unless((int) $log->workspace_id === (int) $this->ws()->id && $this->ownProject($request, $log->project_id) && $path && Storage::disk('local')->exists($path), 404);
 
         return response()->file(Storage::disk('local')->path($path), ['Cache-Control' => 'private, max-age=86400']);
     }
@@ -112,7 +124,11 @@ class OpsController extends Controller
         $d = $request->validate(['project_id' => ['required', 'string', 'max:40'], 'apt_id' => ['required', 'string', 'max:40']]);
         $ws = $this->ws();
         abort_unless(isset(StateWriter::projects($ws, $request->user()->allowedObjects())[$d['project_id']]), 404);
-        $bl = BuyerLink::firstOrCreate(['workspace_id' => $ws->id, 'project_id' => $d['project_id'], 'apt_id' => $d['apt_id']], ['token' => Str::lower(Str::random(24))]);
+        try {
+            $bl = \App\Services\Deals::link($ws, $d['project_id'], $d['apt_id']);
+        } catch (\DomainException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
 
         return response()->json(['url' => $bl->url()]);
     }

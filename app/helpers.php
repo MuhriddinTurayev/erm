@@ -68,6 +68,20 @@ if (! function_exists('st')) {
     }
 }
 
+if (! function_exists('st_html')) {
+    /**
+     * Текст сайта с простым оформлением (<em>, <b>, <br>…) — для вывода через {!! !!}.
+     * Текст правит администратор платформы, поэтому всё, кроме этих тегов, вырезаем, а у тегов убираем атрибуты:
+     * иначе через «текст сайта» можно вставить скрипт и захватить вход владельца платформы.
+     */
+    function st_html(string $key, array $replace = []): string
+    {
+        $v = strip_tags(st($key, $replace), '<em><b><strong><i><br><span>');
+
+        return preg_replace('#<(/?)(em|b|strong|i|br|span)\b[^>]*>#i', '<$1$2>', $v);
+    }
+}
+
 if (! function_exists('weekday')) {
     /** День недели на языке интерфейса (у Carbon в узбекской латинице дней нет) */
     function weekday($date): string

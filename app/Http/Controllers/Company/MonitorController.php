@@ -60,8 +60,8 @@ class MonitorController extends ErpController
         }
         if (in_array('approvals', $on)) {
             $prs = PaymentRequest::of($ws->id)->where('status', 'pending')->with('user')->latest('id')->get()->filter(fn ($r) => Payments::canDecide($u, $r));
-            $w['approvals'] = ['list' => $prs->take(6), 'n' => $prs->count(), 'toPay' => PaymentRequest::of($ws->id)->where('status', 'approved')->count(),
-                'exp' => \App\Models\Expense::where('workspace_id', $ws->id)->where('status', 'pending')->count()];
+            $w['approvals'] = ['list' => $prs->take(6), 'n' => $prs->count(), 'toPay' => PaymentRequest::of($ws->id)->where('status', 'approved')->tap(fn ($q) => $this->scopeProjects($q))->count(),
+                'exp' => \App\Models\Expense::where('workspace_id', $ws->id)->where('status', 'pending')->when($u->allowedObjects() !== null, fn ($q) => $q->whereIn('project_id', $u->allowedObjects()))->count()];
         }
         if (in_array('forecast', $on) && $money) {
             $w['forecast'] = Cash::forecast($ws, 8);
@@ -92,13 +92,12 @@ class MonitorController extends ErpController
             $w['stock'] = Stock::low($ws);
         }
         if (in_array('supply', $on)) {
-            $w['supply'] = SupplyRequest::of($ws->id)->whereIn('status', ['new', 'approved', 'ordered', 'partial'])->selectRaw('status, count(*) n')->groupBy('status')->pluck('n', 'status');
+            $w['supply'] = SupplyRequest::of($ws->id)->whereIn('status', ['new', 'approved', 'ordered', 'partial'])->tap(fn ($q) => $this->scopeProjects($q))->selectRaw('status, count(*) n')->groupBy('status')->pluck('n', 'status');
         }
         if (in_array('debts', $on) && $money) {
             $rows = [];
-            foreach (Contract::of($ws->id)->where('status', 'active')->with('counterparty')->get() as $c) {
-                $paid = (float) $c->ops()->where('type', $c->direction === 'out' ? 'out' : 'in')->sum('amount_base');
-                $left = Money::toBase($ws, $c->amount, $c->currency) - $paid;
+            foreach (Contract::of($ws->id)->where('status', 'active')->tap(fn ($q) => $this->scopeProjects($q))->with('counterparty')->get() as $c) {
+                $left = \App\Services\Erp\Contracts::debtBase($ws, $c);
                 if ($left > 0) {
                     $rows[] = ['c' => $c, 'left' => $left];
                 }

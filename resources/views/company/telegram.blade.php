@@ -11,7 +11,7 @@
       <p>{{ __('Ваш Telegram привязан. Бот :b принимает ваши расходы, фото чеков и записи журнала работ.', ['b' => '@'.$bot]) }}</p>
       <div class="flex">
         <a class="btn btn-p" href="https://t.me/{{ $bot }}" target="_blank" rel="noopener">{!! ic('external-link') !!}{{ __('Открыть бота') }}</a>
-        <form method="post" action="/me/telegram/unlink" onsubmit="return confirm(this.dataset.q)" data-q="{{ __('Отвязать Telegram?') }}">@csrf<button class="btn">{!! ic('unlink') !!}{{ __('Отвязать') }}</button></form>
+        <form method="post" action="/me/telegram/unlink" data-confirm="{{ __('Отвязать Telegram?') }}">@csrf<button class="btn">{!! ic('unlink') !!}{{ __('Отвязать') }}</button></form>
       </div>
     @else
       <ol class="steps-list">

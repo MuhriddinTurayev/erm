@@ -15,7 +15,10 @@ class TelegramController extends Controller
         abort_unless(Telegram::enabled() && hash_equals(Telegram::secret(), $secret), 404);
         $header = (string) $request->header('X-Telegram-Bot-Api-Secret-Token');
         abort_unless($header === '' || hash_equals(Telegram::secret(), $header), 403);
-        $bot->handle($request->json()->all());
+        $u = $request->json()->all();
+        if (TelegramBot::firstTime($u)) {   // повторная доставка того же обновления — пропускаем
+            $bot->handle($u);
+        }
 
         return response()->json(['ok' => true]);
     }

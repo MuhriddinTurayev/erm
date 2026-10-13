@@ -13,9 +13,9 @@ use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
 {
-    public function showLogin()
+    public function showLogin(Request $request)
     {
-        if (User::count() === 0) {
+        if (User::count() === 0 && $this->setupAllowed($request)) {
             return redirect('/setup');
         }
 
@@ -110,7 +110,7 @@ class AuthController extends Controller
                 'settings' => ['first_object' => trim((string) ($data['first_object'] ?? '')) ?: null],
             ]);
 
-            return User::create([
+            $u = User::create([
                 'workspace_id' => $ws->id,
                 'name' => $data['name'],
                 'email' => $data['email'],
@@ -121,6 +121,11 @@ class AuthController extends Controller
                 'last_login_at' => now(),
                 'google_id' => $viaGoogle ? $gp['sub'] : null,
             ]);
+            if ($viaGoogle) {
+                $u->forceFill(['email_verified_at' => now()])->save();   // адрес подтверждён Google
+            }
+
+            return $u;
         });
 
         Auth::login($user, true);
@@ -135,16 +140,34 @@ class AuthController extends Controller
 
     /* ---------- Первый запуск: создаём администратора платформы ---------- */
 
-    public function showSetup()
+    /**
+     * Первый запуск разрешён только владельцу сервера: с самого сервера (localhost) или с ключом SETUP_KEY из .env.
+     * Иначе на новом сервере любой, кто первым откроет /setup, стал бы владельцем платформы.
+     */
+    private function setupAllowed(Request $request): bool
+    {
+        if (User::count() > 0) {
+            return false;
+        }
+        $key = (string) config('app.setup_key', '');
+        if ($key !== '' && hash_equals($key, (string) ($request->input('key') ?: $request->query('key')))) {
+            return true;
+        }
+
+        return in_array($request->ip(), ['127.0.0.1', '::1'], true) && ! $request->headers->has('X-Forwarded-For');
+    }
+
+    public function showSetup(Request $request)
     {
         abort_if(User::count() > 0, 404);
 
-        return view('auth.setup');
+        return view('auth.setup', ['allowed' => $this->setupAllowed($request), 'key' => (string) $request->query('key')]);
     }
 
     public function setup(Request $request)
     {
         abort_if(User::count() > 0, 404);
+        abort_unless($this->setupAllowed($request), 403, __('Первый запуск: откройте страницу с самого сервера или укажите ключ SETUP_KEY из файла .env'));
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:80'],
@@ -152,14 +175,19 @@ class AuthController extends Controller
             'password' => ['required', 'confirmed', Password::min(8)],
         ]);
 
-        $user = User::create([
-            'workspace_id' => null,
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'password' => $data['password'],
-            'role' => 'superadmin',
-            'locale' => app()->getLocale(),
-        ]);
+        $user = DB::transaction(function () use ($data) {
+            // два одновременных запроса не создадут двух владельцев
+            abort_if(User::lockForUpdate()->count() > 0, 404);
+
+            return User::create([
+                'workspace_id' => null,
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => $data['password'],
+                'role' => 'superadmin',
+                'locale' => app()->getLocale(),
+            ]);
+        });
 
         Auth::login($user, true);
         $request->session()->regenerate();

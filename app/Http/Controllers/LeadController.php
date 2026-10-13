@@ -174,12 +174,24 @@ class LeadController extends Controller
     {
         $ws = $this->ws()->id;
         $since = (int) $request->query('since', 0);
-        $items = LeadInbox::where('workspace_id', $ws)->where('id', '>', $since)->orderBy('id')->limit(500)->get();
+        $limit = 500;
+        // граница — до выборки; если заявок больше лимита, seq = последняя отданная, остальные придут следующим запросом
+        $top = (int) (LeadInbox::where('workspace_id', $ws)->max('id') ?? 0);
+        $items = LeadInbox::where('workspace_id', $ws)->where('id', '>', $since)->where('id', '<=', $top)->orderBy('id')->limit($limit)->get();
+        $more = $items->count() >= $limit;
 
         return response()->json([
-            'seq' => (int) (LeadInbox::where('workspace_id', $ws)->max('id') ?? 0),
+            'seq' => $more ? (int) $items->last()->id : max($since, $top),
+            'more' => $more,
             'items' => $items->map->toClient()->values(),
         ]);
+    }
+
+    /** Ключи подключений видят руководитель и менеджер по продажам */
+    private function leadsRole(): void
+    {
+        $u = auth()->user();
+        abort_unless($u->isAdmin() || ($u->role === 'manager' && $u->canEdit()), 403, __('Нет доступа к этому разделу'));
     }
 
     private function publicCfg(Integration $in): array
@@ -203,6 +215,8 @@ class LeadController extends Controller
 
     public function connect()
     {
+        $this->leadsRole();
+
         return response()->json($this->publicCfg($this->ws()->integrationOrCreate()));
     }
 
@@ -249,6 +263,7 @@ class LeadController extends Controller
 
     public function connectCheck()
     {
+        $this->leadsRole();
         $g = new MetaGraph($this->ws()->integrationOrCreate());
         try {
             $me = $g->call('me', 'GET', ['fields' => 'id,name,instagram_business_account{username}']);
@@ -286,6 +301,7 @@ class LeadController extends Controller
     /** Тестовая заявка — проходит тот же путь, что и настоящая */
     public function test(Request $request)
     {
+        $this->leadsRole();
         $in = $this->ws()->integrationOrCreate();
         $ch = (string) $request->input('ch');
         $id = bin2hex(random_bytes(5));

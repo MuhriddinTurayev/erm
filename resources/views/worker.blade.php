@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="{{ asset('assets/tokens.css') }}?v={{ @filemtime(public_path('assets/tokens.css')) }}">
+<script src="{{ asset('assets/dialog.js') }}?v={{ @filemtime(public_path('assets/dialog.js')) }}" defer></script>
 <style>
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:460px;margin:0 auto;padding:16px 16px 40px;min-height:100vh;display:flex;flex-direction:column;gap:12px}
@@ -46,6 +47,7 @@
   <div class="card"><div class="row"><span id="lblToday"></span><b id="today">0:00</b></div><div class="row"><span id="lblLast"></span><b id="last">—</b></div></div>
   <div class="note" id="note"></div>
 </div>
+
 <script>
 'use strict';
 const D = {
@@ -88,7 +90,8 @@ async function send(type) {
 }
 async function press() {
   if (busy || !S) return;
-  if (S.open && !confirm(t('sure'))) return;
+  window.LANG = L;   // язык кнопок окна подтверждения
+  if (S.open && !(await ui.confirm(t('sure'), { danger: false }))) return;
   busy = true; $('#err').textContent = ''; paint();
   try { await send(S.open ? 'out' : 'in'); if (navigator.vibrate) navigator.vibrate(120); }
   catch (e) { $('#err').textContent = e.http ? (e.http === 403 ? t('bad') : e.message) : e instanceof TypeError ? t('net') : t('noGps'); }

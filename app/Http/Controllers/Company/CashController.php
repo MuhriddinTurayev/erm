@@ -68,7 +68,23 @@ class CashController extends ErpController
         if ($d['type'] === 'out' && ($ov = Cash::overLimit($ws, $d['category_id'] ?? null, $base)) && ! $u->isAdmin()) {
             return back()->withInput()->withErrors(['amount' => __('Превышен месячный лимит статьи «:c»: лимит :l, уже потрачено :s.', ['c' => __($ov[2]), 'l' => number_format($ov[0], 0, '.', ' '), 's' => number_format($ov[1], 0, '.', ' ')])]);
         }
-        Cash::add($ws, $u, $d);
+        // касса объекта — только для сотрудников этого объекта
+        if ($desk->project_id) {
+            $this->checkProject($desk->project_id);
+        }
+        // договор и контрагент должны совпадать; по заблокированному контрагенту не платим
+        if (! empty($d['contract_id'])) {
+            $c = Contract::of($ws->id)->find($d['contract_id']);
+            $d['counterparty_id'] = $c->counterparty_id;
+        }
+        if ($d['type'] === 'out' && ! empty($d['counterparty_id']) && \App\Models\Counterparty::of($ws->id)->whereKey($d['counterparty_id'])->value('status') === 'blocked') {
+            return back()->withInput()->withErrors(['counterparty_id' => __('Контрагент заблокирован — оплата запрещена')]);
+        }
+        try {
+            Cash::add($ws, $u, $d);
+        } catch (\DomainException $e) {
+            return back()->withInput()->withErrors(['amount' => $e->getMessage()]);
+        }
 
         return back()->with('ok', __('Операция проведена'));
     }
@@ -82,11 +98,20 @@ class CashController extends ErpController
             'to' => ['required', 'different:from', Rule::exists('cash_desks', 'id')->where('workspace_id', $ws->id)],
             'amount' => ['required', 'numeric', 'min:0.01'], 'rate' => ['nullable', 'numeric', 'min:0.0001'], 'note' => ['nullable', 'string', 'max:300'], 'date' => ['required', 'date'],
         ]);
+        foreach ([$d['from'], $d['to']] as $id) {   // кассы объектов — только своих
+            if ($pid = CashDesk::of($ws->id)->whereKey($id)->value('project_id')) {
+                $this->checkProject($pid);
+            }
+        }
         $bal = Cash::balances($ws)[$d['from']] ?? 0;
         if ($d['amount'] > $bal + 0.001) {
             return back()->withInput()->withErrors(['amount' => __('В кассе только :s', ['s' => Money::fmt($bal, CashDesk::find($d['from'])->currency)])]);
         }
-        Cash::transfer($ws, $u, (int) $d['from'], (int) $d['to'], (float) $d['amount'], isset($d['rate']) ? (float) $d['rate'] : null, $d['note'] ?? null, $d['date']);
+        try {
+            Cash::transfer($ws, $u, (int) $d['from'], (int) $d['to'], (float) $d['amount'], isset($d['rate']) ? (float) $d['rate'] : null, $d['note'] ?? null, $d['date']);
+        } catch (\DomainException $e) {
+            return back()->withInput()->withErrors(['amount' => $e->getMessage()]);
+        }
 
         return back()->with('ok', __('Перевод выполнен'));
     }
@@ -94,6 +119,7 @@ class CashController extends ErpController
     public function destroy(CashOp $op)
     {
         $this->mine($op);
+        $this->editor();
         abort_unless(auth()->user()->isAdmin() || ($op->user_id === auth()->id() && $op->created_at->gt(now()->subDay())), 403, __('Удалять старые операции может только руководитель'));
         Cash::delete($this->ws(), auth()->user(), $op);
 
@@ -105,9 +131,11 @@ class CashController extends ErpController
     public function desks(Request $request)
     {
         $ws = $this->ws();
+        // валюту выбирают только у новой кассы (у существующей поле заблокировано и не отправляется)
         $d = $request->validate(['id' => ['nullable', 'integer'], 'name' => ['required', 'string', 'max:80'], 'kind' => ['required', Rule::in(['cash', 'bank', 'card'])],
-            'currency' => ['required', Rule::in(Money::currencies($ws))], 'project_id' => ['nullable', 'string', 'max:40'], 'keeper_id' => ['nullable', 'integer'],
-            'opening' => ['nullable', 'numeric']]);
+            'currency' => ['required_without:id', 'nullable', Rule::in(Money::currencies($ws))], 'project_id' => ['nullable', 'string', 'max:40'],
+            'keeper_id' => ['nullable', Rule::exists('users', 'id')->where('workspace_id', $ws->id)], 'opening' => ['nullable', 'numeric']]);
+        $d['project_id'] = $this->checkProject($d['project_id'] ?? null);
         $d['opening'] = (float) ($d['opening'] ?? 0);
         $d['is_active'] = ! $request->has('archive');
         if (! empty($d['id'])) {
@@ -142,7 +170,13 @@ class CashController extends ErpController
     public function rate(Request $request)
     {
         $d = $request->validate(['usd_rate' => ['nullable', 'numeric', 'min:0']]);
-        $this->ws()->update(['usd_rate' => (float) ($d['usd_rate'] ?? 0)]);
+        $ws = $this->ws();
+        $v = (float) ($d['usd_rate'] ?? 0);
+        $cb = Money::cbRate(Money::base($ws));
+        if ($v > 0 && Money::base($ws) !== 'USD' && $cb > 0 && abs($v - $cb) / $cb > 0.5) {
+            return back()->withErrors(['usd_rate' => __('Курс :r слишком отличается от официального (:o). Проверьте курс — допустимо отклонение до :p%.', ['r' => $v, 'o' => round($cb, 2), 'p' => 50])]);
+        }
+        $ws->update(['usd_rate' => $v]);
 
         return back()->with('ok', __('Курс сохранён'));
     }
