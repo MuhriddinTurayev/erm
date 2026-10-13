@@ -40,16 +40,21 @@
 </head>
 <body class="site">
 
-<header class="nav" id="nav" data-cms="Шапка и меню">
+<header class="nav{{ $appUrl ? ' authed' : '' }}" id="nav" data-cms="Шапка и меню">
   <div class="wrap">
     <a href="/" style="text-decoration:none" aria-label="{{ $brand }}">@include('partials.logo')</a>
-    <nav class="links">
+    <nav class="links" id="site-menu">
       <a href="{{ $h('#leaks') }}">{{ st('Потери') }}</a>
       <a href="{{ $h('#math') }}">{{ st('Калькулятор') }}</a>
       <a href="{{ $h('#modules') }}">{{ st('Модули') }}</a>
       <a href="{{ $h('#pricing') }}">{{ st('Тарифы') }}</a>
       <a href="/blog">{{ st('Блог') }}</a>
       <a href="{{ $h('#faq') }}">{{ st('Вопросы') }}</a>
+      {{-- на телефоне язык, тема и заявка переезжают сюда, в меню: в шапке остаются логотип, «Войти» и меню --}}
+      <div class="menu-extra">
+        <div class="menu-tools">@include('partials.lang')@include('partials.theme-btn')</div>
+        @unless ($appUrl)<a class="btn btn-p btn-l" href="{{ $h('#demo') }}">{{ st('Бесплатный разбор') }}</a>@endunless
+      </div>
     </nav>
     <div class="act">
       @include('partials.lang')
@@ -57,10 +62,10 @@
       @if ($appUrl)
         <a class="btn btn-p" href="{{ $appUrl }}">{{ st('Открыть программу') }}{!! ic('arrow-right') !!}</a>
       @else
-        <a class="btn btn-ghost hide-s" href="/login">{{ st('Войти') }}</a>
-        <a class="btn btn-p" href="{{ $h('#demo') }}">{{ st('Бесплатный разбор') }}</a>
+        <a class="btn btn-ghost login" href="/login">{!! ic('log-in', 'login-ic') !!}{{ st('Войти') }}</a>
+        <a class="btn btn-p cta" href="{{ $h('#demo') }}">{{ st('Бесплатный разбор') }}</a>
       @endif
-      <button class="icon-btn burger" onclick="document.body.classList.toggle('nav-open')" aria-label="Menu">{!! ic('menu') !!}</button>
+      <button type="button" class="icon-btn burger" aria-label="Menu" aria-controls="site-menu" aria-expanded="false">{!! ic('menu', 'i-open') !!}{!! ic('x', 'i-close') !!}</button>
     </div>
   </div>
 </header>
@@ -89,7 +94,13 @@
 <script>
 const nav = document.getElementById('nav');
 addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 8), { passive: true });
-document.querySelectorAll('.nav .links a').forEach(a => a.addEventListener('click', () => document.body.classList.remove('nav-open')));
+// меню на телефоне: открыть/закрыть кнопкой, закрыть после выбора пункта, по Esc и по нажатию вне шапки
+const burger = nav.querySelector('.burger');
+const setMenu = open => { document.body.classList.toggle('nav-open', open); burger.setAttribute('aria-expanded', open); };
+burger.addEventListener('click', () => setMenu(!document.body.classList.contains('nav-open')));
+document.querySelectorAll('.nav .links a').forEach(a => a.addEventListener('click', () => setMenu(false)));
+addEventListener('keydown', e => { if (e.key === 'Escape') setMenu(false); });
+document.addEventListener('click', e => { if (document.body.classList.contains('nav-open') && !nav.contains(e.target)) setMenu(false); });
 const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: .1 });
 document.querySelectorAll('.reveal').forEach(el => io.observe(el));
 // счётчики

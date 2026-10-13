@@ -6,10 +6,14 @@
 .nav.scrolled{border-color:var(--border)}
 .nav .wrap{display:flex;align-items:center;gap:28px;height:64px}
 .nav .links{display:flex;gap:4px}
-.nav .links a{color:var(--text-2);font-weight:500;font-size:14.5px;text-decoration:none;padding:8px 11px;border-radius:8px;white-space:nowrap}
-.nav .links a:hover{color:var(--text);background:var(--hover)}
+.nav .links>a{color:var(--text-2);font-weight:500;font-size:14.5px;text-decoration:none;padding:8px 11px;border-radius:8px;white-space:nowrap}
+.nav .links>a:hover{color:var(--text);background:var(--hover)}
 .nav .act{margin-left:auto;display:flex;gap:8px;align-items:center}
 .nav .burger{display:none}
+.nav .burger .i-close,body.nav-open .nav .burger .i-open{display:none}
+body.nav-open .nav .burger .i-close{display:block}
+/* язык, тема и заявка внутри меню и значок у «Войти» — только на телефоне */
+.nav .menu-extra,.nav .login .login-ic{display:none}
 .nav .act{flex:none}.nav .links{min-width:0;overflow:hidden}
 
 .hero{padding:72px 0 88px;position:relative;overflow:hidden}
@@ -133,8 +137,8 @@
 .js .reveal.in{opacity:1;transform:none}
 @media (prefers-reduced-motion:reduce){.js .reveal{opacity:1;transform:none;transition:none}.tg-float{animation:none}}
 
-@media (max-width:1180px){.nav .links a{padding:8px 8px;font-size:14px}.nav .wrap{gap:16px}}
-@media (max-width:1320px){.nav .links a[href$="/blog"]{display:none}}
+@media (max-width:1180px){.nav .links>a{padding:8px 8px;font-size:14px}.nav .wrap{gap:16px}}
+@media (min-width:1021px) and (max-width:1320px){.nav .links>a[href$="/blog"]{display:none}}
 @media (max-width:1020px){
   .hero .wrap,.split{grid-template-columns:1fr}.hero{padding-top:44px}.split.rev .chat{order:2}
   .tg-float{left:auto;right:12px;bottom:-40px;width:270px}
@@ -142,12 +146,19 @@
   .strip .wrap{grid-template-columns:1fr 1fr}
   .foot .wrap{grid-template-columns:1fr 1fr}
   .nav .links{display:none}.nav .burger{display:inline-grid}
-  body.nav-open .nav .links{display:flex;position:absolute;top:64px;left:0;right:0;flex-direction:column;background:var(--surface);padding:12px 16px;border-bottom:1px solid var(--border)}
+  body.nav-open .nav .links{display:flex;position:absolute;top:64px;left:0;right:0;flex-direction:column;background:var(--surface);padding:10px 16px 14px;border-bottom:1px solid var(--border);box-shadow:var(--sh-lg);max-height:calc(100vh - 64px);max-height:calc(100dvh - 64px);overflow-y:auto}
+  body.nav-open .nav .links>a{padding:12px 10px;font-size:15.5px}
 }
 @media (max-width:640px){
   .wrap{padding:0 16px}.sec{padding:64px 0}
   .feats,.roles{grid-template-columns:1fr}
-  .nav .act .lang,.hide-s{display:none}
+  /* шапка телефона: логотип, «Войти» и меню; язык, тема и заявка — в меню */
+  .nav .act .lang,.nav .act .theme-btn,.nav .act .cta{display:none}
+  .nav .act .login{border-color:var(--border);background:var(--surface);padding:0 12px}
+  .nav .act .login:hover{background:var(--hover)}
+  .nav .login .login-ic{display:block}
+  body.nav-open .nav .menu-extra{display:grid;gap:12px;margin-top:6px;padding:14px 0 2px;border-top:1px solid var(--border)}
+  .nav .menu-tools{display:flex;align-items:center;justify-content:space-between;gap:12px}
   .m-row{grid-template-columns:1fr 1fr}.m-row .m-k:first-child{grid-column:1/-1}
   .tg-float{position:relative;left:0;right:0;bottom:0;width:auto;margin-top:14px}
   .phone{width:100%;max-width:340px}
@@ -209,8 +220,12 @@
 .post-card .bd{padding:18px;display:grid;gap:8px}.post-card h3{margin:0;font-size:17px;line-height:1.35}.post-card p{margin:0;color:var(--muted);font-size:14px}
 @media (max-width:980px){.flow,.sec-grid,.quotes,.posts{grid-template-columns:1fr 1fr}.flow::before{display:none}}
 @media (max-width:640px){.flow,.sec-grid,.quotes,.posts{grid-template-columns:1fr}.cmp th,.cmp td{padding:10px 8px;font-size:13px}.logos{gap:10px 20px}.logos span{font-size:15px}}
-@media (max-width:560px){.nav .wrap{gap:10px}.nav .act{gap:6px}.nav .act>.btn-p{height:34px;padding:0 10px;font-size:13px}.nav .act>.icon-btn:not(.burger){display:none}.nav .logo-text{font-size:15px}}
-@media (max-width:400px){.nav .act>.btn-p{display:none}}
+@media (max-width:560px){.nav .wrap{gap:10px}.nav .act{gap:6px}.nav .act>.btn-p,.nav .act .login{height:34px;padding:0 10px;font-size:13px}.nav .act>.icon-btn:not(.burger){display:none}.nav .logo-text{font-size:15px}}
+/* узкий телефон: кнопка «Открыть программу» важнее названия рядом с логотипом */
+@media (max-width:420px){.nav.authed .logo-text{display:none}}
+/* «Войти» (в таджикском — «Ворид шудан») должно помещаться рядом с названием: на узких экранах без значка, на самых узких — без названия */
+@media (max-width:380px){.nav .login .login-ic{display:none}}
+@media (max-width:340px){.nav .logo-text{display:none}}
 
 /* ===== Главная: потери, один день, калькулятор, запись на разбор ===== */
 .hero-note{display:flex;align-items:center;gap:7px;margin:14px 0 0;color:var(--text-2);font-size:14.5px;font-weight:500}
