@@ -16,7 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         nginx supervisor curl unzip libicu-dev libzip-dev libpng-dev libjpeg62-turbo-dev libfreetype6-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" pdo_mysql intl zip gd bcmath exif opcache pcntl \
-    && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled/default
+    && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled/default \
+    && ln -sf /dev/stdout /var/log/nginx/access.log && ln -sf /dev/stderr /var/log/nginx/error.log
 
 WORKDIR /var/www/html
 COPY --from=vendor /app /var/www/html

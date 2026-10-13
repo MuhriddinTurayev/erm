@@ -2,7 +2,7 @@
 # Другие проекты на сервере не затрагиваются. Настройки — в файле .env рядом (его создаёт deploy/install.sh).
 #   запуск:     docker compose up -d --build
 #   журнал:     docker compose logs -f app
-#   команды:    docker compose exec app php artisan ...
+#   команды:    docker compose exec app artisan ...
 name: oftob
 
 services:
@@ -11,6 +11,9 @@ services:
     image: oftob-app:latest
     container_name: oftob-app
     restart: unless-stopped
+    logging:                                     # журнал контейнера не растёт бесконечно: 5 файлов по 10 МБ
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
     env_file: .env
     environment:
       DB_CONNECTION: mysql
@@ -31,6 +34,9 @@ services:
     image: mysql:8.0
     container_name: oftob-db
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
     environment:
       MYSQL_DATABASE: ${DB_DATABASE:-oftob}
       MYSQL_USER: ${DB_USERNAME:-oftob}
@@ -54,3 +60,6 @@ volumes:
 
 networks:
   oftob:
+    # постоянное имя моста: разрешения сетевого экрана сервера (deploy/firewall.sh) привязаны к нему
+    driver_opts:
+      com.docker.network.bridge.name: br-oftob
