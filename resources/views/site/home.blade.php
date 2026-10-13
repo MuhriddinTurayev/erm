@@ -213,6 +213,7 @@
           <span class="ok-ic">{!! ic('circle-check', '', 30) !!}</span>
           <h3>{{ st('Спасибо! Заявка принята') }}</h3>
           <p>{{ st('Мы позвоним в течение рабочего дня и договоримся об удобном времени.') }}</p>
+          <button type="button" class="btn btn-ghost mt" id="demoAgain">{!! ic('rotate-ccw', '', 16) !!}{{ st('Оставить ещё одну заявку') }}</button>
         </div>
         <form method="post" action="/demo" id="demoForm" novalidate @if ($sent) hidden @endif>
           @csrf
@@ -494,10 +495,26 @@ document.getElementById('period')?.addEventListener('click', e => {
 /* ===== Запись на разбор: маска телефона, отправка без перезагрузки ===== */
 (() => {
   const f = document.getElementById('demoForm'); if (!f) return;
-  const code = f.querySelector('[name=code]'), ph = f.querySelector('[name=phone]');
-  const syncPh = () => { ph.placeholder = code.selectedOptions[0].dataset.ph; };
+  const code = f.querySelector('[name=code]'), ph = f.querySelector('[name=phone]'), ok = document.getElementById('demoOk');
+  // маска номера по стране: «90 123 45 67»; лишние цифры не вводятся, номер с кодом страны (+998…) — код убирается
+  const groups = () => code.selectedOptions[0].dataset.ph.split(' ').map(g => g.length);
+  const mask = () => {
+    const G = groups(), max = G.reduce((a, b) => a + b, 0), c = code.value;
+    let d = ph.value.replace(/\D/g, '');
+    // код страны убираем, только если номер вставили с «+» или целиком «код + номер» (номер 99 890… сам начинается с 998)
+    if (d.startsWith(c) && (ph.value.trim().startsWith('+') || d.length === c.length + max)) d = d.slice(c.length);
+    d = d.slice(0, max);
+    let out = '', i = 0; for (const g of G) { if (i >= d.length) break; out += (out ? ' ' : '') + d.slice(i, i + g); i += g; }
+    ph.value = out;
+  };
+  const syncPh = () => { ph.placeholder = code.selectedOptions[0].dataset.ph; mask(); };
   code.addEventListener('change', syncPh); syncPh();
-  ph.addEventListener('input', () => { ph.value = ph.value.replace(/[^\d\s()-]/g, '').slice(0, 18); });
+  ph.addEventListener('input', mask);
+  // ещё одна заявка: снова показать пустую форму
+  document.getElementById('demoAgain')?.addEventListener('click', () => {
+    f.reset(); syncPh(); f.querySelectorAll('[data-err]').forEach(x => x.textContent = '');
+    f.querySelector('[type=submit]').disabled = false; ok.hidden = true; f.hidden = false; f.querySelector('[name=name]').focus();
+  });
   f.addEventListener('submit', async e => {
     e.preventDefault();
     f.querySelectorAll('[data-err]').forEach(x => x.textContent = '');
@@ -506,8 +523,8 @@ document.getElementById('period')?.addEventListener('click', e => {
       const r = await fetch(f.action, { method: 'POST', body: new FormData(f), headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
       if (r.status === 422) { const j = await r.json(); Object.entries(j.errors || {}).forEach(([k, v]) => { const el = f.querySelector(`[data-err="${k}"]`); if (el) el.textContent = v[0]; }); btn.disabled = false; return; }
       if (!r.ok) throw new Error(r.status);
-      f.hidden = true; document.getElementById('demoOk').hidden = false;
-      document.getElementById('demo').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      f.hidden = true; ok.hidden = false; btn.disabled = false;
+      ok.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } catch (err) { btn.disabled = false; f.submit(); }   // нет связи по fetch — обычная отправка формы
   });
 })();

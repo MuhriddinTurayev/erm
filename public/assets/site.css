@@ -1,5 +1,6 @@
 /* ===== Сайт платформы (поверх ui.css, обе темы) ===== */
 .site{background:var(--surface)}
+[hidden]{display:none!important}   /* иначе display:grid у формы «перебивает» hidden и форма не прячется */
 .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
 .nav{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--surface) 82%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid transparent;transition:border-color .2s}
 .nav.scrolled{border-color:var(--border)}

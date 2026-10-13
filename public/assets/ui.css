@@ -2,6 +2,7 @@
    Oftob — дизайн-система: вход, панель компании, супер-админ
    Светлая и тёмная тема, Inter, иконки Lucide
    ===================================================================== */
+[hidden]{display:none!important}   /* атрибут hidden сильнее display у классов (.form, .grid…) */
 *{box-sizing:border-box}
 html,body{margin:0}
 body{font:400 15px/1.55 var(--font);font-feature-settings:'cv11','ss01';color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}

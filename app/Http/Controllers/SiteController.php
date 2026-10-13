@@ -41,9 +41,15 @@ class SiteController extends Controller
             'role' => ['nullable', \Illuminate\Validation\Rule::in(array_keys(\App\Models\SiteLead::ROLES))],
             'budget' => ['nullable', 'string', 'max:40'],
         ], [], ['name' => st('Ваше имя'), 'phone' => st('Телефон')]);
+        // номер без кода страны: длина строго по стране (Узбекистан, Таджикистан, Кыргызстан — 9 цифр, Россия и Казахстан — 10)
+        $len = ['998' => 9, '992' => 9, '7' => 10, '996' => 9, '993' => 8, '994' => 9];
+        $code = (string) $request->input('code');
         $digits = preg_replace('/\D/', '', (string) $request->input('phone'));
-        $v->after(function ($v) use ($digits) {
-            if (strlen($digits) < 7 || strlen($digits) > 12) {
+        if (isset($len[$code]) && strlen($digits) === strlen($code) + $len[$code] && str_starts_with($digits, $code)) {
+            $digits = substr($digits, strlen($code));   // вписали номер вместе с кодом страны
+        }
+        $v->after(function ($v) use ($digits, $len, $code) {
+            if (strlen($digits) !== ($len[$code] ?? 9)) {
                 $v->errors()->add('phone', st('Проверьте номер телефона'));
             }
         });
@@ -51,7 +57,8 @@ class SiteController extends Controller
             return $request->expectsJson() ? response()->json(['errors' => $v->errors()], 422) : redirect('/#demo')->withErrors($v)->withInput();
         }
         $d = $v->validated();
-        $phone = '+'.$d['code'].' '.$digits;
+        // единый вид: +998 90 123 45 67
+        $phone = '+'.$d['code'].' '.trim(preg_replace('/^(\d{2,3})(\d{3})(\d{2})(\d{2,3})$/', '$1 $2 $3 $4', $digits));
         // повторная отправка с того же номера в течение 10 минут — не дублируем заявку
         if (! \App\Models\SiteLead::where('phone', $phone)->where('created_at', '>=', now()->subMinutes(10))->exists()) {
             $lead = \App\Models\SiteLead::create(['name' => trim($d['name']), 'phone' => $phone, 'company' => $d['company'] ?? null, 'kind' => $d['kind'] ?? null,
