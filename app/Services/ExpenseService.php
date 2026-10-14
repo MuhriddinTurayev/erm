@@ -56,8 +56,10 @@ class ExpenseService
         if (! $best || $best['amount'] < 1000) {
             return null;
         }
-        $before = trim(mb_substr($text, 0, $best['start']), " ,.-—:;");
-        $after = trim(mb_substr($text, $best['start'] + $best['len']), " ,.-—:;");
+        // не trim(): он режет по байтам, и «—» в списке символов обрезал бы хвост буквы («Бетонмастер» → «Бетонмасте�»)
+        $cut = fn (string $s) => preg_replace('/^[\s,.\-—:;]+|[\s,.\-—:;]+$/u', '', $s);
+        $before = $cut(mb_substr($text, 0, $best['start']));
+        $after = $cut(mb_substr($text, $best['start'] + $best['len']));
 
         return ['amount' => round($best['amount']), 'desc' => $before !== '' ? $before : $after, 'who' => $before !== '' ? $after : ''];
     }

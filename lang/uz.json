@@ -3924,5 +3924,10 @@
     "В Telegram-боте: /zayavka и список («Цемент М400 50 мешков», «песок 3 камаза», «завтра») — или Снабжение → «Заявка на материалы» на сайте.": "Telegram-botda: /zayavka va ro‘yxat («Sement M400 50 qop», «qum 3 kamaz», «ertaga») — yoki saytda Ta’minot → «Materiallarga zayavka».",
     "Согласует кнопкой в Telegram или на сайте, выбирает поставщика (или проводит тендер), указывает цены → «Заказать». Прораб получает в Telegram каждый шаг.": "Telegram’dagi tugma yoki saytda tasdiqlaydi, yetkazib beruvchini tanlaydi (yoki tender o‘tkazadi), narxlarni kiritadi → «Buyurtma berish». Prorab har bir qadamni Telegram’da oladi.",
     "Фото (можно альбомом) и описание: что сделано, сколько людей, что мешает — в Telegram-бот (/hisobot) или «Журнал → Фотоотчёт» с телефона (с геометкой).": "Rasmlar (albom qilib ham bo‘ladi) va tavsif: nima qilindi, necha kishi ishladi, nima xalaqit beryapti — Telegram-botga (/hisobot) yoki telefondan «Jurnal → Fotohisobot» (geobelgi bilan).",
-    "Заводит объекты, корпуса, подъезды, квартиры, планировки и цены, загружает 3D и панорамы, выставляет объект на продажу.": "Obyektlar, bloklar, podyezdlar, xonadonlar, planirovkalar va narxlarni kiritadi, 3D va panoramalarni yuklaydi, obyektni sotuvga chiqaradi."
+    "Заводит объекты, корпуса, подъезды, квартиры, планировки и цены, загружает 3D и панорамы, выставляет объект на продажу.": "Obyektlar, bloklar, podyezdlar, xonadonlar, planirovkalar va narxlarni kiritadi, 3D va panoramalarni yuklaydi, obyektni sotuvga chiqaradi.",
+    "Похоже на расход: :s. Если вы потратили деньги, а не заказываете материал, нажмите «Это расход».": "Xarajatga o‘xshaydi: :s. Agar material buyurtma qilmayotgan, balki pul sarflagan bo‘lsangiz, «Bu xarajat» tugmasini bosing.",
+    "Это расход": "Bu xarajat",
+    "Записываю как расход…": "Xarajat sifatida yozyapman…",
+    "Сохранено. :n не подключил Telegram — сообщение ему не ушло, предупредите его сами. Подключить: «Мой Telegram» в его профиле.": "Saqlandi. :n Telegram ulamagan — unga xabar bormadi, o‘zingiz ogohlantiring. Ulash: uning profilida «Mening Telegramim».",
+    "Укажите, сколько привезли: количество в столбце «Принять сейчас».": "Qancha olib kelinganini kiriting: «Hozir qabul qilish» ustunidagi miqdor."
 }

@@ -26,5 +26,6 @@ return [
         'slug' => 'Kod', 'price_month' => 'Oylik narx', 'api_key' => 'API kaliti', 'model' => 'Model', 'base_url' => 'API manzili',
         'report_time' => 'Yuborish vaqti', 'report_email' => 'Rahbar emaili', 'report_chats' => 'Telegram chat_id', 'amount' => 'Summa', 'months' => 'Oylar',
         'name.ru' => 'Nomi (ruscha)', 'messages' => 'Savol', 'system' => 'Loyiha ma\'lumotlari', 'confirm' => 'Tasdiqlash',
+        'counterparty_id' => 'Yetkazib beruvchi', 'warehouse_id' => 'Ombor', 'project_id' => 'Obyekt', 'cash_desk_id' => 'Kassa', 'item_id' => 'Tovar', 'qty' => 'Miqdor',
     ],
 ];

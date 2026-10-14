@@ -8,6 +8,7 @@ use App\Models\SupplyRequest;
 use App\Models\SupplyLine;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\ExpenseService;
 use App\Services\StateWriter;
 use App\Services\Telegram;
 use Illuminate\Support\Carbon;
@@ -99,10 +100,31 @@ class Supply
 
                 continue;
             }
-            $lines[] = ['name' => mb_substr($name, 0, 160), 'qty' => $qty, 'unit' => mb_substr($unit ?: 'шт', 0, 16)];
+            $lines[] = ['name' => mb_substr($name, 0, 160), 'qty' => $qty, 'unit' => mb_substr($unit ?: 'шт', 0, 16), 'guess' => ! $known];
         }
 
         return ['lines' => array_slice($lines, 0, 60), 'need_by' => $need, 'note' => mb_substr(implode('; ', $note), 0, 300)];
+    }
+
+    /**
+     * Одна позиция без единицы и с крупным числом («solyarka 850 000 AYoQSh») — скорее расход, чем материал.
+     * Возвращает разбор расхода, чтобы бот предложил «Это расход»; иначе null.
+     */
+    public static function expenseLike(array $d, string $text): ?array
+    {
+        if (count($d['lines'] ?? []) !== 1 || empty($d['lines'][0]['guess'])) {
+            return null;
+        }
+        $e = ExpenseService::parse($text);
+        $money = preg_match('/(?<![\p{L}])(млрд|mlrd|млн|mln|ming|тыс|сум|so[\'‘’`]?m|сӯм|сомонӣ|uzs)(?![\p{L}])/iu', $text);
+
+        return $e && ($e['amount'] >= 10000 || $money) ? $e : null;
+    }
+
+    /** Единица для показа на языке получателя: «шт» → «dona» */
+    public static function unit(?string $u): string
+    {
+        return $u ? __($u) : '';
     }
 
     /**
@@ -170,7 +192,7 @@ class Supply
         $n = fn ($v) => rtrim(rtrim(number_format((float) $v, 3, ',', ' '), '0'), ',');
         $L = ['📦 <b>'.__('Заявка на снабжение').' №'.$sr->number.'</b>'.($sr->project_id && $ws ? ' · '.e(StateWriter::projects($ws)[$sr->project_id] ?? '') : '')];
         foreach ($sr->lines as $l) {
-            $L[] = '• '.e($l->item?->name ?? '—').' — <b>'.$n($l->qty).' '.e($l->item?->unit ?? '').'</b>'.($l->received > 0 ? ' ('.__('принято').' '.$n($l->received).')' : '');
+            $L[] = '• '.e($l->item?->name ?? '—').' — <b>'.$n($l->qty).' '.e(self::unit($l->item?->unit)).'</b>'.($l->received > 0 ? ' ('.__('принято').' '.$n($l->received).')' : '');
         }
         if ($sr->need_by) {
             $L[] = '📅 '.__('Нужно к').': <b>'.$sr->need_by->format('d.m.Y').'</b>';

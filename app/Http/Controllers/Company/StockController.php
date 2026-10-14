@@ -8,6 +8,7 @@ use App\Models\StockMove;
 use App\Models\SupplyRequest;
 use App\Models\Tender;
 use App\Models\TenderBid;
+use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\Erp\Stock;
 use App\Services\Telegram;
@@ -229,7 +230,7 @@ class StockController extends ErpController
             // согласование и ответ автору в Telegram — так же, как кнопкой в боте (повторное решение не пройдёт)
             \App\Services\Erp\Supply::decide($sr, $u, $a === 'approve');
 
-            return back()->with('ok', __('Сохранено'));
+            return $this->supplySaved($sr, $u);
         } elseif ($a === 'order') {
             abort_unless($boss && in_array($sr->status, ['approved', 'ordered'], true), 403);
             $d = $request->validate(['counterparty_id' => ['required', Rule::exists('counterparties', 'id')->where('workspace_id', $ws->id)], 'price' => ['array'], 'price.*' => ['nullable', 'numeric', 'min:0']]);
@@ -241,6 +242,9 @@ class StockController extends ErpController
             abort_unless(in_array($sr->status, ['approved', 'ordered', 'partial'], true), 403);
             $d = $request->validate(['warehouse_id' => ['required', Rule::exists('warehouses', 'id')->where('workspace_id', $ws->id)], 'qty' => ['array'], 'qty.*' => ['nullable', 'numeric', 'min:0']]);
             $this->myWarehouse((int) $d['warehouse_id']);
+            if (! array_filter($d['qty'] ?? [], fn ($q) => (float) $q > 0)) {
+                return back()->withErrors(['qty' => __('Укажите, сколько привезли: количество в столбце «Принять сейчас».')]);
+            }
             Stock::receiveSupply($ws, $u, $sr, $d['qty'] ?? [], (int) $d['warehouse_id']);
             if ($request->boolean('make_pr')) {
                 \App\Services\Erp\Supply::notifyAuthor($sr->fresh(), $u);
@@ -259,6 +263,17 @@ class StockController extends ErpController
         }
         AuditLog::create(['workspace_id' => $ws->id, 'user_id' => $u->id, 'action' => 'supply.edit', 'summary' => 'Заявка на снабжение №'.$sr->number.': '.$sr->fresh()->status]);
         \App\Services\Erp\Supply::notifyAuthor($sr->fresh(), $u);   // прорабу в Telegram: заказана / принята
+
+        return $this->supplySaved($sr, $u);
+    }
+
+    /** «Сохранено» — и предупреждение, если автор заявки не узнает об этом в Telegram */
+    private function supplySaved(SupplyRequest $sr, User $u)
+    {
+        $author = $sr->user;
+        if ($author && $author->id !== $u->id && ! $author->telegram_chat_id) {
+            return back()->with('warn', __('Сохранено. :n не подключил Telegram — сообщение ему не ушло, предупредите его сами. Подключить: «Мой Telegram» в его профиле.', ['n' => $author->name]));
+        }
 
         return back()->with('ok', __('Сохранено'));
     }

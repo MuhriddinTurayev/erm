@@ -26,5 +26,6 @@ return [
         'slug' => 'Код', 'price_month' => 'Нарх дар моҳ', 'api_key' => 'Калиди API', 'model' => 'Модел', 'base_url' => 'Суроғаи API',
         'report_time' => 'Вақти фиристодан', 'report_email' => 'Email-и роҳбар', 'report_chats' => 'Telegram chat_id', 'amount' => 'Маблағ', 'months' => 'Моҳҳо',
         'name.ru' => 'Ном (русӣ)', 'messages' => 'Савол', 'system' => 'Маълумоти лоиҳа', 'confirm' => 'Тасдиқ',
+        'counterparty_id' => 'Таъминкунанда', 'warehouse_id' => 'Анбор', 'project_id' => 'Объект', 'cash_desk_id' => 'Касса', 'item_id' => 'Мол', 'qty' => 'Миқдор',
     ],
 ];

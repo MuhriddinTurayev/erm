@@ -298,11 +298,13 @@ class TelegramBot
 
             return;
         }
-        $user->forceFill(['tg_state' => ['supply_draft' => $d]])->save();
+        // «solyarka 850 000 AYoQSh» — это расход, а не материал: предложим записать его расходом
+        $exp = Supply::expenseLike($d, $text);
+        $user->forceFill(['tg_state' => ['supply_draft' => $d + ['exp' => $exp]]])->save();
         $n = fn ($v) => rtrim(rtrim(number_format((float) $v, 3, ',', ' '), '0'), ',');
         $L = ['📦 <b>'.__('Проверьте заявку').'</b>'];
         foreach ($d['lines'] as $i => $l) {
-            $L[] = ($i + 1).'. '.e($l['name']).' — <b>'.$n($l['qty']).' '.e($l['unit']).'</b>';
+            $L[] = ($i + 1).'. '.e($l['name']).' — <b>'.$n($l['qty']).' '.e(Supply::unit($l['unit'])).'</b>';
         }
         if ($d['need_by']) {
             $L[] = '📅 '.__('Нужно к').': <b>'.Carbon::parse($d['need_by'])->format('d.m.Y').'</b>';
@@ -310,7 +312,13 @@ class TelegramBot
         if ($d['note'] !== '') {
             $L[] = '✏️ '.e($d['note']);
         }
-        $this->say($chat, implode("\n", $L), [[['text' => '✅ '.__('Отправить'), 'data' => 'sr:send'], ['text' => '✏️ '.__('Исправить'), 'data' => 'sr:edit'], ['text' => '✖ '.__('Отмена'), 'data' => 'sr:cancel']]]);
+        $rows = [[['text' => '✅ '.__('Отправить'), 'data' => 'sr:send'], ['text' => '✏️ '.__('Исправить'), 'data' => 'sr:edit'], ['text' => '✖ '.__('Отмена'), 'data' => 'sr:cancel']]];
+        if ($exp) {
+            $L[] = '';
+            $L[] = '💸 '.__('Похоже на расход: :s. Если вы потратили деньги, а не заказываете материал, нажмите «Это расход».', ['s' => '<b>'.CompanyStats::money($exp['amount']).'</b>']);
+            array_unshift($rows, [['text' => '💸 '.__('Это расход'), 'data' => 'sr:exp']]);
+        }
+        $this->say($chat, implode("\n", $L), $rows);
     }
 
     /* ---------------- объект ---------------- */
@@ -456,6 +464,19 @@ class TelegramBot
                     $user->forceFill(['tg_state' => ['supply' => true]])->save();
                     Telegram::answer($q['id']);
                     $this->say($chat, '✏️ '.__('Напишите список заново — каждую позицию с новой строки.'));
+
+                    return;
+                }
+                if ($arg === 'exp') {   // это был расход, а не заявка
+                    if (empty($draft['exp'])) {
+                        Telegram::answer($q['id']);
+
+                        return;
+                    }
+                    $user->forceFill(['tg_state' => null])->save();
+                    Telegram::answer($q['id'], '✓');
+                    Telegram::edit($chat, (int) $q['message']['message_id'], '💸 '.__('Записываю как расход…'));
+                    $this->withProject($user, $chat, ['do' => 'expense', 'data' => $draft['exp']]);
 
                     return;
                 }

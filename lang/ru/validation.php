@@ -26,5 +26,6 @@ return [
         'slug' => 'Код', 'price_month' => 'Цена в месяц', 'api_key' => 'Ключ API', 'model' => 'Модель', 'base_url' => 'Адрес API',
         'report_time' => 'Время отправки', 'report_email' => 'Email руководителя', 'report_chats' => 'Telegram chat_id', 'amount' => 'Сумма', 'months' => 'Месяцев',
         'name.ru' => 'Название (русский)', 'messages' => 'Вопрос', 'system' => 'Данные проекта', 'confirm' => 'Подтверждение',
+        'counterparty_id' => 'Поставщик', 'warehouse_id' => 'Склад', 'project_id' => 'Объект', 'cash_desk_id' => 'Касса', 'item_id' => 'Товар', 'qty' => 'Количество',
     ],
 ];
