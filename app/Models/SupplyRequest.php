@@ -9,11 +9,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /** Заявка на снабжение */
 class SupplyRequest extends Model
 {
-    protected $fillable = ['workspace_id', 'number', 'project_id', 'user_id', 'counterparty_id', 'warehouse_id', 'need_by', 'status', 'note'];
+    protected $fillable = ['workspace_id', 'number', 'project_id', 'user_id', 'counterparty_id', 'warehouse_id', 'need_by', 'urgent', 'status', 'note', 'photos'];
 
     protected function casts(): array
     {
-        return ['need_by' => 'date'];
+        return ['need_by' => 'date', 'urgent' => 'boolean', 'photos' => 'array'];
     }
 
     /** Записи компании */

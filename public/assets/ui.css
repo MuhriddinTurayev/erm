@@ -437,6 +437,7 @@ dialog.modal::backdrop{background:rgba(2,6,23,.5);backdrop-filter:blur(2px)}
 .st::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
 .st-pending,.st-new,.st-check,.st-todo,.st-open{background:var(--warn-soft);color:var(--warn-text)}
 .st-approved,.st-ordered,.st-doing,.st-work,.st-active,.st-review,.st-partial{background:var(--info-soft);color:var(--info-text)}
+.st-transit{background:var(--accent-soft);color:var(--accent-text)}
 .st-paid,.st-received,.st-done,.st-ok,.st-awarded{background:var(--ok-soft);color:var(--ok-text)}
 .st-rejected,.st-cancelled,.st-blocked,.st-suspicious{background:var(--bad-soft);color:var(--bad-text)}
 .st-draft{background:var(--sunken);color:var(--muted)}

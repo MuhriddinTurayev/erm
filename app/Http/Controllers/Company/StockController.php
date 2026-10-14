@@ -238,8 +238,14 @@ class StockController extends ErpController
                 $l->update(['price' => (float) ($d['price'][$l->id] ?? $l->price)]);
             }
             $sr->update(['status' => 'ordered', 'counterparty_id' => $d['counterparty_id']]);
+        } elseif ($a === 'transit') {
+            // машина выехала: прорабу в Telegram — «в пути» и кнопка «Принял»
+            abort_unless($boss && $sr->status === 'ordered', 403);
+            \App\Services\Erp\Supply::transit($sr, $u);
+
+            return $this->supplySaved($sr, $u);
         } elseif ($a === 'receive') {
-            abort_unless(in_array($sr->status, ['approved', 'ordered', 'partial'], true), 403);
+            abort_unless(in_array($sr->status, \App\Services\Erp\Supply::RECEIVABLE, true), 403);
             $d = $request->validate(['warehouse_id' => ['required', Rule::exists('warehouses', 'id')->where('workspace_id', $ws->id)], 'qty' => ['array'], 'qty.*' => ['nullable', 'numeric', 'min:0']]);
             $this->myWarehouse((int) $d['warehouse_id']);
             if (! array_filter($d['qty'] ?? [], fn ($q) => (float) $q > 0)) {
@@ -265,6 +271,16 @@ class StockController extends ErpController
         \App\Services\Erp\Supply::notifyAuthor($sr->fresh(), $u);   // прорабу в Telegram: заказана / принята
 
         return $this->supplySaved($sr, $u);
+    }
+
+    /** Фото к заявке и накладные (из Telegram) */
+    public function supplyPhoto(SupplyRequest $sr, int $i)
+    {
+        $this->mine($sr);
+        $path = $sr->photos[$i]['p'] ?? null;
+        abort_unless($path && \Illuminate\Support\Facades\Storage::disk('local')->exists($path), 404);
+
+        return response()->file(\Illuminate\Support\Facades\Storage::disk('local')->path($path), ['Cache-Control' => 'private, max-age=86400']);
     }
 
     /** «Сохранено» — и предупреждение, если автор заявки не узнает об этом в Telegram */

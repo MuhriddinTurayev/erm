@@ -11,7 +11,7 @@ class User extends Authenticatable
     use Notifiable;
 
     protected $fillable = ['workspace_id', 'name', 'email', 'phone', 'password', 'role', 'locale', 'object_ids', 'is_active', 'last_login_at',
-        'telegram_chat_id', 'tg_link_code', 'tg_project', 'tg_state', 'admin_perms', 'google_id', 'login_alerts'];
+        'telegram_chat_id', 'tg_link_code', 'tg_project', 'tg_state', 'tg_cart', 'admin_perms', 'google_id', 'login_alerts'];
 
     protected $hidden = ['password', 'remember_token'];
 
@@ -23,6 +23,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'object_ids' => 'array',
             'tg_state' => 'array',
+            'tg_cart' => 'array',
             'admin_perms' => 'array',
             'login_alerts' => 'boolean',
             'is_active' => 'boolean',

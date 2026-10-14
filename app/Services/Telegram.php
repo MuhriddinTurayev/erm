@@ -29,6 +29,19 @@ class Telegram
         return self::call('sendMessage', $p);
     }
 
+    /**
+     * Сообщение с постоянным меню внизу экрана (кнопки-разделы бота). $rows — [['🧱 Материалы', '🛒 Корзина'], …].
+     * Нажатие кнопки приходит обычным текстом.
+     */
+    public static function menu(string $chatId, string $html, array $rows, string $placeholder = ''): array
+    {
+        $p = ['chat_id' => $chatId, 'text' => mb_substr($html, 0, 4000), 'parse_mode' => 'HTML', 'disable_web_page_preview' => true,
+            'reply_markup' => array_filter(['keyboard' => array_map(fn ($r) => array_map(fn ($t) => ['text' => $t], $r), $rows), 'resize_keyboard' => true, 'is_persistent' => true,
+                'input_field_placeholder' => mb_substr($placeholder, 0, 64) ?: null])];
+
+        return self::call('sendMessage', $p);
+    }
+
     public static function edit(string $chatId, int $messageId, string $html, array $buttons = []): void
     {
         $p = ['chat_id' => $chatId, 'message_id' => $messageId, 'text' => mb_substr($html, 0, 4000), 'parse_mode' => 'HTML', 'disable_web_page_preview' => true,

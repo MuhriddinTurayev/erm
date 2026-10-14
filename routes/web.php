@@ -205,6 +205,7 @@ Route::middleware(['auth', 'role:company'])->group(function () {
                 Route::get('/supply', [Company\StockController::class, 'supply']);
                 Route::post('/supply', [Company\StockController::class, 'supplyStore']);
                 Route::post('/supply/{sr}', [Company\StockController::class, 'supplyAction']);
+                Route::get('/supply/{sr}/photo/{i}', [Company\StockController::class, 'supplyPhoto'])->whereNumber('i');
             });
             Route::middleware('module:tenders')->group(function () {
                 Route::get('/tenders', [Company\StockController::class, 'tenders']);

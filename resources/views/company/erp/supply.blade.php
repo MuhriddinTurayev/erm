@@ -2,7 +2,7 @@
 @section('title', __('Снабжение'))
 @php
   $u = auth()->user(); $cur = \App\Services\CompanyStats::currency($ws); $n = fn ($v) => \App\Services\Erp\Stock::n($v);
-  $stl = ['new' => 'новая', 'approved' => 'согласована', 'ordered' => 'заказана', 'partial' => 'принята частично', 'received' => 'принята', 'rejected' => 'отклонена'];
+  $stl = ['new' => 'новая', 'approved' => 'согласована', 'ordered' => 'заказана', 'transit' => 'в пути', 'partial' => 'принята частично', 'received' => 'принята', 'rejected' => 'отклонена'];
   $boss = $u->isAdmin() || $u->role === 'accountant';
 @endphp
 @section('actions')
@@ -22,22 +22,26 @@
 <div class="card mt">
   <div class="card-h">
     <h3>{!! ic('clipboard-list') !!}{{ __('Заявка') }} №{{ $sr->number }} @if ($sr->project_id)<span class="muted" style="font-weight:400">· {{ $projects[$sr->project_id] ?? '' }}</span>@endif</h3>
-    <span class="st st-{{ $sr->status }}">{{ __($stl[$sr->status] ?? $sr->status) }}</span>
+    <span class="flex" style="gap:6px">@if ($sr->urgent)<span class="badge b-bad">🔥 {{ __('Срочно') }}</span>@endif<span class="st st-{{ $sr->status }}">{{ __($stl[$sr->status] ?? $sr->status) }}</span></span>
   </div>
   <div class="sum-line" style="margin-bottom:10px"><span>{{ $sr->user?->name }} · {{ $sr->created_at->format('d.m.Y') }}</span>@if ($sr->need_by)<span>{{ __('Нужно к') }}: <b class="{{ $sr->need_by->isPast() && ! in_array($sr->status, ['received', 'rejected']) ? 'out-c' : '' }}">{{ $sr->need_by->format('d.m.Y') }}</b></span>@endif
     @if ($sr->counterparty)<span>{{ __('Поставщик') }}: <b><a href="/company/parties/{{ $sr->counterparty_id }}">{{ $sr->counterparty->name }}</a></b></span>@endif @if ($sr->note)<span>{{ $sr->note }}</span>@endif</div>
+  @if ($sr->photos)
+  {{-- фото к заявке (прораб) и накладные при приёмке --}}
+  <div class="gallery" style="grid-template-columns:repeat(auto-fill,minmax(110px,1fr));margin:0 0 12px">@foreach ($sr->photos as $i => $ph)<a href="/company/supply/{{ $sr->id }}/photo/{{ $i }}" target="_blank" title="{{ ($ph['k'] ?? '') === 'invoice' ? __('Накладная') : __('Фото к заявке') }}"><img src="/company/supply/{{ $sr->id }}/photo/{{ $i }}" loading="lazy" alt=""></a>@endforeach</div>
+  @endif
 
-  @php $action = $boss && in_array($sr->status, ['approved', 'ordered']) ? 'order' : (in_array($sr->status, ['approved', 'ordered', 'partial']) && $u->canEdit() ? 'receive' : null); @endphp
+  @php $action = $boss && in_array($sr->status, ['approved', 'ordered']) ? 'order' : (in_array($sr->status, \App\Services\Erp\Supply::RECEIVABLE) && $u->canEdit() ? 'receive' : null); @endphp
   <form method="post" action="/company/supply/{{ $sr->id }}">@csrf
   <div class="tbl-wrap"><table class="tbl lines-tbl"><thead><tr><th>{{ __('Материал') }}</th><th class="n">{{ __('Нужно') }}</th><th class="n">{{ __('Есть на складах') }}</th><th class="n">{{ __('Цена') }}</th><th class="n">{{ __('Принято') }}</th>
-    @if (in_array($sr->status, ['approved', 'ordered', 'partial']))<th class="n">{{ __('Принять сейчас') }}</th>@endif</tr></thead><tbody>
+    @if (in_array($sr->status, \App\Services\Erp\Supply::RECEIVABLE))<th class="n">{{ __('Принять сейчас') }}</th>@endif</tr></thead><tbody>
   @foreach ($sr->lines as $l)
     @php $have = array_sum($bal[$l->item_id] ?? []); @endphp
     <tr><td><a href="/company/stock/items/{{ $l->item_id }}">{{ $l->item?->name }}</a></td><td class="n"><b>{{ $n($l->qty) }}</b> {{ __($l->item?->unit ?? '') }}</td>
       <td class="n {{ $have >= $l->qty ? 'in-c' : '' }}">{{ $n($have) }}</td>
       <td class="n">@if ($boss && in_array($sr->status, ['approved', 'ordered']))<input class="input" type="number" step="0.01" min="0" name="price[{{ $l->id }}]" value="{{ $l->price ?: '' }}" style="width:120px">@else{{ $l->price ? money_s($l->price, $cur) : '—' }}@endif</td>
       <td class="n">{{ $n($l->received) }}</td>
-      @if (in_array($sr->status, ['approved', 'ordered', 'partial']))<td class="n"><input class="input" type="number" step="0.001" min="0" name="qty[{{ $l->id }}]" placeholder="{{ $n(max(0, $l->qty - $l->received)) }}" style="width:110px"></td>@endif
+      @if (in_array($sr->status, \App\Services\Erp\Supply::RECEIVABLE))<td class="n"><input class="input" type="number" step="0.001" min="0" name="qty[{{ $l->id }}]" placeholder="{{ $n(max(0, $l->qty - $l->received)) }}" style="width:110px"></td>@endif
     </tr>
   @endforeach
   </tbody></table></div>
@@ -50,7 +54,10 @@
       <select class="input" name="counterparty_id"><option value="">{{ __('Поставщик') }}…</option>@foreach ($counterparties as $c)<option value="{{ $c->id }}" @selected($sr->counterparty_id === $c->id) @disabled($c->status === 'blocked')>{{ $c->name }}</option>@endforeach</select>
       <button class="btn btn-s" name="action" value="order" formnovalidate>{!! ic('send') !!}{{ __('Заказать') }}</button>
     @endif
-    @if (in_array($sr->status, ['approved', 'ordered', 'partial']) && $u->canEdit())
+    @if ($boss && $sr->status === 'ordered')
+      <button class="btn btn-s" name="action" value="transit" formnovalidate>{!! ic('truck') !!}{{ __('Машина в пути') }}</button>
+    @endif
+    @if (in_array($sr->status, \App\Services\Erp\Supply::RECEIVABLE) && $u->canEdit())
       <span class="grow"></span>
       <select class="input" name="warehouse_id">@foreach ($whs as $w)<option value="{{ $w->id }}">{{ __($w->name) }}</option>@endforeach</select>
       <label class="switch" style="font-size:13px"><input type="checkbox" name="make_pr" value="1" @checked($sr->counterparty_id)> {{ __('и создать заявку на оплату') }}</label>

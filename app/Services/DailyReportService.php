@@ -100,6 +100,33 @@ class DailyReportService
                         .($o['overdue'] ? ' ⚠️ '.__('просрочено этапов').': '.$o['overdue'] : '');
                 }
             }
+            // снабжение: что заканчивается на объектах и какие заявки опаздывают
+            $low = [];
+            foreach (StateWriter::projects($ws) as $pid => $pn) {
+                if (\App\Services\Bot\Catalog::warehouse($ws, (string) $pid)) {
+                    foreach (\App\Services\Bot\Catalog::stock($ws, (string) $pid) as $row) {
+                        if ($row['low']) {
+                            $low[] = '• '.$e($pn).': '.$e($row['item']->name).' — '.\App\Services\Bot\Catalog::n($row['qty']).' '.$e(\App\Services\Erp\Supply::unit($row['item']->unit))
+                                .($row['days'] !== null ? ' (~'.__(':n дн.', ['n' => $row['days']]).')' : '');
+                        }
+                    }
+                }
+            }
+            if ($low) {
+                $L[] = '';
+                $L[] = '⚠️ <b>'.__('Заканчиваются материалы').':</b>';
+                array_push($L, ...array_slice($low, 0, 8));
+            }
+            $late = \App\Models\SupplyRequest::of($ws->id)->whereIn('status', \App\Services\Erp\Supply::RECEIVABLE)->whereNotNull('need_by')
+                ->whereDate('need_by', '<', $s['date'])->with('counterparty')->orderBy('need_by')->limit(6)->get();
+            if ($late->count()) {
+                $L[] = '';
+                $L[] = '🚚 <b>'.__('Материал опаздывает').':</b>';
+                foreach ($late as $sr) {
+                    $L[] = '• №'.$sr->number.' · '.$e(StateWriter::projects($ws)[$sr->project_id] ?? '').' · '.__('нужно было к').' '.$sr->need_by->format('d.m')
+                        .' · '.__(\App\Services\Erp\Supply::STATUS[$sr->status] ?? $sr->status).($sr->counterparty ? ' · '.$e($sr->counterparty->name) : '');
+                }
+            }
             if ($r->ai_summary) {
                 $L[] = '';
                 $L[] = '🤖 <b>'.__('Вывод ИИ').':</b>';

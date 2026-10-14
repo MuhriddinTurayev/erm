@@ -81,6 +81,42 @@ class TelegramBot
 
                 return;
             }
+            if (preg_match('/^\/(menu|menyu|меню)\b/u', $text)) {
+                $this->sendMenu($user, $chat, '👇 '.__('Разделы — в меню внизу экрана.'));
+
+                return;
+            }
+            // кнопка меню внизу экрана
+            if ($key = \App\Services\Bot\Sections::match($text)) {
+                $user->forceFill(['tg_state' => null])->save();
+                $this->section($user, $chat, $key);
+
+                return;
+            }
+            // шаг диалога: количество, поиск, комментарий, приёмка, цены
+            $st0 = (array) ($user->tg_state ?? []);
+            if (! empty($st0['flow']) && ! str_starts_with($text, '/')) {
+                $photo0 = $m['photo'] ?? null;
+                $doc0 = $m['document'] ?? null;
+                $path0 = null;
+                if (($photo0 || ($doc0 && str_starts_with((string) ($doc0['mime_type'] ?? ''), 'image/'))) && in_array($st0['flow']['k'] ?? '', ['note', 'note_ph', 'rcv_photo'], true)) {
+                    $path0 = $this->store($user, $photo0 ? end($photo0)['file_id'] : $doc0['file_id'], 'inbox');
+                }
+                if (($text !== '' || $path0) && $this->flowInput($user, $chat, $st0['flow'], $text, $path0)) {
+                    return;
+                }
+            }
+            if (preg_match('/^\/(material|materiallar|homashyo|материалы)\b/u', $text)) {
+                $this->canSupply($user, $chat) && $this->materials($user, $chat)->home();
+
+                return;
+            }
+            if (preg_match('/^\/(sarf|rasxod|расход)\b/u', $text)) {
+                $M = $this->materials($user, $chat);
+                $M->canUse() ? $M->useHome(null) : $this->say($chat, __('Нет доступа к этому разделу'));
+
+                return;
+            }
             if (preg_match('/^\/(obyekt|object|объект)\b/u', $text)) {
                 $this->askProject($user, $chat, null);
 
@@ -168,6 +204,24 @@ class TelegramBot
 
                 return;
             }
+            // без команды: «sement 20 qop kerak» — заявка на материалы, «20 qop sement ishlatildi» — списание; всё — после подтверждения кнопкой
+            $need = '/(?<!\p{L})(kerak|керак|нужно|надо|нужен|нужна|лозим|даркор|zarur)(?!\p{L})/iu';
+            if (empty($state['await_amount']) && $user->canEdit() && $user->canModule('supply') && preg_match($need, $text)) {
+                $clean = trim(preg_replace($need, '', $text));
+                $d = Supply::parse($clean, $user->workspace->localNow());
+                if ($d['lines'] && ! Supply::expenseLike($d, $clean) && collect($d['lines'])->contains(fn ($l) => empty($l['guess']))) {
+                    $this->supplyDraft($user, $chat, $clean);
+
+                    return;
+                }
+            }
+            $M = $this->materials($user, $chat);
+            if (empty($state['await_amount']) && $M->canUse() && preg_match('/(ishlatil|ishlatdi|sarflan|sarfladi|израсход|использовал|истифода|ушло на)/iu', $text)) {
+                $d = Supply::parse(preg_replace('/(?<!\p{L})\p{L}*(ishlatil|ishlatdi|sarflan|sarfladi|израсход|использовал|истифода)\p{L}*/iu', '', $text), $user->workspace->localNow());
+                if ($d['lines'] && $M->proposeUse($d['lines'][0])) {
+                    return;
+                }
+            }
             $parsed = ExpenseService::parse($text);
             if (! empty($state['await_amount'])) {     // ждали сумму к фото чека
                 if (! $parsed) {
@@ -239,17 +293,26 @@ class TelegramBot
             '📓 '.__('Журнал работ — пришлите фото с объекта или напишите, что сделано за день.'),
         ];
         if ($user->canEdit() && $user->canModule('supply')) {
-            $lines[] = '📦 '.__('Заявка на материалы — /zayavka и список: «Цемент М400 50 мешков», «Песок 3 камаза», «завтра».');
+            $lines[] = '🧱 '.__('Материалы — остаток на объекте, корзина и заявка в пару нажатий. Или просто напишите: «sement 20 qop kerak».');
+            $lines[] = '📤 '.__('Расход — «сегодня использовали 20 мешков цемента», остаток склада обновится.');
+            $lines[] = '📥 '.__('Материал привезли — нажмите «Принял», укажите количество и пришлите накладную.');
+        }
+        if (\App\Services\Erp\Supply::canDecide($user)) {
+            $lines[] = '✅ '.__('Заявки на материалы и оплату согласуете кнопками, поставщика и цены выбираете прямо здесь.');
         }
         array_push($lines, '', '/obyekt — '.__('выбрать объект').($proj ? ' ('.e($proj).')' : ''), '/hisobot — '.__('как сдать отчёт за день'));
         if ($user->canEdit() && $user->canModule('supply')) {
-            $lines[] = '/zayavka — '.__('заявка на материалы');
+            $lines[] = '/material — '.__('материалы и корзина');
+            $lines[] = '/zayavka — '.__('заявка на материалы списком');
+            $lines[] = '/sarf — '.__('расход материала');
         }
         if ($user->seesMoney()) {
             $lines[] = '/kassa — '.__('деньги компании сейчас');
         }
         $lines[] = '/bekor — '.__('отменить');
-        $this->say($chat, implode("\n", $lines));
+        $lines[] = '';
+        $lines[] = '👇 '.__('Разделы — в меню внизу экрана.');
+        $this->sendMenu($user, $chat, implode("\n", $lines));
     }
 
     private function cash(User $user, string $chat): void
@@ -300,11 +363,19 @@ class TelegramBot
         }
         // «solyarka 850 000 AYoQSh» — это расход, а не материал: предложим записать его расходом
         $exp = Supply::expenseLike($d, $text);
+        // строки — к товарам справочника («sement» → «M400 sement, 50 kg qop»): заявка ляжет на те же позиции склада
+        foreach ($d['lines'] as &$l) {
+            if ($hit = \App\Services\Bot\Catalog::find($user->workspace, $l['name'])) {
+                $l['item_id'] = $hit->id;
+                $l['match'] = $hit->name;
+            }
+        }
+        unset($l);
         $user->forceFill(['tg_state' => ['supply_draft' => $d + ['exp' => $exp]]])->save();
         $n = fn ($v) => rtrim(rtrim(number_format((float) $v, 3, ',', ' '), '0'), ',');
         $L = ['📦 <b>'.__('Проверьте заявку').'</b>'];
         foreach ($d['lines'] as $i => $l) {
-            $L[] = ($i + 1).'. '.e($l['name']).' — <b>'.$n($l['qty']).' '.e(Supply::unit($l['unit'])).'</b>';
+            $L[] = ($i + 1).'. '.e($l['name']).' — <b>'.$n($l['qty']).' '.e(Supply::unit($l['unit'])).'</b>'.(! empty($l['match']) && $l['match'] !== $l['name'] ? ' → <i>'.e($l['match']).'</i>' : '');
         }
         if ($d['need_by']) {
             $L[] = '📅 '.__('Нужно к').': <b>'.Carbon::parse($d['need_by'])->format('d.m.Y').'</b>';
@@ -312,7 +383,8 @@ class TelegramBot
         if ($d['note'] !== '') {
             $L[] = '✏️ '.e($d['note']);
         }
-        $rows = [[['text' => '✅ '.__('Отправить'), 'data' => 'sr:send'], ['text' => '✏️ '.__('Исправить'), 'data' => 'sr:edit'], ['text' => '✖ '.__('Отмена'), 'data' => 'sr:cancel']]];
+        $rows = [[['text' => '✅ '.__('Отправить'), 'data' => 'sr:send'], ['text' => '🛒 '.__('В корзину'), 'data' => 'sr:cart']],
+            [['text' => '✏️ '.__('Исправить'), 'data' => 'sr:edit'], ['text' => '✖ '.__('Отмена'), 'data' => 'sr:cancel']]];
         if ($exp) {
             $L[] = '';
             $L[] = '💸 '.__('Похоже на расход: :s. Если вы потратили деньги, а не заказываете материал, нажмите «Это расход».', ['s' => '<b>'.CompanyStats::money($exp['amount']).'</b>']);
@@ -352,6 +424,12 @@ class TelegramBot
     private function run(User $user, string $chat, string $pid, array $action): void
     {
         $ws = $user->workspace;
+        if (in_array($action['do'], ['materials', 'cart', 'use'], true)) {   // объект выбран — продолжаем раздел
+            $M = $this->materials($user, $chat);
+            match ($action['do']) { 'materials' => $M->home(), 'cart' => $M->cart(), default => $M->useHome(null) };
+
+            return;
+        }
         if ($action['do'] === 'expense') {
             if (! $user->canEdit()) {
                 $this->say($chat, __('Только просмотр'));
@@ -408,6 +486,12 @@ class TelegramBot
                 return;
             }
             [$cmd, $arg] = array_pad(explode(':', $data, 2), 2, '');
+            // материалы, расход, приёмка, снабжение — свои кнопки
+            if (in_array($cmd, ['m', 'u', 'rc', 'sq', 'so', 'sp', 'spx', 'st', 'sec'], true)) {
+                $this->materialsCallback($user, $chat, $cmd, $arg, $q);
+
+                return;
+            }
             if ($cmd === 'obj') {
                 if (! isset(StateWriter::projects($ws, $user->allowedObjects())[$arg])) {
                     Telegram::answer($q['id'], __('Нет доступа к этому разделу'));
@@ -467,6 +551,13 @@ class TelegramBot
 
                     return;
                 }
+                if ($arg === 'cart') {   // в корзину: можно добавить ещё материалы, дату, «срочно», фото
+                    $user->forceFill(['tg_state' => null])->save();
+                    Telegram::answer($q['id'], '🛒');
+                    $this->materials($user, $chat)->addLines((array) $draft['lines'], (int) $q['message']['message_id']);
+
+                    return;
+                }
                 if ($arg === 'exp') {   // это был расход, а не заявка
                     if (empty($draft['exp'])) {
                         Telegram::answer($q['id']);
@@ -501,7 +592,11 @@ class TelegramBot
                 }
                 $ok = Supply::decide($sr, $user, $cmd === 'sa');
                 Telegram::answer($q['id'], $ok ? ($cmd === 'sa' ? '✅ '.__('Согласовано') : '❌ '.__('Отклонено')) : __('Уже решено'));
-                Telegram::edit($chat, (int) $q['message']['message_id'], Supply::card($sr->fresh()), [[['text' => __('Открыть'), 'url' => url('/company/supply')]]]);
+                // согласовал — сразу можно выбрать поставщика и заказать
+                Telegram::edit($chat, (int) $q['message']['message_id'], Supply::card($sr->fresh(), true), array_values(array_filter([
+                    $ok && $cmd === 'sa' ? [['text' => '🏢 '.__('Поставщик и цены → заказать'), 'data' => 'so:'.$sr->id]] : null,
+                    [['text' => __('Открыть'), 'url' => url('/company/supply')]],
+                ])));
 
                 return;
             }
@@ -565,6 +660,185 @@ class TelegramBot
                 Telegram::edit($chat, (int) $q['message']['message_id'], ExpenseService::card($e->fresh(), $ws), [[['text' => '🏷 '.__('Изменить статью'), 'data' => 'cat:'.$e->id]]]);
             }
         });
+    }
+
+    /* ---------------- материалы и разделы по ролям ---------------- */
+
+    private function materials(User $user, string $chat): \App\Services\Bot\Materials
+    {
+        return new \App\Services\Bot\Materials($user, $chat, fn (array $action) => $this->askProject($user, $chat, $action));
+    }
+
+    /** Меню внизу экрана — разделы по роли сотрудника */
+    private function sendMenu(User $user, string $chat, string $html): void
+    {
+        try {
+            Telegram::menu($chat, $html, \App\Services\Bot\Sections::menu($user), __('Напишите или выберите раздел'));
+        } catch (\Throwable $e) {
+            Log::warning('Telegram menu: '.$e->getMessage());
+            $this->say($chat, $html);
+        }
+    }
+
+    /** Нажата кнопка меню */
+    private function section(User $user, string $chat, string $key): void
+    {
+        $M = $this->materials($user, $chat);
+        $S = new \App\Services\Bot\Sections($user, $chat);
+        $sup = fn () => $this->canSupply($user, $chat);
+        match ($key) {
+            'materials' => $sup() && $M->home(),
+            'cart' => $sup() && $M->cart(),
+            'myorders' => $M->orders(null),
+            'orders' => \App\Services\Erp\Supply::canDecide($user) ? $M->queue(null) : $M->orders(null),
+            'use' => $M->canUse() ? $M->useHome(null) : $this->say($chat, __('Нет доступа к этому разделу')),
+            'report' => $this->say($chat, '📓 <b>'.__('Отчёт за день').'</b>'."\n".__('Пришлите фото с объекта (можно сразу несколько, альбомом) и напишите, что сделано: какие работы, сколько людей работало, что мешает. Всё попадёт в журнал работ, руководитель увидит это в ежедневном отчёте.')),
+            'status' => $S->status(),
+            'queue' => $S->queue(),
+            'cash' => $this->cash($user, $chat),
+            'pay' => $S->payToday(),
+            'flats' => $S->flats(),
+            'leads' => $S->leads(),
+            default => $this->help($chat, $user),
+        };
+    }
+
+    /**
+     * Ввод на шаге диалога (количество, поиск, комментарий, приёмка, цены). true — сообщение обработано.
+     * Если ввод не подходит к шагу (например, вместо числа написали расход), шаг сбрасывается и сообщение идёт дальше.
+     */
+    private function flowInput(User $user, string $chat, array $f, string $text, ?string $photo): bool
+    {
+        $M = $this->materials($user, $chat);
+        $num = fn (string $t) => preg_match('/^\s*(\d+(?:[.,]\d+)?)\s*[\p{L}.²³]*\s*$/u', $t, $x) ? (float) str_replace(',', '.', $x[1]) : null;
+        switch ($f['k'] ?? '') {
+            case 'qty':
+                if ($text !== '' && ($q = $num($text)) !== null) {
+                    $M->setQty((int) $f['item'], $q);
+
+                    return true;
+                }
+                break;
+            case 'use':
+                if ($text !== '' && ($q = $num($text)) !== null) {
+                    $M->useConfirm((int) $f['item'], $q, null);
+
+                    return true;
+                }
+                break;
+            case 'search':
+                // слово без цифр — ищем материал; «Бетон 25 млн …» и прочее идёт дальше (расход, журнал)
+                if ($text !== '' && ! $photo && ! preg_match('/\d/', $text) && mb_strlen($text) <= 40) {
+                    $M->search($text);
+
+                    return true;
+                }
+                break;
+            case 'use_search':
+                if ($text !== '' && ! $photo) {
+                    if (preg_match('/\d/', $text)) {
+                        $d = Supply::parse($text, $user->workspace->localNow());
+                        if ($d['lines'] && $M->proposeUse($d['lines'][0])) {
+                            return true;
+                        }
+                    } elseif ($i = \App\Services\Bot\Catalog::find($user->workspace, $text)) {
+                        $M->useItem($i->id, null);
+
+                        return true;
+                    }
+                }
+                break;
+            case 'note':
+                if ($text !== '' || $photo) {
+                    $M->addNote($text !== '' ? $text : null, $photo);
+
+                    return true;
+                }
+                break;
+            case 'note_ph':
+                if ($photo) {
+                    $M->addNote(null, $photo);
+
+                    return true;
+                }
+                break;
+            case 'rcv_qty':
+                if ($text !== '') {
+                    $M->receiveQtyText((int) $f['sr'], $text);
+
+                    return true;
+                }
+                break;
+            case 'rcv_photo':
+                if ($photo) {
+                    $M->receivePhoto($photo);
+
+                    return true;
+                }
+                $this->say($chat, '📄 '.__('Пришлите фото накладной или нажмите «Без накладной — принять».'));
+
+                return true;
+            case 'price':
+                if ($text !== '') {
+                    $M->orderWithPrices((int) $f['sr'], $text, null);
+
+                    return true;
+                }
+                break;
+        }
+        $user->forceFill(['tg_state' => null])->save();
+
+        return false;
+    }
+
+    /** Кнопки разделов материалов, приёмки и снабжения */
+    private function materialsCallback(User $user, string $chat, string $cmd, string $arg, array $q): void
+    {
+        $M = $this->materials($user, $chat);
+        $mid = (int) ($q['message']['message_id'] ?? 0) ?: null;
+        $a = explode(':', $arg);
+        Telegram::answer($q['id']);
+        $orderOnly = ['q', 'k', 'r', 'd', 'u', 'n', 's', 'z', 'p', 'pp', 'a', 'l', 'f'];
+        if ($cmd === 'm' && in_array($a[0], $orderOnly, true) && ! ($user->canEdit() && $user->canModule('supply'))) {
+            $this->say($chat, __('Нет доступа к этому разделу'));
+
+            return;
+        }
+        match (true) {
+            $cmd === 'm' && $a[0] === 'h' => $M->home($mid),
+            $cmd === 'm' && $a[0] === 'c' => $M->category($a[1] ?? 'other', (int) ($a[2] ?? 0), $mid),
+            $cmd === 'm' && $a[0] === 'i' => $M->item((int) ($a[1] ?? 0), $mid),
+            $cmd === 'm' && $a[0] === 'q' => $M->setQty((int) ($a[1] ?? 0), (float) ($a[2] ?? 0), $mid),
+            $cmd === 'm' && $a[0] === 'k' => $M->cart($mid),
+            $cmd === 'm' && in_array($a[0], ['r', 'd', 'u', 'z'], true) => $M->cartAction($a[0], (string) ($a[1] ?? ''), $mid),
+            $cmd === 'm' && $a[0] === 'n' => $M->askNote(),
+            $cmd === 'm' && $a[0] === 's' => $M->submit($mid),
+            $cmd === 'm' && $a[0] === 'f' => $M->favorites($mid),
+            $cmd === 'm' && $a[0] === 'pp' => $M->repeatList($mid),
+            $cmd === 'm' && $a[0] === 'p' => $M->repeat((int) ($a[1] ?? 0), $mid),
+            $cmd === 'm' && $a[0] === 'o' => $M->orders($mid),
+            $cmd === 'm' && $a[0] === 'oo' => $M->order((int) ($a[1] ?? 0), $mid),
+            $cmd === 'm' && $a[0] === 'a' => $M->proposeAccept($mid),
+            $cmd === 'm' && $a[0] === 'l' => $M->lowOrder((int) ($a[1] ?? 0), $mid),
+            $cmd === 'm' && $a[0] === 'sq' => $user->forceFill(['tg_state' => ['flow' => ['k' => 'search']]])->save() && $this->say($chat, '🔍 '.__('Напишите название материала — например «цемент» или «арматура 12».')),
+            $cmd === 'm' => $M->home($mid),
+            $cmd === 'u' && $a[0] === 'h' => $M->useHome($mid),
+            $cmd === 'u' && $a[0] === 'hp' => $M->useHome($mid, (int) ($a[1] ?? 0)),
+            $cmd === 'u' && $a[0] === 'i' => $M->useItem((int) ($a[1] ?? 0), $mid),
+            $cmd === 'u' && $a[0] === 'q' => $M->useConfirm((int) ($a[1] ?? 0), (float) ($a[2] ?? 0), $mid),
+            $cmd === 'u' && $a[0] === 'ok' => $M->useOk((int) ($a[1] ?? 0), (float) ($a[2] ?? 0), $mid),
+            $cmd === 'rc' && $a[0] === 'a' => $M->receiveAll((int) ($a[1] ?? 0), $mid),
+            $cmd === 'rc' && $a[0] === 'e' => $M->receiveAskQty((int) ($a[1] ?? 0), $mid),
+            $cmd === 'rc' && $a[0] === 'n' => $M->receiveFinish((int) ($a[1] ?? 0), $mid),
+            $cmd === 'rc' => $M->receiveStart((int) $a[0], null),
+            $cmd === 'sq' => (int) $a[0] ? $M->queueItem((int) $a[0], $mid) : $M->queue($mid),
+            $cmd === 'so' => $M->suppliers((int) $a[0], $mid),
+            $cmd === 'sp' => $M->pickSupplier((int) $a[0], (int) ($a[1] ?? 0), $mid),
+            $cmd === 'spx' => $M->orderWithPrices((int) $a[0], null, $mid),
+            $cmd === 'st' => $M->transit((int) $a[0], $mid),
+            $cmd === 'sec' && $a[0] === 'queue' => (new \App\Services\Bot\Sections($user, $chat))->queue(),
+            default => null,
+        };
     }
 
     /* ---------------- служебное ---------------- */
