@@ -116,12 +116,47 @@ class ObjectController extends ErpController
         $debtors = array_values(array_filter(array_map(fn ($a) => $a + ['od' => Apartments::overdue($a, $today)], $deals), fn ($a) => $a['od'] > 0));
         usort($debtors, fn ($x, $y) => $y['od'] <=> $x['od']);
 
+        $media = ObjectMedia::of($ws->id)->where('project_id', $pid)->orderByDesc('is_main')->orderBy('kind')->orderBy('sort')->orderBy('id')->get();
+        $u = auth()->user();
+        $tab = request('tab', $u->isCatalog() ? 'units' : 'overview');
+
         return view('company.objects.show', [
             'byRooms' => $byRooms, 'lastPays' => array_slice($lastPays, 0, 10), 'debtors' => array_slice($debtors, 0, 10),
             'ws' => $ws, 'p' => $p, 'pid' => $pid, 's' => self::summary($p), 'team' => $this->team($pid), 'cur' => \App\Services\CompanyStats::currency($ws),
-            'media' => ObjectMedia::of($ws->id)->where('project_id', $pid)->orderByDesc('is_main')->orderBy('kind')->orderBy('sort')->orderBy('id')->get(),
-            'roles' => config('oftob.roles'), 'tab' => request('tab', 'overview'),
+            'media' => $media, 'roles' => config('oftob.roles'), 'tab' => $tab, 'types' => self::layouts($p),
+            'inv' => $tab === 'units' ? $this->unitsData($ws, $p, $apts, $media) : null,
         ]);
+    }
+
+    /** Данные для редактора перечня помещений */
+    private function unitsData($ws, array $p, array $apts, $media): array
+    {
+        $deals = [];
+        $status = [];
+        $over = [];
+        foreach ($apts as $a) {
+            if ($a['status'] !== 'free') {
+                $status[$a['id']] = $a['status'];
+            }
+            if (in_array($a['status'], ['sold', 'booked'], true)) {
+                $deals[$a['id']] = ['st' => $a['status'], 'buyer' => $a['buyer'], 'price' => $a['price']];
+            } elseif (! empty($p['apts'][$a['id']]['price'])) {
+                $over[$a['id']] = (float) $p['apts'][$a['id']]['price'];   // цену поставил менеджер продаж
+            }
+        }
+        // что загружено для каждой планировки: чертёж, 3D-интерьер, панорамы комнат
+        $byType = [];
+        foreach ($media->whereNotNull('layout') as $m) {
+            $byType[$m->layout][$m->kind][] = ['id' => $m->id, 'title' => $m->title, 'room' => $m->meta['room'] ?? null];
+        }
+
+        return [
+            'has' => \App\Services\Inventory::has($p), 'data' => $p['inv'] ?? null, 'rev' => InventoryController::rev($p), 'undo' => ! empty($p['invPrev']),
+            'ready' => $p['inv']['ready'] ?? false, 'status' => (object) $status, 'deals' => (object) $deals, 'over' => (object) $over, 'media' => (object) $byType,
+            'generated' => count(Apartments::generated($p)), 'genDeals' => count($deals),
+            'exterior' => $media->where('kind', 'exterior')->count(), 'public' => (bool) $ws->public_enabled,
+            'build' => Apartments::buildParams($p), 'kinds' => array_map(fn ($k) => __($k), \App\Services\Inventory::KINDS),
+        ];
     }
 
     /** Учётная запись для объекта: по умолчанию прораб, доступ только к этому объекту */
@@ -158,8 +193,18 @@ class ObjectController extends ErpController
 
     private function canMedia(): void
     {
-        $u = auth()->user();
-        abort_unless($u->canEdit() && in_array($u->role, ['admin', 'manager', 'foreman', 'accountant'], true), 403, __('Нет доступа к этому разделу'));
+        abort_unless(auth()->user()->canMedia(), 403, __('Нет доступа к этому разделу'));
+    }
+
+    /** Планировки объекта из перечня помещений: [id => планировка] */
+    public static function layouts(array $p): array
+    {
+        $out = [];
+        foreach ((array) ($p['inv']['types'] ?? []) as $t) {
+            $out[(string) ($t['id'] ?? '')] = $t;
+        }
+
+        return $out;
     }
 
     /**
@@ -169,14 +214,23 @@ class ObjectController extends ErpController
     public function mediaUpload(Request $request, string $pid)
     {
         $this->canMedia();
-        $this->project($pid);
+        $p = $this->project($pid);
         $ws = $this->ws();
         $d = $request->validate([
             'upload' => ['required', 'string', 'regex:/^[a-z0-9]{16,40}$/'], 'index' => ['required', 'integer', 'min:0'], 'total' => ['required', 'integer', 'min:1', 'max:200'],
             'name' => ['required', 'string', 'max:200'], 'chunk' => ['required', 'file', 'max:6144'],
-            'kind' => ['required', Rule::in(array_keys(ObjectMedia::KINDS))], 'rooms' => ['nullable', 'integer', 'min:0', 'max:6'], 'title' => ['nullable', 'string', 'max:160'],
+            'kind' => ['required', Rule::in(array_keys(ObjectMedia::KINDS))], 'rooms' => ['nullable', 'integer', 'min:0', 'max:9'], 'title' => ['nullable', 'string', 'max:160'],
             'attach' => ['nullable', 'integer'],   // id модели фасада: файл станет её состоянием «Готовый дом»
+            'layout' => ['nullable', 'string', 'max:40'],   // планировка из перечня помещений: её чертёж, 3D-интерьер, панорамы комнат
+            'room' => ['nullable', 'string', 'max:60'],     // комната на панораме: «Кухня», «Спальня»…
+            'src' => ['nullable', 'string', 'max:200'],     // исходный файл, если модель переведена в GLB в браузере
         ]);
+        $layout = null;
+        if (! empty($d['layout'])) {
+            $types = self::layouts($p);
+            abort_unless(isset($types[$d['layout']]), 422, __('Планировка не найдена — обновите страницу'));
+            $layout = $types[$d['layout']];
+        }
         $target = null;
         if (! empty($d['attach'])) {
             $target = ObjectMedia::of($ws->id)->where('project_id', $pid)->where('kind', 'exterior')->whereIn('ext', ['glb', 'gltf'])->findOrFail($d['attach']);
@@ -236,12 +290,22 @@ class ObjectController extends ErpController
 
             return response()->json(['ok' => true, 'id' => $target->id]);
         }
+        $meta = in_array($ext, ['glb', 'gltf'], true) ? self::glbFlags($disk->path($path)) : [];
+        if (! empty($d['room'])) {
+            $meta['room'] = trim($d['room']);
+        }
+        if (! empty($d['src'])) {
+            $meta['src'] = trim($d['src']);
+        }
+        $title = ($d['title'] ?? '') ?: (! empty($d['room']) && $layout ? $layout['name'].' — '.trim($d['room']) : Str::limit(pathinfo($d['src'] ?? $d['name'], PATHINFO_FILENAME), 150, ''));
         $m = ObjectMedia::create([
-            'workspace_id' => $ws->id, 'project_id' => $pid, 'kind' => $d['kind'], 'rooms' => $d['rooms'] ?? null,
-            'title' => ($d['title'] ?? '') ?: Str::limit(pathinfo($d['name'], PATHINFO_FILENAME), 150, ''), 'path' => $path, 'ext' => $ext,
+            'workspace_id' => $ws->id, 'project_id' => $pid, 'kind' => $d['kind'],
+            // у планировки число комнат берём из неё: так файл найдут и старые экраны, которые ищут по комнатам
+            'rooms' => $layout ? (int) ($layout['rooms'] ?? 0) : ($d['rooms'] ?? null), 'layout' => $layout ? (string) $layout['id'] : null,
+            'title' => Str::limit($title, 160, ''), 'path' => $path, 'ext' => $ext,
             'size' => $disk->size($path), 'user_id' => $request->user()->id, 'is_public' => true,
             'is_main' => $d['kind'] === 'exterior' && ! ObjectMedia::of($ws->id)->where('project_id', $pid)->where('kind', 'exterior')->exists(),
-            'meta' => in_array($ext, ['glb', 'gltf'], true) ? (self::glbFlags($disk->path($path)) ?: null) : null,
+            'meta' => $meta ?: null,
         ]);
         \App\Models\AuditLog::create(['workspace_id' => $ws->id, 'user_id' => $request->user()->id, 'project' => StateWriter::projects($ws)[$pid] ?? null, 'action' => 'media.add',
             'summary' => ObjectMedia::KINDS[$m->kind][0].': '.$m->title.' ('.round($m->size / 1048576, 1).' МБ)']);
@@ -281,10 +345,47 @@ class ObjectController extends ErpController
         $this->mine($media);
         $this->canMedia();
         $this->checkProject($media->project_id);
-        $d = $request->validate(['title' => ['required', 'string', 'max:160'], 'rooms' => ['nullable', 'integer', 'min:0', 'max:6'], 'sort' => ['nullable', 'integer'],
-            'camera' => ['nullable', 'string', 'max:120'], 'exposure' => ['nullable', 'numeric', 'min:0.2', 'max:3'], 'poster' => ['nullable', 'string', 'max:2000000']]);
+        $d = $request->validate(['title' => ['required', 'string', 'max:160'], 'rooms' => ['nullable', 'integer', 'min:0', 'max:9'], 'sort' => ['nullable', 'integer'],
+            'camera' => ['nullable', 'string', 'max:120'], 'exposure' => ['nullable', 'numeric', 'min:0.2', 'max:3'], 'poster' => ['nullable', 'string', 'max:2000000'],
+            'layout' => ['nullable', 'string', 'max:40'], 'room' => ['nullable', 'string', 'max:60'],
+            // комнаты внутри 3D-интерьера: [{name, orbit, target, fov}] — кнопки «Кухня», «Спальня»… в просмотре
+            'views' => ['nullable', 'string', 'max:20000']]);
         $media->fill(['title' => $d['title'], 'rooms' => $d['rooms'] ?? null, 'sort' => (int) ($d['sort'] ?? 0), 'is_public' => $request->boolean('is_public')]);
+        if ($request->has('layout')) {   // поле есть только в форме «Настроить»; «Сохранить вид» его не присылает
+            $types = self::layouts(StateWriter::project($this->ws(), (string) $media->project_id) ?? []);
+            $t = $types[(string) ($d['layout'] ?? '')] ?? null;
+            $media->layout = $t ? (string) $t['id'] : null;
+            if ($t) {
+                $media->rooms = (int) ($t['rooms'] ?? 0);
+            }
+        }
         $meta = (array) $media->meta;
+        if ($request->has('room')) {
+            $room = trim((string) ($d['room'] ?? ''));
+            if ($room !== '') {
+                $meta['room'] = $room;
+            } else {
+                unset($meta['room']);
+            }
+        }
+        if (isset($d['views'])) {
+            $views = [];
+            foreach ((array) json_decode($d['views'], true) as $v) {
+                $name = trim((string) ($v['name'] ?? ''));
+                $orbit = (string) ($v['orbit'] ?? '');
+                $target = (string) ($v['target'] ?? '');
+                if ($name === '' || ! preg_match('/^[-0-9.e]+(rad|deg) [-0-9.e]+(rad|deg) [-0-9.e]+m$/', $orbit) || ! preg_match('/^[-0-9.e]+m [-0-9.e]+m [-0-9.e]+m$/', $target)) {
+                    continue;
+                }
+                $views[] = ['name' => mb_substr($name, 0, 40), 'orbit' => $orbit, 'target' => $target, 'fov' => preg_match('/^[0-9.]+deg$/', (string) ($v['fov'] ?? '')) ? $v['fov'] : null];
+            }
+            $views = array_slice($views, 0, 24);
+            if ($views) {
+                $meta['views'] = $views;
+            } else {
+                unset($meta['views']);
+            }
+        }
         if (isset($d['camera'])) {
             $meta['camera'] = $d['camera'];
         }
@@ -359,6 +460,6 @@ class ObjectController extends ErpController
 
         return view('company.objects.viewer', ['ws' => $ws, 'p' => $p, 'pid' => $pid, 'media' => $media, 'cur' => $cur,
             'src' => fn (ObjectMedia $m, bool $poster = false) => url('/company/media/'.$m->id.'/file'.($poster ? '?poster=1' : '')), 'public' => false,
-            'canEdit' => auth()->user()->canEdit() && in_array(auth()->user()->role, ['admin', 'manager', 'foreman', 'accountant'], true)]);
+            'canEdit' => auth()->user()->canMedia()]);
     }
 }

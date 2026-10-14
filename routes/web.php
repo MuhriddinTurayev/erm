@@ -124,6 +124,13 @@ Route::middleware(['auth', 'role:company'])->group(function () {
             // объекты: каждый отдельно — команда, учётные записи, 3D-модели и панорамы
             Route::middleware('module:objects')->group(function () {
                 Route::get('/objects', [Company\ObjectController::class, 'index']);
+                // объекты и перечень помещений ведут руководитель и администратор объектов (проверка — в контроллере)
+                Route::post('/objects', [Company\InventoryController::class, 'create']);
+                Route::post('/objects/{pid}/info', [Company\InventoryController::class, 'info']);
+                Route::post('/objects/{pid}/inventory', [Company\InventoryController::class, 'save']);
+                Route::post('/objects/{pid}/inventory/convert', [Company\InventoryController::class, 'convert']);
+                Route::post('/objects/{pid}/inventory/undo', [Company\InventoryController::class, 'undo']);
+                Route::post('/objects/{pid}/inventory/ready', [Company\InventoryController::class, 'ready']);
                 Route::get('/objects/{pid}', [Company\ObjectController::class, 'show']);
                 Route::get('/objects/{pid}/3d', [Company\ObjectController::class, 'viewer']);
                 Route::post('/objects/{pid}/account', [Company\ObjectController::class, 'account']);

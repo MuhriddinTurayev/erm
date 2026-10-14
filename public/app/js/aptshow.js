@@ -1,7 +1,7 @@
 'use strict';
 /* ===== Квартира для клиента: расположение, планировка, 3D, оплата, задаток ===== */
 function aptPos(p, a) {
-  const b = p.b, apf = b.aptsPerFloor, cols = Math.ceil(apf / 2);
+  const b = bView(p), apf = b.aptsPerFloor, cols = Math.ceil(apf / 2);
   if (!a.rooms) return { cols: 1, col: 0, row: 'south', corner: true, comm: true };
   const row = a.idx < cols ? 'south' : 'north', col = row === 'south' ? a.idx : (a.idx - cols);
   const cRow = row === 'south' ? cols : apf - cols;
@@ -10,7 +10,7 @@ function aptPos(p, a) {
 }
 function aptFacts(p, a) {
   const b = p.b, pos = aptPos(p, a), h = (a.floor - 1) * b.floorH, f = [];
-  f.push(['🏢', 'Подъезд', `${a.section} из ${b.sections}`]);
+  f.push(['🏢', 'Подъезд', a.secName || `${a.section} из ${b.sections}`]);
   f.push(['🔢', 'Этаж', `${a.floor} из ${b.floors}` + (a.floor === b.floors ? ' · последний' : a.floor === (b.commercialFirst ? 2 : 1) ? ' · нижний жилой' : '')]);
   f.push(['📏', 'Высота пола над землёй', `${fmt(h, 1)} м`]);
   f.push(['📍', 'Положение в доме', pos.corner ? 'угловая — окна на две стороны' : 'в середине секции — тёплая, меньше наружных стен']);
@@ -21,7 +21,7 @@ function aptFacts(p, a) {
 }
 /* ---------- схема фасада с отметкой квартиры ---------- */
 function aptFacadeSvg(p, a) {
-  const b = p.b, pos = aptPos(p, a), secs = b.sections, W = 600, fh = Math.max(9, Math.min(24, 300 / b.floors)), top = 26, g = top + b.floors * fh, H = g + 30, sw = (W - 40) / secs;
+  const b = bView(p), pos = aptPos(p, a), secs = b.sections, W = 600, fh = Math.max(9, Math.min(24, 300 / b.floors)), top = 26, g = top + b.floors * fh, H = g + 30, sw = (W - 40) / secs;
   let s = `<svg viewBox="0 0 ${W} ${H}" class="bsvg"><rect width="${W}" height="${g}" fill="#eaf2fb"/><rect y="${g}" width="${W}" height="${H - g}" fill="#cfe3c2"/>`;
   for (let k = 0; k < secs; k++) {
     const x0 = 20 + k * sw;
@@ -41,7 +41,7 @@ function aptFacadeSvg(p, a) {
 }
 /* ---------- схема этажа ---------- */
 function aptFloorSvg(p, a) {
-  const b = p.b, A = genApts(p).filter(x => x.section === a.section && x.floor === a.floor), apf = b.aptsPerFloor, cols = Math.ceil(apf / 2), ncols = apf - cols;
+  const b = bView(p), A = genApts(p).filter(x => x.section === a.section && x.floor === a.floor), apf = b.aptsPerFloor, cols = Math.ceil(apf / 2), ncols = apf - cols;
   const W = 620, H = 330, x0 = 60, y0 = 46, w = W - 120, h = H - 100, coreW = w * 0.16, corrH = h * 0.16, rowH = (h - corrH) / 2;
   const col = st => ({ free: '#dcfce7', booked: '#fef3c7', sold: '#fee2e2', reserve: '#e2e8f0' }[st]);
   let s = `<svg viewBox="0 0 ${W} ${H}" class="bsvg"><rect width="${W}" height="${H}" fill="#f8fafc"/>`;
@@ -107,7 +107,7 @@ PAGES.apt = {
       <div class="card mt"><h3>Схема фасада</h3>${aptFacadeSvg(p, a)}</div>`;
     if (tab === 'route') body = aptRouteHtml(p, a);
     if (tab === 'plan') { const P2 = a.rooms ? aptPlanSvg(a) : null;
-      body = `<div class="grid g2"><div class="card"><h3>План ${a.floor} этажа, подъезд ${a.section}</h3>${a.rooms ? aptFloorSvg(p, a) : '<p class="muted">Коммерческое помещение занимает весь первый этаж секции.</p>'}
+      body = `<div class="grid g2"><div class="card"><h3>План ${a.floor} этажа, ${secTxt(a)}</h3>${a.rooms ? aptFloorSvg(p, a) : '<p class="muted">Коммерческое помещение занимает весь первый этаж секции.</p>'}
         <div class="legend mt"><span><i style="background:#fed7aa;border:2px solid #ea580c"></i>эта квартира</span><span><i style="background:#dcfce7"></i>свободна</span><span><i style="background:#fef3c7"></i>бронь</span><span><i style="background:#fee2e2"></i>продана</span><span><i style="background:#60a5fa"></i>окна</span></div></div>
         ${P2 ? `<div class="card"><h3>Планировка квартиры №${a.num} · ${a.area} м²</h3>${P2.svg}
         <table class="mt"><tbody>${P2.plan.rooms.map(r => `<tr><td>${T(r.name)}</td><td class="n">${fmt(r.w * r.d, 1)} м²</td></tr>`).join('')}</tbody></table></div>` : ''}</div>`; }
@@ -117,7 +117,7 @@ PAGES.apt = {
     if (tab === 'pay') body = `<div id="results">${this.results(p, args)}</div>`;
     const ld = args.lead ? p.leads.find(l => l.id === args.lead) : null;
     return `${ld ? `<div class="note">👤 Клиент: <b>${esc(ld.name)}</b> · <a href="${telHref(ld.phone)}">${esc(ld.phone)}</a> · ищет: ${esc(leadWant(ld) || 'не указано')} <button class="btn-s" data-act="leadOpen" data-id="${ld.id}">карточка лида</button></div>` : ''}<div class="apt-head">
-      <div><div class="small muted">ЖК «${esc(p.name.replace(/^ЖК\s*/, '').replace(/[«»]/g, ''))}» · подъезд ${a.section} · ${a.floor} этаж</div>
+      <div><div class="small muted">ЖК «${esc(p.name.replace(/^ЖК\s*/, '').replace(/[«»]/g, ''))}» · ${secTxt(a)} · ${a.floor} этаж</div>
         <h2>${a.rooms ? `${a.rooms}-комнатная квартира №${a.num}` : 'Коммерческое помещение ' + a.num}</h2>
         <div class="flex"><span class="pill p-${a.status}">${T(ST_NAME[a.status])}</span><span class="pill p-reserve">${a.area} м²</span><span class="pill p-reserve">${pos.corner ? 'угловая' : 'в середине'}</span><span class="pill p-reserve">${pos.row === 'south' ? 'окна во двор' : 'окна на улицу'}</span>${o.bookedUntil && a.status === 'booked' ? `<span class="pill p-booked">бронь до ${fdate(o.bookedUntil)}</span>` : ''}</div></div>
       <div class="apt-price"><b>${money(a.price)}</b><span>${money(ppm)} за м²</span>
@@ -173,7 +173,7 @@ ACT.aptStyle = d => { aptObj(P(), pageArgs.id).style = d.style; save(); $$('[dat
 ACT.aptBookForm = d => {
   const p = P(), a = genApts(p).find(x => x.id === d.id), c = aptCalc(p, a), dep = Math.round(Math.max(5e6, c.price * 0.05) / 1e5) * 1e5, ld = pageArgs.lead ? p.leads.find(l => l.id === pageArgs.lead) : null;
   if (ld && !a.buyer) { a.buyer = ld.name; a.phone = ld.phone; }
-  openModal(`<h2>✍️ Бронирование и задаток</h2><div class="muted">Квартира №${a.num} · ${a.rooms}-комн. · ${a.area} м² · ${a.floor} этаж · подъезд ${a.section}</div>
+  openModal(`<h2>✍️ Бронирование и задаток</h2><div class="muted">Квартира №${a.num} · ${a.rooms}-комн. · ${a.area} м² · ${a.floor} этаж · ${secTxt(a)}</div>
   <div class="form mt">
     <label class="fld"><span>ФИО покупателя *</span><input class="txt" id="bkName" value="${esc(a.buyer)}"></label>
     <label class="fld"><span>Телефон *</span><input class="txt" id="bkPhone" value="${esc(a.phone)}" placeholder="+998"></label>
@@ -211,7 +211,7 @@ ACT.aptDocs = d => {
 function aptDocHtml(p, a, kind) {
   const o = a.o, dep = (o.payments || []).find(x => x.id === o.depositId) || (o.payments || [])[0] || { amount: 0, date: today() }, c = DB.settings.company, ln = '______________________';
   const head = `<style>body{font:14px/1.6 'Times New Roman',serif;margin:40px;color:#111}h1{font-size:18px;text-align:center;margin:0 0 6px}h2{font-size:15px;margin:18px 0 6px}.c{text-align:center}.r{text-align:right}table{width:100%;border-collapse:collapse;margin:10px 0}td{border:1px solid #999;padding:5px 8px}.sig{display:flex;justify-content:space-between;margin-top:50px}.sig div{width:45%}@media print{button{display:none}}</style>`;
-  const info = `<table><tr><td>Объект</td><td>${esc(p.name)}, ${esc(p.address || '')}</td></tr><tr><td>Квартира</td><td>№${a.num}, ${a.rooms}-комнатная, общая площадь ${a.area} м²</td></tr><tr><td>Подъезд / этаж</td><td>${a.section} / ${a.floor} из ${p.b.floors}</td></tr><tr><td>Цена</td><td>${money(a.price)} (${money(a.price / a.area)} за м²)</td></tr><tr><td>Условия оплаты</td><td>${esc(o.plan || '—')}</td></tr></table>`;
+  const info = `<table><tr><td>Объект</td><td>${esc(p.name)}, ${esc(p.address || '')}</td></tr><tr><td>Квартира</td><td>№${a.num}, ${a.rooms}-комнатная, общая площадь ${a.area} м²</td></tr><tr><td>Подъезд / этаж</td><td>${a.secName || a.section} / ${a.floor} из ${bView(p).floors}</td></tr><tr><td>Цена</td><td>${money(a.price)} (${money(a.price / a.area)} за м²)</td></tr><tr><td>Условия оплаты</td><td>${esc(o.plan || '—')}</td></tr></table>`;
   if (kind === 'receipt') return `${head}<h1>КВИТАНЦИЯ № ${a.num}-${(dep.id || '').slice(0, 4).toUpperCase()}</h1><p class="c">о приёме задатка от ${fdate(dep.date)}</p><table><tr><td>Получатель</td><td>${esc(c)}</td></tr><tr><td>Плательщик</td><td>${esc(o.buyer)}, тел. ${esc(o.phone)}${o.passport ? ', паспорт ' + esc(o.passport) : ''}</td></tr><tr><td>Основание</td><td>Задаток за квартиру №${a.num} в ${esc(p.name)}</td></tr><tr><td>Сумма</td><td><b>${money(dep.amount)}</b></td></tr><tr><td>Способ оплаты</td><td>${esc(dep.way || o.payWay || '—')}</td></tr></table><div class="sig"><div>Принял: ${ln}<br><small>(ФИО, подпись) М.П.</small></div><div>Оплатил: ${ln}<br><small>(подпись)</small></div></div>`;
   if (kind === 'offer') { const cl = aptCalc(p, a); return `${head}<h1>КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ</h1><p class="c">${esc(c)} · ${fdate(today())}</p>${info}<h2>Расположение</h2><ul>${aptFacts(p, a).map(([, k, v]) => `<li>${k}: ${v}</li>`).join('')}</ul><h2>Оплата</h2><p>${Object.fromEntries(PAY_PLANS)[cl.plan]}: цена ${money(cl.price)}, первый взнос ${money(cl.first)}${cl.months ? `, ежемесячно ${money(cl.monthly)} в течение ${cl.months} мес.` : ''}.</p>`; }
   return `${head}<h1>СОГЛАШЕНИЕ О ЗАДАТКЕ</h1><p class="c">(бронирование квартиры)</p><p class="r">${fdate(dep.date)}</p>

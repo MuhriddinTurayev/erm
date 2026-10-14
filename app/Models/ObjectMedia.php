@@ -19,7 +19,19 @@ class ObjectMedia extends Model
         'video' => ['Видео-обзор', 'circle-play', ['mp4', 'webm']],
     ];
 
-    protected $fillable = ['workspace_id', 'project_id', 'kind', 'rooms', 'title', 'path', 'ext', 'size', 'poster', 'is_public', 'is_main', 'sort', 'meta', 'user_id'];
+    protected $fillable = ['workspace_id', 'project_id', 'kind', 'rooms', 'layout', 'title', 'path', 'ext', 'size', 'poster', 'is_public', 'is_main', 'sort', 'meta', 'user_id'];
+
+    /**
+     * Файлы для квартиры: сначала привязанные к её планировке, затем (для старых файлов без планировки) — по числу комнат,
+     * затем общие. $list — коллекция файлов объекта.
+     */
+    public static function forUnit($list, ?string $layout, int $rooms)
+    {
+        $own = $layout ? $list->where('layout', $layout) : collect();
+
+        return $own->count() ? $own->values()
+            : $list->filter(fn ($m) => $m->layout === null && ($m->rooms === null || (int) $m->rooms === $rooms))->values();
+    }
 
     protected function casts(): array
     {

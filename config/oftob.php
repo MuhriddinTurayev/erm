@@ -7,6 +7,8 @@ return [
     // Роли пользователей компании (названия — ключи перевода)
     'roles' => [
         'admin' => 'Руководитель (всё)',
+        // заводит объекты, корпуса, подъезды, квартиры, планировки, цены, 3D и панорамы — готовит объект к продаже; денег и сделок не видит
+        'catalog' => 'Администратор объектов',
         'accountant' => 'Бухгалтер',
         'cashier' => 'Кассир',
         'manager' => 'Менеджер по продажам',
@@ -21,6 +23,7 @@ return [
         'accountant' => ['home', 'objects', 'cash', 'dashboard', 'finance', 'smeta', 'accounting', 'fleet', 'materials', 'staff', 'attend', 'labour',
             'sell', 'sales', 'schedule', 'legal', 'ai'],
         'cashier' => ['home', 'objects', 'cash', 'accounting'],
+        'catalog' => ['home', 'objects', 'build', 'project', 'sell', 'apt', 'design', 'site', 'ai'],
         'manager' => ['home', 'objects', 'sell', 'leads', 'sales', 'apt', 'design', 'site', 'schedule', 'ai'],
         'foreman' => ['home', 'objects', 'build', 'project', 'prep', 'ground', 'geology', 'pit', 'attend', 'staff', 'labour', 'materials', 'fleet',
             'hiring', 'safety', 'schedule', 'site', 'ai'],
@@ -50,6 +53,7 @@ return [
         'viewer' => ['objects', 'sales', 'monitoring', 'cash', 'payments', 'forecast', 'counterparties', 'contracts', 'warehouse', 'supply', 'tenders', 'tasks', 'services', 'journal', 'approvals'],
         'accountant' => ['objects', 'sales', 'monitoring', 'cash', 'payments', 'forecast', 'counterparties', 'contracts', 'warehouse', 'supply', 'tenders', 'tasks', 'services', 'journal', 'approvals'],
         'cashier' => ['objects', 'sales', 'cash', 'payments', 'counterparties', 'tasks', 'approvals'],
+        'catalog' => ['objects', 'tasks'],   // шахматку с ценами и статусами видит в «Объекты → Помещения»; деньги продаж — нет
         'manager' => ['objects', 'sales', 'counterparties', 'contracts', 'tasks', 'services', 'journal'],
         'foreman' => ['objects', 'payments', 'warehouse', 'supply', 'tasks', 'services', 'journal'],
     ],

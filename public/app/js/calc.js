@@ -22,7 +22,49 @@ function bld(p) {
 }
 
 /* ---------- Квартиры (шахматка) ---------- */
+/* Перечень помещений, заведённый в «Объекты → Помещения» (p.inv: корпуса, подъезды, квартиры, планировки).
+   Тот же расчёт, что на сервере (App\Services\Inventory). Без перечня — квартиры считаются по параметрам здания. */
+const hasInv = p => !!(p.inv && Array.isArray(p.inv.units) && p.inv.units.length);
+function invPrice(u, R, b) {
+  if (+u.price > 0) return +u.price;
+  const a = +u.area || 0; let v;
+  switch (u.kind || 'flat') {
+    case 'commercial': case 'office': v = a * (+R.commercial || 0); break;
+    case 'storage': v = a * (+R.storage || 0); break;
+    case 'parking': v = +R.parking || 0; break;
+    default: v = a * ((+(b && b.ppm2) || 0) || +R.ppm2 || 0) * (1 + Math.max(0, (u.f ?? 1) - (R.from ?? 2)) * (+R.step || 0) / 100);
+  }
+  const r = +R.round || 1000; return Math.round(v / r) * r;
+}
+/* «A · подъезд 2» (короткое название корпуса — «Блок A · подъезд 2») или «подъезд 2» */
+const secLabel = (block, entr) => block ? `${block.length <= 3 ? 'Блок ' : ''}${block} · подъезд ${entr}` : `Подъезд ${entr}`;
+const secTxt = a => a.secName || `подъезд ${a.section}`;
+function invApts(p) {
+  const I = p.inv, R = I.price || {}, types = Object.fromEntries((I.types || []).map(t => [t.id, t])), ents = {};
+  let sec = 0;
+  (I.blocks || []).forEach((b, bi) => (b.entr || []).forEach((e, ei) => { ents[b.id + '|' + e.id] = { n: ++sec, bo: bi, eo: ei, b, e }; }));
+  const rows = [];
+  I.units.forEach((u, pos) => {
+    const E = ents[u.b + '|' + u.e]; if (!E) return;
+    const kind = u.kind || 'flat', t = types[u.type], f = u.f ?? 1;
+    rows.push({ id: u.id, num: String(u.num ?? ''), section: E.n, floor: f, rooms: kind === 'flat' ? Math.max(1, +u.rooms || 1) : 0, area: Math.round((+u.area || 0) * 100) / 100,
+      basePrice: invPrice(u, R, E.b), kind, type: t ? t.id : null, typeName: t ? t.name || '' : '', block: E.b.name || '', entr: E.e.name || '', secName: secLabel(E.b.name || '', E.e.name || ''), _o: [E.bo, E.eo, f, pos] });
+  });
+  rows.sort((x, y) => x._o[0] - y._o[0] || x._o[1] - y._o[1] || x._o[2] - y._o[2] || x._o[3] - y._o[3]);
+  const idx = {}; rows.forEach(a => { const k = a.section + '|' + a.floor; a.idx = idx[k] = k in idx ? idx[k] + 1 : 0; delete a._o; });
+  return rows;
+}
+/* Здание для схем «где квартира в доме»: подъезды, этажи и квартир на этаже — из перечня, если он заведён */
+function bView(p) {
+  if (!hasInv(p)) return p.b;
+  const A = invApts(p), per = {};
+  A.filter(a => a.rooms && a.floor > 0).forEach(a => { const k = a.section + '|' + a.floor; per[k] = (per[k] || 0) + 1; });   // квартир на этаже — без паркинга и кладовых
+  if (!Object.keys(per).length) per.x = 1;
+  return Object.assign({}, p.b, { sections: Math.max(1, ...A.map(a => a.section)), floors: Math.max(1, ...A.map(a => a.floor)), aptsPerFloor: Math.max(1, ...Object.values(per)),
+    commercialFirst: A.some(a => a.floor === 1 && !a.rooms) });
+}
 function genApts(p) {
+  if (hasInv(p)) return invApts(p).map(a => { const o = p.apts[a.id] || {}; a.status = o.status || 'free'; a.price = o.price || a.basePrice; a.buyer = o.buyer || ''; a.phone = o.phone || ''; a.paid = sum(o.payments || [], x => x.amount); a.o = o; return a; });
   const b = p.b, B = bld(p);
   const mix = String(b.mix || '2').split(/[^0-9]+/).filter(Boolean).map(x => Math.min(4, Math.max(1, parseInt(x))));
   if (!mix.length) mix.push(2);

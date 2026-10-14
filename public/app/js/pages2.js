@@ -280,7 +280,7 @@ PAGES.sales = {
       <div class="chess-wrap">${secs.map(s => {
         const fl = [...new Set(A.filter(x => x.section === s).map(x => x.floor))].sort((x, y) => y - x);
         const cols = Math.max(...fl.map(f => A.filter(x => x.section === s && x.floor === f).length));
-        return `<div class="section"><div class="sec-h"><b>Подъезд ${s}</b><span>${A.filter(x => x.section === s && x.status === 'free').length} / ${A.filter(x => x.section === s).length}</span></div>${fl.map(f => `<div class="floor" style="--cols:${cols}"><span class="fl">${f}</span>${A.filter(x => x.section === s && x.floor === f).map(x => {
+        return `<div class="section"><div class="sec-h"><b>${(A.find(x => x.section === s) || {}).secName || "Подъезд " + s}</b><span>${A.filter(x => x.section === s && x.status === 'free').length} / ${A.filter(x => x.section === s).length}</span></div>${fl.map(f => `<div class="floor" style="--cols:${cols}"><span class="fl">${f}</span>${A.filter(x => x.section === s && x.floor === f).map(x => {
           const dim = (fr !== '' && String(x.rooms) !== fr) || (fs && x.status !== fs);
           return `<div class="apt st-${x.status}${dim ? ' dim' : ''}${x.rooms ? '' : ' wide'}" data-act="aptOpen" data-id="${x.id}" title="${x.buyer ? esc(x.buyer) + ' · ' : ''}${ST_NAME[x.status]}">`
             + `<div class="a-top"><b>№${x.num}</b><span>${x.rooms ? `${x.rooms}-комн.` : 'Коммерция'}</span></div>`
@@ -343,7 +343,7 @@ ACT.aptPay = d => {
 };
 ACT.aptPayDel = async d => { const p = P(), o = p.apts[d.id]; const x = o.payments.find(z => z.id === d.pay); if (!await ui.confirm('Удалить оплату?')) return; o.payments = o.payments.filter(z => z.id !== d.pay); p.tx = p.tx.filter(t => t.id !== x.txId); save(); rerender(); ACT.apt(d); };
 ACT.aptDesign = d => { closeModal(); go('design', { apt: d.id }); };
-ACT.priceCsv = () => { const p = P(); download('prais-list.csv', csv([['№', 'Подъезд', 'Этаж', 'Комнат', 'Площадь', 'Цена', 'Цена за м²', 'Статус'], ...genApts(p).map(a => [a.num, a.section, a.floor, a.rooms || 'коммерция', a.area, a.price, Math.round(a.price / a.area), ST_NAME[a.status]])]), 'text/csv'); };
+ACT.priceCsv = () => { const p = P(); download('prais-list.csv', csv([['№', 'Подъезд', 'Этаж', 'Комнат', 'Площадь', 'Цена', 'Цена за м²', 'Статус'], ...genApts(p).map(a => [a.num, a.secName || a.section, a.floor, a.rooms || (a.kind && a.kind !== "flat" && a.kind !== "commercial" ? ({ office: "офис", parking: "паркинг", storage: "кладовая" })[a.kind] : "коммерция"), a.area, a.price, Math.round(a.price / a.area), ST_NAME[a.status]])]), 'text/csv'); };
 
 /* ---------- Дизайн квартиры (3D) ---------- */
 let designCfg = null;

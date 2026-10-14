@@ -6,10 +6,14 @@
   $match = fn ($a) => ($rooms === '' || (string) $a['rooms'] === (string) $rooms) && ($stF === '' || $a['status'] === $stF || ($stF === 'overdue' && $a['overdue'] > 0))
       && ($q === '' || str_contains(mb_strtolower($a['num'].' '.$a['buyer'].' '.$a['phone']), $q));
   $bySec = collect($apts)->groupBy('section');
-  $js = collect($apts)->map(fn ($a) => ['id' => $a['id'], 'num' => apt_num($a['num']), 'section' => $a['section'], 'floor' => $a['floor'], 'rooms' => $a['rooms'], 'area' => $a['area'],
+  $KS = ['commercial' => 'K', 'office' => 'O', 'parking' => 'P', 'storage' => 'S'];   // буква в клетке шахматки для нежилых помещений
+  $js = collect($apts)->map(fn ($a) => ['id' => $a['id'], 'num' => apt_num($a['num']), 'section' => $a['section'], 'sec' => \App\Services\Inventory::secLabel($a), 'floor' => $a['floor'], 'rooms' => $a['rooms'], 'area' => $a['area'],
+      'kind' => $a['kind'] ?? ($a['rooms'] ? 'flat' : 'commercial'), 'type' => $a['type'] ?? null, 'typeName' => $a['typeName'] ?? '',
       'price' => $a['price'], 'base' => $a['basePrice'], 'status' => $a['status'], 'buyer' => $a['buyer'], 'phone' => $a['phone'], 'plan' => $a['plan'], 'note' => $a['note'],
       'paid' => $a['paid'], 'overdue' => $a['overdue'], 'next' => $a['next'], 'payments' => $a['payments'], 'link' => isset($links[$a['id']]) ? url('/b/'.$links[$a['id']]) : null])->keyBy('id');
-  $int = $interiors->map(fn ($g) => $g->map(fn ($m) => ['id' => $m->id, 'title' => $m->title, 'kind' => $m->kind])->values());
+  // файлы для покупателей: привязанные к планировке квартиры; у старых файлов без планировки — по числу комнат
+  $mediaJs = $media->map(fn ($m) => ['id' => $m->id, 'title' => $m->title, 'kind' => $m->kind, 'layout' => $m->layout, 'rooms' => $m->rooms, 'room' => $m->meta['room'] ?? null, 'img' => $m->isImage()])->values();
+  $kinds = array_map(fn ($k) => __($k), \App\Services\Inventory::KINDS);
 @endphp
 @section('actions')
 <form method="get" class="flex"><select class="input" name="o" onchange="this.form.submit()" style="min-width:220px">@foreach ($projects as $id => $n)<option value="{{ $id }}" @selected($id === $pid)>{{ $n }}</option>@endforeach</select></form>
@@ -24,6 +28,11 @@
   <div class="kpi"><div class="k-l">{!! ic('building-2') !!}{{ __('Осталось продать') }}</div><div class="k-v">{{ money_s($s['stock_value'], $cur) }}</div></div>
 </div>
 
+@unless ($ready)
+<div class="alert alert-warn">{!! ic('hourglass') !!}<div>{{ __('Объект ещё готовится к продаже: администратор объектов заполняет квартиры, планировки и цены.') }}
+  {{ auth()->user()->isAdmin() ? __('Вы как руководитель можете бронировать и сейчас.') : __('Бронь и продажа откроются, когда объект выставят на продажу.') }}
+  @if (auth()->user()->managesObjects()) <a href="/company/objects/{{ $pid }}?tab=units&v=ready">{{ __('Проверить готовность') }}</a>@endif</div></div>
+@endunless
 <div class="card">
   <form method="get" class="toolbar"><input type="hidden" name="o" value="{{ $pid }}">
     <div class="chips">
@@ -38,12 +47,12 @@
   <div class="pub-sections sales-chess">
     @foreach ($bySec as $sec => $list)
       <div class="pub-sec">
-        <div class="muted" style="margin-bottom:8px">{{ __('Подъезд') }} {{ $sec }}</div>
+        <div class="muted" style="margin-bottom:8px">{{ \App\Services\Inventory::secLabel($list->first()) }}</div>
         @foreach ($list->groupBy('floor')->sortKeysDesc() as $fl => $row)
           <div class="pub-floor"><span class="fl">{{ $fl }}</span>
             @foreach ($row as $a)
               <button type="button" class="pub-apt st-{{ $a['status'] }} {{ $match($a) ? '' : 'dimmed' }} {{ $a['overdue'] > 0 ? 'late' : '' }}" data-apt="{{ $a['id'] }}" title="{{ __('Кв.') }} {{ apt_num($a['num']) }} · {{ $a['area'] }} {{ __('м²') }}{{ $a['buyer'] ? ' · '.$a['buyer'] : '' }}">
-                <b>{{ apt_num($a['num']) }}</b><small>{{ $a['rooms'] ?: 'K' }}·{{ round($a['area']) }}</small>
+                <b>{{ apt_num($a['num']) }}</b><small>{{ $a['rooms'] ?: ($KS[$a['kind'] ?? 'commercial'] ?? 'K') }}·{{ round($a['area']) }}</small>
                 @if (in_array($a['status'], ['sold', 'booked']) && $a['price'] > 0)<i class="paid-bar" style="width:{{ min(100, round($a['paid'] / $a['price'] * 100)) }}%"></i>@endif
               </button>
             @endforeach
@@ -114,15 +123,19 @@
 @push('scripts')
 <script>
 (() => {
-  const A = @json($js), INT = @json($int), CUR = @json(__($cur)), PID = @json($pid), canDel = @json(auth()->user()->isAdmin() || auth()->user()->role === 'accountant');
+  const A = @json($js), M = @json($mediaJs), KN = @json($kinds), CUR = @json(__($cur)), PID = @json($pid), canDel = @json(auth()->user()->isAdmin() || auth()->user()->role === 'accountant');
   const ST = @json(collect($ST)->map(fn ($v) => __($v))), T = { kv: @json(__('Кв.')), k: @json(__('Коммерция')), r: @json(__('-комн.')), sec: @json(__('Подъезд')), fl: @json(__('этаж')),
     none: @json(__('Оплат пока нет')), next: @json(__('Следующий платёж')), od: @json(__('Просрочено')), link: @json(__('Ссылка для покупателя')), mk: @json(__('Создать кабинет покупателя')),
-    t3: @json(__('3D-интерьер')), m2: @json(__('м²')), del: @json(__('Удалить оплату?')) };
+    t3: @json(__('3D-интерьер')), pano: @json(__('Панорамы комнат 360°')), plan: @json(__('Планировка')), m2: @json(__('м²')), del: @json(__('Удалить оплату?')) };
+  // файлы квартиры: её планировки, а у старых файлов без планировки — по числу комнат (как в кабинете покупателя)
+  const filesFor = a => { const own = a.type ? M.filter(m => m.layout === a.type) : []; return own.length ? own : M.filter(m => !m.layout && (m.rooms === null || m.rooms === a.rooms)); };
   const m = n => Math.round(n).toLocaleString('ru-RU') + ' ' + CUR, dlg = document.getElementById('dlg-apt'), esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   function open(id) {
     const a = A[id]; if (!a) return;
-    document.getElementById('ap-title').textContent = a.rooms ? `${T.kv} ${a.num} · ${a.rooms}${T.r}` : `${T.k} ${a.num}`;
-    document.getElementById('ap-sub').innerHTML = `<span>${T.sec} <b>${a.section}</b>, ${T.fl} <b>${a.floor}</b></span><span><b>${a.area}</b> ${T.m2}</span><span><b>${m(a.price)}</b> (${m(a.price / a.area)}/${T.m2})</span><span class="st st-${a.status}">${esc(ST[a.status])}</span>`;
+    document.getElementById('ap-title').textContent = a.rooms ? `${T.kv} ${a.num} · ${a.rooms}${T.r}` : `${KN[a.kind] || T.k} ${a.num}`;
+    const fs = filesFor(a), planImg = fs.find(x => x.kind === 'plan' && x.img), planDoc = fs.find(x => x.kind === 'plan' && !x.img);
+    document.getElementById('ap-sub').innerHTML = `<span>${esc(a.sec)}, ${T.fl} <b>${a.floor}</b></span>${a.typeName ? `<span>${esc(a.typeName)}</span>` : ''}<span><b>${a.area}</b> ${T.m2}</span><span><b>${m(a.price)}</b> (${m(a.price / a.area)}/${T.m2})</span><span class="st st-${a.status}">${esc(ST[a.status])}</span>`
+      + (planImg ? `<a class="ap-plan" href="/company/media/${planImg.id}/file" target="_blank" title="${esc(T.plan)}"><img src="/company/media/${planImg.id}/file" alt="${esc(T.plan)}" loading="lazy"></a>` : '');
     const f = document.getElementById('ap-form'); f.action = `/company/sales/${PID}/apt/${a.id}`;
     f.status.value = a.status; f.price.value = Math.round(a.price); f.buyer.value = a.buyer; f.phone.value = a.phone; f.plan.value = a.plan; f.note.value = a.note;
     const pct = a.price ? Math.min(100, a.paid / a.price * 100) : 0;
@@ -130,9 +143,11 @@
     document.getElementById('ap-next').innerHTML = (a.overdue > 0 ? `<b class="out-c">${T.od}: ${m(a.overdue)}</b> · ` : '') + (a.next ? `${T.next}: <b>${m(a.next.amount)}</b> — ${a.next.date.split('-').reverse().join('.')}` : '');
     document.getElementById('ap-pays').innerHTML = a.payments.length ? a.payments.slice().reverse().map(x => `<div class="file-row"><span style="flex:1">${(x.date || '').split('-').reverse().join('.')}</span><b class="in-c">+${m(x.amount)}</b>${canDel ? `<button class="icon-btn" data-del="${x.id}" title="✕">✕</button>` : ''}</div>`).join('') : `<div class="muted">${T.none}</div>`;
     const pf = document.getElementById('ap-pay'); if (pf) { pf.action = `/company/sales/${PID}/apt/${a.id}/pay`; pf.amount.value = a.next ? Math.round(a.next.amount) : ''; }
-    const ints = (INT[String(a.rooms)] || []).concat(INT[''] || []);
+    const ints = fs.filter(x => x.kind === 'interior'), panos = fs.filter(x => x.kind === 'pano');
     document.getElementById('ap-actions').innerHTML = (a.link ? `<a class="btn btn-s" href="${a.link}" target="_blank">🔗 ${T.link}</a>` : (['sold', 'booked'].includes(a.status) ? `<button class="btn btn-s" data-link="${a.id}">${T.mk}</button>` : ''))
-      + ints.map(x => `<a class="btn btn-s" href="/company/objects/${PID}/3d?m=${x.id}" target="_blank">${T.t3}: ${esc(x.title)}</a>`).join('');
+      + ints.map(x => `<a class="btn btn-s" href="/company/objects/${PID}/3d?m=${x.id}" target="_blank">${T.t3}: ${esc(x.title)}</a>`).join('')
+      + (panos.length ? `<a class="btn btn-s" href="/company/objects/${PID}/3d?m=${panos[0].id}" target="_blank">${T.pano} (${panos.length})</a>` : '')
+      + (planDoc ? `<a class="btn btn-s" href="/company/media/${planDoc.id}/file" target="_blank">${T.plan} (PDF)</a>` : '');
     dlg.dataset.apt = a.id; dlg.showModal();
   }
   document.addEventListener('click', async e => {

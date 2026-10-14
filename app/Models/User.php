@@ -87,6 +87,24 @@ class User extends Authenticatable
         return $this->role !== 'viewer';
     }
 
+    /** Администратор объектов: заводит объекты, квартиры, планировки, цены и 3D — без денег и сделок */
+    public function isCatalog(): bool
+    {
+        return $this->role === 'catalog';
+    }
+
+    /** Может создавать объекты и вести перечень помещений (корпуса, подъезды, квартиры, планировки, цены) */
+    public function managesObjects(): bool
+    {
+        return $this->isAdmin() || $this->isCatalog();
+    }
+
+    /** Может загружать и настраивать 3D-модели, панорамы и планировки */
+    public function canMedia(): bool
+    {
+        return $this->canEdit() && in_array($this->role, ['admin', 'catalog', 'manager', 'foreman', 'accountant'], true);
+    }
+
     /** Видит ли деньги компании (касса, бухгалтерия, отчёты) */
     public function seesMoney(): bool
     {

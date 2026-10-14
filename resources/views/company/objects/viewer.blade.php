@@ -37,6 +37,14 @@
   .v-load{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;color:var(--muted);font-size:14px}
   .v-toast{position:absolute;right:18px;top:16px;z-index:6;background:var(--ok);color:#fff;border-radius:10px;padding:10px 14px;font-weight:600;display:none}
   .ar-btn{position:absolute;right:16px;bottom:80px}
+  /* комнаты внутри 3D-интерьера: кнопки слева, по нажатию камера переходит в комнату */
+  .v-rooms{position:absolute;left:18px;top:86px;z-index:5;display:flex;flex-direction:column;gap:6px;max-height:calc(100% - 180px);overflow:auto;padding:2px}
+  .v-rooms button{height:36px;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 90%,transparent);backdrop-filter:blur(10px);color:var(--text);border-radius:10px;padding:0 12px;font:500 13.5px var(--font);cursor:pointer;display:inline-flex;gap:8px;align-items:center;white-space:nowrap;text-align:left}
+  .v-rooms button:hover{border-color:var(--accent)}.v-rooms button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .v-rooms button.add{border-style:dashed;color:var(--muted)}
+  .v-rooms .x{margin-left:4px;opacity:.55;font-size:12px}.v-rooms .x:hover{opacity:1}
+  .v-sub{font-size:11.5px;color:var(--muted);padding:6px 8px 2px;font-weight:600}
+  @media (max-width:820px){.v-rooms{top:auto;bottom:84px;flex-direction:row;max-width:calc(100% - 36px);overflow-x:auto}}
   @media (max-width:820px){.v-shell{grid-template-columns:1fr;grid-template-rows:auto 1fr}.v-side{max-height:34vh;border-right:0;border-bottom:1px solid var(--border)}.v-list{display:flex;gap:6px;overflow-x:auto}.v-sec{display:none}.v-item{flex:none}.v-title{max-width:calc(100% - 36px)}}
 </style>
 </head>
@@ -48,14 +56,21 @@
       <b>{{ $p['name'] ?? '' }}</b>@if (! empty($p['address']))<small class="muted">{{ $p['address'] }}</small>@endif
     </div>
     <div class="v-list">
-      @php $groups = ['exterior' => __('Здание и фасад'), 'interior' => __('Интерьеры квартир'), 'pano' => __('Панорамы 360°')]; @endphp
+      @php
+        $groups = ['exterior' => __('Здание и фасад'), 'interior' => __('Интерьеры квартир'), 'pano' => __('Панорамы 360°')];
+        $types = \App\Http\Controllers\Company\ObjectController::layouts($p);
+        $keep = array_filter(request()->only(['o', 't']));   // в открытой шахматке — тот же объект и планировка
+        $q = fn ($m) => '?'.http_build_query($keep + ['m' => $m->id]);
+      @endphp
       @foreach ($groups as $k => $gn)
-        @php $items = $media->where('kind', $k); @endphp
+        @php $items = $media->where('kind', $k)->sortBy(fn ($m) => ($m->layout ? array_search($m->layout, array_keys($types)) : -1).'|'.$m->sort.'|'.$m->id); $lastL = false; @endphp
         @if ($items->count())<div class="v-sec">{{ $gn }}</div>@endif
         @foreach ($items as $m)
-          <a class="v-item {{ $cur && $cur->id === $m->id ? 'on' : '' }}" href="?m={{ $m->id }}">
+          @if ($k !== 'exterior' && $m->layout !== $lastL && $items->pluck('layout')->unique()->count() > 1)<div class="v-sub">{{ $m->layout && isset($types[$m->layout]) ? $types[$m->layout]['name'] : __('все планировки') }}</div>@endif
+          @php $lastL = $m->layout; @endphp
+          <a class="v-item {{ $cur && $cur->id === $m->id ? 'on' : '' }}" href="{{ $q($m) }}">
             <span class="th">@if ($m->poster)<img src="{{ $src($m, true) }}" alt="">@elseif ($m->kind === 'pano')<img src="{{ $src($m) }}" alt="" loading="lazy">@else{!! ic($m->kind === 'exterior' ? 'building-2' : 'sofa', '', 20) !!}@endif</span>
-            <span><b style="font-size:14px">{{ $m->title }}</b><small>{{ $m->rooms ? $m->rooms.__('-комн.') : ($m->kind === 'exterior' ? __('весь дом') : __('все планировки')) }}@if ($m->is3d()) · {{ file_size($m->size) }} @endif</small></span>
+            <span><b style="font-size:14px">{{ $m->kind === 'pano' && ! empty($m->meta['room']) ? $m->meta['room'] : $m->title }}</b><small>{{ $m->layout && isset($types[$m->layout]) ? $types[$m->layout]['name'] : ($m->rooms ? $m->rooms.__('-комн.') : ($m->kind === 'exterior' ? __('весь дом') : __('все планировки'))) }}@if ($m->is3d()) · {{ file_size($m->size) }} @endif @if (! empty($m->meta['views'])) · {{ __('комнат') }}: {{ count($m->meta['views']) }}@endif</small></span>
           </a>
         @endforeach
       @endforeach
@@ -71,11 +86,18 @@
         @php $sky = $cur->kind === 'exterior' && ($cur->meta['sky'] ?? false); @endphp
         <model-viewer id="mv" src="{{ $src($cur) }}" @if ($cur->poster) poster="{{ $src($cur, true) }}" @endif camera-controls touch-action="pan-y" auto-rotate auto-rotate-delay="1500" rotation-per-second="18deg"
           shadow-intensity="1" shadow-softness="0.8" exposure="{{ $cur->meta['exposure'] ?? 1 }}" @if ($sky) skybox-image="{{ asset('assets/sky/day.hdr') }}" environment-image="{{ asset('assets/sky/day.hdr') }}" @else environment-image="neutral" @endif tone-mapping="aces" interaction-prompt="auto"
-          @if (! empty($cur->meta['camera'])) camera-orbit="{{ $cur->meta['camera'] }}" @endif @if (! empty($cur->meta['target'])) camera-target="{{ $cur->meta['target'] }}" @endif min-camera-orbit="auto auto 2m" max-camera-orbit="auto 95deg 3000m"
+          @if (! empty($cur->meta['camera'])) camera-orbit="{{ $cur->meta['camera'] }}" @endif @if (! empty($cur->meta['target'])) camera-target="{{ $cur->meta['target'] }}" @endif
+          @if ($cur->kind === 'interior') min-camera-orbit="auto auto 0.05m" max-camera-orbit="auto 180deg 400m" interpolation-decay="140" @else min-camera-orbit="auto auto 2m" max-camera-orbit="auto 95deg 3000m" @endif
           ar ar-modes="webxr scene-viewer quick-look" ar-scale="auto" alt="{{ $cur->title }}">
           <button slot="ar-button" class="btn btn-p ar-btn">{!! ic('smartphone') !!}{{ __('Посмотреть в AR') }}</button>
           <div class="v-load" slot="progress-bar" id="prog"></div>
         </model-viewer>
+        @if ($cur->kind === 'interior' && (! empty($cur->meta['views']) || $canEdit))
+        <div class="v-rooms" id="v-rooms">
+          @foreach ((array) ($cur->meta['views'] ?? []) as $i => $v)<button type="button" data-view="{{ $i }}">{!! ic('door-open', '', 15) !!}{{ $v['name'] }}@if ($canEdit)<span class="x" data-delview="{{ $i }}" title="{{ __('Удалить') }}">✕</span>@endif</button>@endforeach
+          @if ($canEdit)<button type="button" class="add" id="v-addroom" title="{{ __('Наведите камеру на комнату (колесо мыши — ближе) и сохраните её как кнопку') }}">+ {{ __('Комната (текущий вид)') }}</button>@endif
+        </div>
+        @endif
         <div class="v-bar">
           <button id="b-rot" class="on" title="{{ __('Вращение') }}">{!! ic('refresh-cw', '', 16) !!}{{ __('Вращение') }}</button>
           <button id="b-reset" title="{{ __('Исходный вид') }}">{!! ic('house', '', 16) !!}{{ __('Исходный вид') }}</button>
@@ -124,7 +146,33 @@ document.getElementById('st-cur')?.addEventListener('click', e => { seg(e.curren
 document.getElementById('st-fin')?.addEventListener('click', e => { seg(e.currentTarget, document.getElementById('st-cur')); setState(true); });
 document.getElementById('b-sky')?.addEventListener('click', e => { const on = !e.currentTarget.classList.contains('on'), hdr = @json(asset('assets/sky/day.hdr'));
   e.currentTarget.classList.toggle('on', on); mv.skyboxImage = on ? hdr : null; mv.environmentImage = on ? hdr : 'neutral'; });
+// комнаты интерьера: камера переходит внутрь выбранной комнаты
+const VIEWS = @json(array_values((array) ($cur->meta['views'] ?? [])));
+document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', e => {
+  if (e.target.closest('[data-delview]')) return;
+  const v = VIEWS[+b.dataset.view]; if (!v) return;
+  mv.autoRotate = false; document.getElementById('b-rot').classList.remove('on');
+  mv.cameraTarget = v.target; mv.cameraOrbit = v.orbit; if (v.fov) mv.fieldOfView = v.fov;
+  document.querySelectorAll('[data-view]').forEach(x => x.classList.toggle('on', x === b));
+}));
 @if ($canEdit)
+const saveViews = async list => {
+  const fd = new FormData(); fd.append('_token', document.querySelector('meta[name=csrf-token]').content);
+  fd.append('title', @json($cur->title)); fd.append('rooms', @json($cur->rooms ?? '')); fd.append('sort', @json($cur->sort)); fd.append('is_public', @json($cur->is_public ? 1 : 0));
+  fd.append('views', JSON.stringify(list));
+  const r = await fetch('/company/media/{{ $cur->id }}', { method: 'POST', body: fd, headers: { Accept: 'application/json' } });
+  if (r.ok) location.reload(); else toast(@json(__('Не удалось сохранить')));
+};
+document.getElementById('v-addroom')?.addEventListener('click', async () => {
+  const name = await ui.prompt(@json(__('Название комнаты')), { placeholder: @json(__('Гостиная, кухня, спальня…')), ok: @json(__('Сохранить')) });
+  if (!name || !name.trim()) return;
+  const o = mv.getCameraOrbit(), t = mv.getCameraTarget();
+  await saveViews(VIEWS.concat([{ name: name.trim(), orbit: `${o.theta}rad ${o.phi}rad ${o.radius}m`, target: `${t.x}m ${t.y}m ${t.z}m`, fov: `${mv.getFieldOfView()}deg` }]));
+});
+document.querySelectorAll('[data-delview]').forEach(x => x.addEventListener('click', async e => {
+  e.stopPropagation();
+  if (await ui.confirm(@json(__('Удалить эту комнату из списка?')))) await saveViews(VIEWS.filter((v, i) => i !== +x.dataset.delview));
+}));
 document.getElementById('b-save').addEventListener('click', async () => {
   const o = mv.getCameraOrbit(), cam = `${o.theta}rad ${o.phi}rad ${o.radius}m`;
   const blob = await mv.toBlob({ mimeType: 'image/jpeg', qualityArgument: 0.82, idealAspect: true });

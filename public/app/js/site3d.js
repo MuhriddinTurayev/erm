@@ -157,7 +157,7 @@ function s3Label(text, x, y, z, color = '#ea580c', scale = 1) {
 /* ---------- сборка сцены ---------- */
 function s3Build(p) {
   const sc = new THREE.Scene(); S3.scene = sc; S3.lights = [];
-  const b = p.b, Ly = siteLayout(p), { L, Wd, SW, SD, z0 } = Ly, n = S3.night, prog = siteProgress(p), building = S3.mode === 'build' && prog.total < 100;
+  const b = bView(p), Ly = siteLayout(p), { L, Wd, SW, SD, z0 } = Ly, n = S3.night, prog = siteProgress(p), building = S3.mode === 'build' && prog.total < 100;
   const done = !building || prog.land >= 100, R = rng(11);
   // небо, окружение, свет
   const sunAz = 3.75, sunEl = 0.62;
@@ -240,7 +240,7 @@ function s3Cars(cars, n) {
   if (n) s3inst(new THREE.BoxGeometry(1.5, 0.12, 0.05), new THREE.MeshBasicMaterial({ color: 0xff3020 }), cars.map(c => { const o = off(c, 0, -2.24); return [o[0], 0.85, o[1], c[2]]; }), null, false);
 }
 function s3Building(p, Ly, prog, building) {
-  const b = p.b, { L, Wd, z0 } = Ly, n = S3.night, secs = Math.max(1, b.sections), sw = L / secs, fh = b.floorH, apf = b.aptsPerFloor;
+  const b = bView(p), { L, Wd, z0 } = Ly, n = S3.night, secs = Math.max(1, b.sections), sw = L / secs, fh = b.floorH, apf = b.aptsPerFloor;
   const comm = b.commercialFirst ? 1 : 0, cols = Math.ceil(apf / 2);
   const builtF = building ? Math.round(b.floors * prog.frame / 100) : b.floors;
   const finF = building ? Math.min(builtF, Math.round(b.floors * Math.min(prog.facade, prog.windows || prog.facade) / 100)) : b.floors;
@@ -428,7 +428,7 @@ function s3StatsHtml(p) {
       ${rbox('Детская площадка', fmt(st.play) + ' м²')}${rbox('Спортивная зона', fmt(st.sport) + ' м²')}${rbox('Площадь участка', fmt(st.area) + ' м²')}
     </div>`;
 }
-const b3 = p => `${p.b.floors} / ${p.b.sections}`;
+const b3 = p => `${bView(p).floors} / ${bView(p).sections}`;
 
 /* отдельная страница в группе «Продажи и дизайн» */
 PAGES.site = {
@@ -440,7 +440,7 @@ PAGES.site = {
 
 /* ---------- квартира клиента: подсветка, маршрут от калитки до двери ---------- */
 function s3AptGeom(p, Ly, h) {
-  const b = p.b, sw = Ly.L / b.sections, fh = b.floorH, x0 = -Ly.L / 2 + sw * (h.section - 1), xc = x0 + sw / 2;
+  const b = bView(p), sw = Ly.L / b.sections, fh = b.floorH, x0 = -Ly.L / 2 + sw * (h.section - 1), xc = x0 + sw / 2;
   if (h.comm) return { x: xc, y: 0, z: Ly.z0, w: sw - 0.2, hh: fh, d: Ly.Wd + 0.6, xc, dir: 1, door: xc };
   const cw = sw / h.cols, x = x0 + cw * (h.col + 0.5), dir = h.row === 'south' ? 1 : -1;
   return { x, y: (h.floor - 1) * fh, z: Ly.z0 + dir * (Ly.Wd / 4 + 0.9), w: cw - 0.2, hh: fh - 0.1, d: Ly.Wd / 2 + 1.8, xc, dir, door: x };
@@ -450,7 +450,7 @@ function s3AddHighlight(p, Ly) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, hh, d), new THREE.MeshBasicMaterial({ color: 0xff5a00, transparent: true, opacity: 0.8, depthWrite: false }));
   m.position.set(x, y + hh / 2, z); S3.scene.add(m); S3.hlMesh = m;
   const e = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: 0xff3d00 })); e.position.copy(m.position); S3.scene.add(e);
-  const top = p.b.floors * p.b.floorH + 7, pin = new THREE.Mesh(new THREE.ConeGeometry(1.6, 3.4, 20), new THREE.MeshBasicMaterial({ color: 0xff3d00 }));
+  const top = bView(p).floors * p.b.floorH + 7, pin = new THREE.Mesh(new THREE.ConeGeometry(1.6, 3.4, 20), new THREE.MeshBasicMaterial({ color: 0xff3d00 }));
   pin.rotation.x = Math.PI; pin.position.set(x, top, zFace); S3.scene.add(pin);
   const ln = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, top - (y + hh), 6), new THREE.MeshBasicMaterial({ color: 0xff7a00 })); ln.position.set(x, (top + y + hh) / 2, zFace); S3.scene.add(ln);
   S3.hlInfo = { x, y, z, zFace, dir, hh };

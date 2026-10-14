@@ -14,9 +14,14 @@ if (SV) {
     const u = typeof url === 'string' ? url : (url && url.url) || '';
     if (/^\/(?!\/)/.test(u)) {
       const h = new Headers(opt.headers || {}); h.set('X-CSRF-TOKEN', csrf()); h.set('X-Requested-With', 'XMLHttpRequest'); if (!h.has('Accept')) h.set('Accept', 'application/json');
+      h.set('X-Oftob-Ws', String(SV.ws));   // сервер не примет запрос, если в браузере уже вошли в другую компанию
       opt = Object.assign({}, opt, { headers: h, credentials: 'same-origin' });
     }
-    return nativeFetch(url, opt).then(r => { if ((r.status === 401 || r.status === 419) && /^\/api\//.test(u)) location.href = '/login'; return r; });
+    return nativeFetch(url, opt).then(r => {
+      if ((r.status === 401 || r.status === 419) && /^\/api\//.test(u)) location.href = '/login';
+      if (r.status === 409) r.clone().json().then(j => { if (j && j.switched) svSwitched(); }).catch(() => {});
+      return r;
+    });
   };
 
   /* 2. До запуска программы кладём данные с сервера туда, откуда программа их читает */
@@ -56,9 +61,12 @@ async function svPush() {
   if (svPushing) { clearTimeout(svPushT); svPushT = setTimeout(svPush, 800); return; }
   svPushing = true; const sent = new Set(svTouched); svTouched.clear();
   try {
-    const r = await fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version: SV.version, data: JSON.stringify(DB) }) });
+    // ws — какая это компания: если в этом браузере уже вошли в другую (вход под другим логином, «войти как»), сервер не примет чужие данные
+    const r = await fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ws: SV.ws, version: SV.version, data: JSON.stringify(DB) }) });
     if (r.status === 409) {   // кто-то сохранил раньше: объединяем и отправляем ещё раз
-      const j = await r.json(); svMerge(j, sent); SV.version = j.version; sent.forEach(x => svTouched.add(x)); svTouched.add('*');
+      const j = await r.json();
+      if (j.switched) { svSwitched(); return; }
+      svMerge(j, sent); SV.version = j.version; sent.forEach(x => svTouched.add(x)); svTouched.add('*');
       svPushing = false; return svPush();
     }
     if (r.status === 402 || r.status === 403) {   // тариф: лимит объектов, подписка закончилась, только просмотр — повтор не поможет
@@ -80,6 +88,12 @@ async function svPush() {
     clearTimeout(svPushT); svPushT = setTimeout(svPush, 6000);
   }
   svPushing = false;
+}
+/* В этом браузере вошли в другую компанию: эта вкладка больше ничего не сохраняет и открывается заново уже с данными новой компании */
+function svSwitched() {
+  if (SV.switched) return; SV.switched = true; SV.canEdit = false; svTouched.clear(); clearTimeout(svPushT); svPushing = false;
+  svMark('⚠ ' + T('Вы вошли в другую компанию'));
+  setTimeout(() => location.reload(), 1200);
 }
 function svMerge(j, mine) {
   let S; try { S = JSON.parse(j.data); } catch (e) { return; }
@@ -107,9 +121,11 @@ function svApply(raw) {
 async function svPull() {
   if (!SV || svPushing || svTouched.size || document.hidden || !DB) return;
   try {
-    const v = (await (await fetch('/api/state/version')).json()).version;
+    const vj = await (await fetch('/api/state/version')).json(), v = vj.version;
+    if (vj.ws && vj.ws !== SV.ws) return svSwitched();
     if (!(v > SV.version)) return;
     const j = await (await fetch('/api/state')).json();
+    if (j.ws && j.ws !== SV.ws) return svSwitched();
     if (svTouched.size || svPushing) return;
     if (!svApply(j.data)) return;
     SV.version = j.version;

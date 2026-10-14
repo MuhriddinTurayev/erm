@@ -23,7 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/lead',
             'api/w/*',
         ]);
-        $middleware->web(prepend: [\App\Http\Middleware\FixEncoding::class, \App\Http\Middleware\NormalizeEmail::class], append: [SetLocale::class]);
+        $middleware->web(prepend: [\App\Http\Middleware\FixEncoding::class, \App\Http\Middleware\NormalizeEmail::class], append: [SetLocale::class, \App\Http\Middleware\SameWorkspace::class]);
         // на сервере программа стоит за прокси (nginx, Traefik) во внутренней сети Docker: верим только ему —
         // тогда правильно определяются https и IP посетителя (вход, лимиты попыток, журнал входов)
         $middleware->trustProxies(at: ['127.0.0.1', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16']);

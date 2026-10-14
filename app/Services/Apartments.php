@@ -11,11 +11,43 @@ class Apartments
 
     public const STATUS = ['free' => 'Свободна', 'booked' => 'Бронь', 'sold' => 'Продана', 'reserve' => 'Не в продаже'];
 
+    /**
+     * Все помещения объекта со статусом, ценой и оплатами. Если перечень заведён вручную (корпуса, подъезды, квартиры) —
+     * из него, иначе — рассчитанные по параметрам здания, как раньше.
+     */
     public static function list(array $p): array
     {
-        $b = array_merge(['length' => 56, 'width' => 17, 'floors' => 12, 'sections' => 2, 'aptsPerFloor' => 4, 'commercialFirst' => true, 'sellableK' => 0.72,
-            'mix' => '1,2,2,3', 'pricePerM2' => 11000000, 'commercialPrice' => 14000000, 'floorStep' => 0.5], (array) ($p['b'] ?? []));
         $apts = (array) ($p['apts'] ?? []);
+        $rows = Inventory::has($p) ? Inventory::rows($p) : self::generated($p);
+
+        return array_map(fn (array $a) => self::withDeal($a, (array) ($apts[$a['id']] ?? [])), $rows);
+    }
+
+    /** Статус, цена, покупатель и оплаты помещения (из p.apts) */
+    private static function withDeal(array $a, array $o): array
+    {
+        $a['status'] = $o['status'] ?? 'free';
+        $a['price'] = (float) ($o['price'] ?? 0) ?: $a['basePrice'];
+        $a['buyer'] = (string) ($o['buyer'] ?? '');
+        $a['phone'] = (string) ($o['phone'] ?? '');
+        $a['plan'] = (string) ($o['plan'] ?? '');
+        $a['payments'] = array_values((array) ($o['payments'] ?? []));
+        $a['paid'] = array_sum(array_map(fn ($x) => (float) ($x['amount'] ?? 0), $a['payments']));
+
+        return $a;
+    }
+
+    /** Параметры здания с умолчаниями программы */
+    public static function buildParams(array $p): array
+    {
+        return array_merge(['length' => 56, 'width' => 17, 'floors' => 12, 'sections' => 2, 'aptsPerFloor' => 4, 'commercialFirst' => true, 'sellableK' => 0.72,
+            'mix' => '1,2,2,3', 'pricePerM2' => 11000000, 'commercialPrice' => 14000000, 'floorStep' => 0.5], (array) ($p['b'] ?? []));
+    }
+
+    /** Квартиры, рассчитанные по параметрам здания (без статусов) — тот же расчёт, что genApts в программе */
+    public static function generated(array $p): array
+    {
+        $b = self::buildParams($p);
         $mix = array_values(array_filter(array_map(fn ($x) => min(4, max(1, (int) $x)), preg_split('/[^0-9]+/', (string) $b['mix']))));
         if (! $mix) {
             $mix = [2];
@@ -30,30 +62,22 @@ class Apartments
         $scale = $secArea / $sumBase;
         $out = [];
         $n = 0;
-        $push = function (array $a) use (&$out, $apts) {
-            $o = (array) ($apts[$a['id']] ?? []);
+        $push = function (array $a) use (&$out) {
             $a['basePrice'] = round($a['basePrice'] / 1000) * 1000;
-            $a['status'] = $o['status'] ?? 'free';
-            $a['price'] = (float) ($o['price'] ?? 0) ?: $a['basePrice'];
-            $a['buyer'] = (string) ($o['buyer'] ?? '');
-            $a['phone'] = (string) ($o['phone'] ?? '');
-            $a['plan'] = (string) ($o['plan'] ?? '');
-            $a['payments'] = array_values((array) ($o['payments'] ?? []));
-            $a['paid'] = array_sum(array_map(fn ($x) => (float) ($x['amount'] ?? 0), $a['payments']));
-            $out[] = $a;
+            $out[] = $a + ['kind' => $a['rooms'] ? 'flat' : 'commercial', 'type' => null, 'typeName' => '', 'block' => '', 'blockId' => '', 'entr' => (string) $a['section'], 'entrId' => ''];
         };
         $f0 = $b['commercialFirst'] ? 2 : 1;
         for ($s = 1; $s <= (int) $b['sections']; $s++) {
             if ($b['commercialFirst']) {
                 $area = round($secArea, 1);
-                $push(['id' => "K-$s", 'num' => 'К'.$s, 'section' => $s, 'floor' => 1, 'rooms' => 0, 'area' => $area, 'basePrice' => $area * (float) $b['commercialPrice']]);
+                $push(['id' => "K-$s", 'num' => 'К'.$s, 'section' => $s, 'floor' => 1, 'idx' => 0, 'rooms' => 0, 'area' => $area, 'basePrice' => $area * (float) $b['commercialPrice']]);
             }
             for ($f = $f0; $f <= (int) $b['floors']; $f++) {
                 for ($i = 0; $i < (int) $b['aptsPerFloor']; $i++) {
                     $n++;
                     $rooms = $per[$i];
                     $area = round(self::MIX_BASE[$rooms] * $scale, 1);
-                    $push(['id' => "$s-$f-$i", 'num' => (string) $n, 'section' => $s, 'floor' => $f, 'rooms' => $rooms, 'area' => $area,
+                    $push(['id' => "$s-$f-$i", 'num' => (string) $n, 'section' => $s, 'floor' => $f, 'idx' => $i, 'rooms' => $rooms, 'area' => $area,
                         'basePrice' => $area * (float) $b['pricePerM2'] * (1 + ($f - $f0) * (float) $b['floorStep'] / 100)]);
                 }
             }

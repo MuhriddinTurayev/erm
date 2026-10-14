@@ -1,7 +1,7 @@
 'use strict';
 /* ===== Как пройти к квартире: от калитки до двери — подъезд, лифт, налево/направо, какая дверь ===== */
 function aptRoute(p, a) {
-  const b = p.b, pos = aptPos(p, a), sw = b.length / b.sections, apf = b.aptsPerFloor, cols = Math.ceil(apf / 2), ncols = apf - cols, coreW = Math.max(3.2, sw * 0.16);
+  const b = bView(p), pos = aptPos(p, a), sw = b.length / b.sections, apf = b.aptsPerFloor, cols = Math.ceil(apf / 2), ncols = apf - cols, coreW = Math.max(3.2, sw * 0.16);
   // двери всех квартир этажа: x от оси лифта (м), ряд
   const doors = []; for (let i = 0; i < apf; i++) { const south = i < cols, n = south ? cols : ncols, k = south ? i : i - cols; doors.push({ idx: i, south, dx: -sw / 2 + (k + 0.5) * sw / n }); }
   const me = doors.find(d => d.idx === a.idx) || doors[0];
@@ -28,7 +28,7 @@ function aptRoute(p, a) {
 /* план участка с маршрутом от калитки до подъезда */
 function aptSiteRouteSvg(p, a) {
   const Ly = siteLayout(p), W = 620, H = Math.round(W * Math.min(1.1, Ly.SD / Ly.SW)) + 40, k = (W - 40) / Ly.SW, X = x => 20 + (x + Ly.SW / 2) * k, Z = z => 30 + (z + Ly.SD / 2) * k;
-  const b = p.b, sw = Ly.L / b.sections, zs = Ly.z0 + Ly.Wd / 2, wx = -Ly.L / 2 - 6, wz0 = -Ly.SD / 2 + 14, wz1 = zs + 3, gx = -Ly.SW / 4, xc = -Ly.L / 2 + sw * (a.section - 0.5);
+  const b = bView(p), sw = Ly.L / b.sections, zs = Ly.z0 + Ly.Wd / 2, wx = -Ly.L / 2 - 6, wz0 = -Ly.SD / 2 + 14, wz1 = zs + 3, gx = -Ly.SW / 4, xc = -Ly.L / 2 + sw * (a.section - 0.5);
   let s = `<svg viewBox="0 0 ${W} ${H}" class="bsvg"><rect width="${W}" height="${H}" fill="#eef2ea"/>`;
   s += `<rect x="0" y="4" width="${W}" height="22" fill="#4b5563"/><text x="${W / 2}" y="19" text-anchor="middle" font-size="11" fill="#fff">улица</text>`;
   s += `<rect x="${X(-Ly.SW / 2)}" y="${Z(-Ly.SD / 2)}" width="${Ly.SW * k}" height="${Ly.SD * k}" fill="#cfe3b8" stroke="#334155" stroke-dasharray="4 3"/>`;
@@ -40,7 +40,7 @@ function aptSiteRouteSvg(p, a) {
   const pts = [[gx, -Ly.SD / 2 - 3], [gx, wz0], [wx, wz0], [wx, wz1], [xc, wz1], [xc, zs + .5]].map(([x, z]) => `${X(x).toFixed(1)},${Z(z).toFixed(1)}`).join(' ');
   s += `<polyline points="${pts}" fill="none" stroke="#0ea5e9" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" class="route-anim"/>`;
   s += `<circle cx="${X(gx)}" cy="${Z(-Ly.SD / 2 - 3)}" r="7" fill="#0f766e"/><text x="${X(gx) + 10}" y="${Z(-Ly.SD / 2) + 12}" font-size="11" font-weight="700" fill="#0f766e">калитка</text>`;
-  s += `<circle cx="${X(xc)}" cy="${Z(zs + .5)}" r="8" fill="#ea580c"/><text x="${X(xc)}" y="${Z(zs) + 26}" text-anchor="middle" font-size="12" font-weight="700" fill="#c2410c">вход, подъезд ${a.section}</text>`;
+  s += `<circle cx="${X(xc)}" cy="${Z(zs + .5)}" r="8" fill="#ea580c"/><text x="${X(xc)}" y="${Z(zs) + 26}" text-anchor="middle" font-size="12" font-weight="700" fill="#c2410c">вход, ${secTxt(a)}</text>`;
   s += `<g transform="translate(${W - 30},${H - 30})"><circle r="14" fill="#fff" stroke="#94a3b8"/><path d="M0 -10 L4 4 L0 0 L-4 4Z" fill="#dc2626"/><text y="-17" text-anchor="middle" font-size="9" fill="#dc2626">С</text></g></svg>`;
   return s;
 }

@@ -8,6 +8,7 @@ use App\Models\PlatformSetting;
 use App\Models\SiteLog;
 use App\Models\Workspace;
 use App\Services\Apartments;
+use App\Services\Inventory;
 use App\Services\StateWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -33,14 +34,27 @@ class PublicController extends Controller
     {
         $ws = Workspace::where('public_key', $key)->where('public_enabled', true)->firstOrFail();
         abort_unless($ws->hasAccess(), 404);
-        $projects = array_values(array_filter($ws->projects(), fn ($p) => ! Workspace::isDemo($p))) ?: $ws->projects();
+        // на сайте — только объекты, выставленные на продажу (пока администратор объектов готовит перечень, объекта не видно)
+        $onSale = array_values(array_filter($ws->projects(), fn ($p) => Inventory::ready($p)));
+        $projects = array_values(array_filter($onSale, fn ($p) => ! Workspace::isDemo($p))) ?: $onSale;
         $cur = collect($projects)->firstWhere('id', $request->query('o')) ?? ($projects[0] ?? null);
         abort_unless($cur, 404);
-        $apts = array_map(fn ($a) => array_intersect_key($a, array_flip(['id', 'num', 'section', 'floor', 'rooms', 'area', 'price', 'status'])), Apartments::list($cur));
+        $apts = array_map(fn ($a) => array_intersect_key($a, array_flip(['id', 'num', 'section', 'floor', 'rooms', 'area', 'price', 'status', 'kind', 'type', 'typeName', 'block', 'entr'])), Apartments::list($cur));
+        // чертёж и 3D каждой планировки — покупатель видит их, выбрав квартиру
+        $media = \App\Models\ObjectMedia::of($ws->id)->where('project_id', (string) $cur['id'])->where('is_public', true)->whereIn('kind', ['plan', 'interior', 'pano'])->orderBy('sort')->orderBy('id')->get();
+        $plans = [];
+        $tours = [];
+        foreach ($media->whereNotNull('layout') as $m) {
+            if ($m->kind === 'plan' && $m->isImage()) {
+                $plans[$m->layout] ??= url("/s/{$key}/m/{$m->id}");
+            } elseif ($m->kind !== 'plan') {
+                $tours[$m->layout] = true;
+            }
+        }
 
         return view('public.chess', [
             'ws' => $ws, 'projects' => $projects, 'p' => $cur, 'apts' => $apts, 'progress' => self::progress($cur),
-            'currency' => \App\Services\CompanyStats::currency($ws),
+            'currency' => \App\Services\CompanyStats::currency($ws), 'plans' => $plans, 'tours' => $tours,
         ]);
     }
 
@@ -86,11 +100,16 @@ class PublicController extends Controller
 
     /* ---------- 3D для покупателей: только открытые файлы своего объекта ---------- */
 
-    private function publicMedia(int $wsId, string $pid, ?int $rooms = null)
+    /** Открытые файлы объекта: здание целиком и — для квартиры — файлы её планировки (у старых файлов — по числу комнат) */
+    private function publicMedia(int $wsId, string $pid, ?int $rooms = null, ?string $layout = null)
     {
-        return \App\Models\ObjectMedia::of($wsId)->where('project_id', $pid)->where('is_public', true)->whereIn('kind', ['exterior', 'interior', 'pano'])
-            ->when($rooms !== null, fn ($q) => $q->where(fn ($x) => $x->where('kind', 'exterior')->orWhereNull('rooms')->orWhere('rooms', $rooms)))
-            ->orderByDesc('is_main')->orderBy('kind')->orderBy('sort')->get();
+        $all = \App\Models\ObjectMedia::of($wsId)->where('project_id', $pid)->where('is_public', true)->whereIn('kind', ['exterior', 'interior', 'pano'])
+            ->orderByDesc('is_main')->orderBy('kind')->orderBy('sort')->orderBy('id')->get();
+        if ($rooms === null && $layout === null) {
+            return $all;
+        }
+
+        return $all->where('kind', 'exterior')->concat(\App\Models\ObjectMedia::forUnit($all->where('kind', '!=', 'exterior'), $layout, (int) $rooms))->values();
     }
 
     public function chess3d(Request $request, string $key)
@@ -98,7 +117,9 @@ class PublicController extends Controller
         $ws = Workspace::where('public_key', $key)->where('public_enabled', true)->firstOrFail();
         $pid = (string) $request->query('o', '');
         $p = StateWriter::project($ws, $pid) ?? abort(404);
-        $media = $this->publicMedia($ws->id, $pid, $request->has('r') ? (int) $request->query('r') : null);
+        abort_unless(Inventory::ready($p), 404);
+        $layout = $request->query('t') && isset(\App\Http\Controllers\Company\ObjectController::layouts($p)[$request->query('t')]) ? (string) $request->query('t') : null;
+        $media = $this->publicMedia($ws->id, $pid, $request->has('r') ? (int) $request->query('r') : ($layout ? (int) (\App\Http\Controllers\Company\ObjectController::layouts($p)[$layout]['rooms'] ?? 0) : null), $layout);
 
         return view('company.objects.viewer', ['ws' => $ws, 'p' => $p, 'pid' => $pid, 'media' => $media, 'cur' => $media->firstWhere('id', (int) $request->query('m')) ?? $media->first(),
             'src' => fn ($m, bool $poster = false) => url("/s/{$key}/m/{$m->id}".($poster ? '?poster=1' : '')), 'public' => true, 'canEdit' => false]);
@@ -115,7 +136,7 @@ class PublicController extends Controller
     public function cabinet3d(Request $request, string $token)
     {
         [$bl, $ws, $p, $a] = $this->buyer($token);
-        $media = $this->publicMedia($ws->id, $bl->project_id, (int) $a['rooms']);
+        $media = $this->publicMedia($ws->id, $bl->project_id, (int) $a['rooms'], $a['type'] ?? null);
 
         return view('company.objects.viewer', ['ws' => $ws, 'p' => $p, 'pid' => $bl->project_id, 'media' => $media, 'cur' => $media->firstWhere('id', (int) $request->query('m')) ?? $media->first(),
             'src' => fn ($m, bool $poster = false) => url("/b/{$token}/m/{$m->id}".($poster ? '?poster=1' : '')), 'public' => true, 'canEdit' => false]);

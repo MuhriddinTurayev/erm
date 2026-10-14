@@ -13,20 +13,27 @@ class StateController extends Controller
 {
     public function version()
     {
-        return response()->json(['version' => (int) Workspace::whereKey($this->ws()->id)->value('version')]);
+        // ws — чтобы вкладка, открытая под другой компанией (вход под другим логином, «войти как»), поняла это и перезагрузилась
+        return response()->json(['version' => (int) Workspace::whereKey($this->ws()->id)->value('version'), 'ws' => (int) $this->ws()->id]);
     }
 
     public function show(Request $request)
     {
         $ws = Workspace::whereKey($this->ws()->id)->first(['id', 'version', 'data']);
 
-        return response()->json(['version' => (int) $ws->version, 'data' => StateAccess::forUser($ws->data, $request->user())]);
+        return response()->json(['version' => (int) $ws->version, 'ws' => (int) $ws->id, 'data' => StateAccess::forUser($ws->data, $request->user())]);
     }
 
     public function update(Request $request)
     {
         $user = $request->user();
         abort_unless($user->canEdit(), 403, __('Только просмотр'));
+        // данные из вкладки другой компании: в этом браузере после неё вошли в эту — чужие объекты сюда не пишем
+        // (старая версия программы, открытая до обновления сервера, ws не присылает — её не останавливаем, иначе она зациклится на повторах)
+        if ($request->has('ws') && (int) $request->input('ws') !== (int) $this->ws()->id) {
+            return response()->json(['switched' => true, 'ws' => (int) $this->ws()->id, 'version' => (int) Workspace::whereKey($this->ws()->id)->value('version'),
+                'error' => __('Вы вошли в другую компанию. Страница обновится.')], 409);
+        }
 
         $base = (int) $request->input('version');
         $data = $request->input('data');

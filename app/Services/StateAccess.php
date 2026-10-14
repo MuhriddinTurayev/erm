@@ -18,6 +18,13 @@ class StateAccess
     /** Поля объекта, которые меняет только руководитель */
     private const ADMIN_ONLY = ['name', 'gps', 'demo'];
 
+    /** Перечень помещений пишет только раздел «Объекты» (с проверкой и защитой сделок) — программа присылает его как есть */
+    private const SERVER_ONLY = ['inv', 'invPrev'];
+
+    /** Администратор объектов не меняет деньги, сделки, кадры и стройку — даже если программа их пришлёт */
+    private const CATALOG_KEEP = ['tx', 'pays', 'staff', 'ts', 'fuel', 'fleet', 'labour', 'itr', 'mach', 'overhead', 'prices', 'extraMat', 'stages',
+        'leads', 'legal', 'cands', 'safety', 'geoEv', 'gps', 'demo'];
+
     /** Данные, которые видит пользователь */
     public static function forUser(?string $json, User $user): ?string
     {
@@ -56,29 +63,93 @@ class StateAccess
                     $mine[$id] = $p;
                 }
             }
-            // свои объекты — из присланного (кроме полей руководителя), остальные — как были; новые объекты и удаление — только у руководителя
-            $base['projects'] = array_map(function ($p) use ($mine) {
+            $catalog = $user->isCatalog();
+            // свои объекты — из присланного (кроме полей руководителя), остальные — как были; удаление — только у руководителя
+            $base['projects'] = array_map(function ($p) use ($mine, $catalog) {
                 $id = (string) ($p['id'] ?? '');
                 if (! isset($mine[$id])) {
                     return $p;
                 }
                 $n = $mine[$id];
-                foreach (self::ADMIN_ONLY as $k) {
-                    if (array_key_exists($k, $p)) {
-                        $n[$k] = $p[$k];
-                    } else {
-                        unset($n[$k]);
+                foreach ($catalog ? array_diff(self::ADMIN_ONLY, ['name']) : self::ADMIN_ONLY as $k) {
+                    self::keep($n, $p, $k);
+                }
+                if ($catalog) {
+                    foreach (self::CATALOG_KEEP as $k) {
+                        self::keep($n, $p, $k);
                     }
+                    $n['apts'] = self::catalogApts((array) ($p['apts'] ?? []), (array) ($n['apts'] ?? []));
                 }
                 $n['id'] = $p['id'];
 
                 return $n;
             }, $base['projects']);
+            // новые объекты — у руководителя и у администратора объектов со всеми объектами (лимит тарифа проверяется отдельно)
+            if ($catalog && $allowed === null) {
+                $known = array_flip(array_map(fn ($p) => (string) ($p['id'] ?? ''), $base['projects']));
+                foreach ($incoming['projects'] as $p) {
+                    $id = (string) ($p['id'] ?? '');
+                    if (is_array($p) && $id !== '' && ! isset($known[$id])) {
+                        $p['tx'] = [];      // у нового объекта ещё нет денег и сделок
+                        $p['apts'] = [];
+                        $base['projects'][] = $p;
+                    }
+                }
+            }
             $next = $base;   // настройки компании и текущий объект — как были
         }
+        self::keepInventory(json_decode((string) $stored, true), $next);
         self::demoFlags(is_array($base) ? $base : null, $next);
 
         return $next;
+    }
+
+    /** Поле объекта — как было сохранено (или без него, если его не было) */
+    private static function keep(array &$n, array $p, string $k): void
+    {
+        if (array_key_exists($k, $p)) {
+            $n[$k] = $p[$k];
+        } else {
+            unset($n[$k]);
+        }
+    }
+
+    /** Перечень помещений существующих объектов — только сохранённый (его меняет раздел «Объекты») */
+    private static function keepInventory($old, array &$next): void
+    {
+        $was = [];
+        foreach ((array) ($old['projects'] ?? []) as $p) {
+            if (is_array($p) && isset($p['id'])) {
+                $was[(string) $p['id']] = $p;
+            }
+        }
+        foreach ($next['projects'] as &$p) {
+            if (is_array($p) && isset($was[(string) ($p['id'] ?? '')])) {
+                foreach (self::SERVER_ONLY as $k) {
+                    self::keep($p, $was[(string) $p['id']], $k);
+                }
+            }
+        }
+        unset($p);
+    }
+
+    /** Администратор объектов: «в продаже» / «не в продаже» у свободных квартир; сделки и оплаты — без изменений */
+    private static function catalogApts(array $stored, array $incoming): array
+    {
+        $out = $stored;
+        foreach ($incoming as $id => $o) {
+            $was = (array) ($stored[$id] ?? []);
+            $st = is_array($o) ? (string) ($o['status'] ?? 'free') : 'free';
+            if (in_array($was['status'] ?? 'free', ['sold', 'booked'], true) || ! empty($was['payments']) || ! in_array($st, ['free', 'reserve'], true)) {
+                continue;
+            }
+            if ($st !== ($was['status'] ?? 'free')) {
+                $was['status'] = $st;
+                $out[$id] = $was;
+            }
+        }
+
+        return $out;
     }
 
     /**

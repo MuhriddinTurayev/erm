@@ -7,6 +7,7 @@ use App\Models\BuyerLink;
 use App\Models\LeadInbox;
 use App\Models\ObjectMedia;
 use App\Services\Apartments;
+use App\Services\Inventory;
 use App\Services\StateWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -56,16 +57,28 @@ class SalesController extends ErpController
         usort($payments, fn ($x, $y) => strcmp($y['date'] ?? '', $x['date'] ?? ''));
         $month = substr($today, 0, 7);
 
+        $media = ObjectMedia::of($ws->id)->where('project_id', $pid)->whereIn('kind', ['interior', 'pano', 'plan'])->orderBy('sort')->orderBy('id')->get();
+
         return view('company.sales', [
             'ws' => $ws, 'projects' => $projects, 'pid' => $pid, 'p' => $p, 'apts' => $apts, 'f' => $f, 'cur' => \App\Services\CompanyStats::currency($ws),
             's' => ObjectController::summary($p), 'deals' => $deals, 'payments' => array_slice($payments, 0, 12),
             'monthIn' => array_sum(array_map(fn ($x) => str_starts_with($x['date'] ?? '', $month) ? (float) $x['amount'] : 0, $payments)),
             'overdueList' => array_values(array_filter($deals, fn ($a) => $a['overdue'] > 0)),
             'leads' => LeadInbox::where('workspace_id', $ws->id)->latest('id')->limit(8)->get(),
-            'interiors' => ObjectMedia::of($ws->id)->where('project_id', $pid)->whereIn('kind', ['interior', 'pano', 'plan'])->get()->groupBy(fn ($m) => (string) $m->rooms),
+            'media' => $media, 'types' => ObjectController::layouts($p), 'ready' => Inventory::ready($p),
             'links' => BuyerLink::where('workspace_id', $ws->id)->where('project_id', $pid)->pluck('token', 'apt_id'),
             'canSell' => auth()->user()->canEdit() && in_array(auth()->user()->role, ['admin', 'manager', 'accountant', 'cashier'], true),
         ]);
+    }
+
+    /** Объект ещё готовится к продаже: бронировать и продавать может только руководитель */
+    private function guardReady(array $p, string $status): ?string
+    {
+        if (in_array($status, ['sold', 'booked'], true) && ! Inventory::ready($p) && ! auth()->user()->isAdmin()) {
+            return __('Объект ещё готовится к продаже. Бронь и продажа откроются, когда администратор объектов выставит его на продажу.');
+        }
+
+        return null;
     }
 
     /** Изменить квартиру: статус, покупатель, цена, условия */
@@ -81,7 +94,11 @@ class SalesController extends ErpController
             return back()->withErrors(['buyer' => __('Укажите покупателя')])->withInput();
         }
         $ws = $this->ws();
-        $a = Apartments::find(StateWriter::project($ws, $pid), $aptId) ?? abort(404);
+        $p = StateWriter::project($ws, $pid) ?? abort(404);
+        $a = Apartments::find($p, $aptId) ?? abort(404);
+        if ($a['status'] !== $d['status'] && ($err = $this->guardReady($p, $d['status']))) {
+            return back()->withErrors(['buyer' => $err])->withInput()->with('open', $aptId);
+        }
         StateWriter::mutate($ws->id, function (array &$data) use ($pid, $aptId, $d, $a) {
             foreach ($data['projects'] as &$p) {
                 if ((string) ($p['id'] ?? '') !== $pid) {
@@ -117,9 +134,13 @@ class SalesController extends ErpController
         $this->checkProject($pid);
         $d = $request->validate(['amount' => ['required', 'numeric', 'min:1'], 'date' => ['required', 'date'], 'way' => ['nullable', 'string', 'max:40']]);
         $ws = $this->ws();
-        $a = Apartments::find(StateWriter::project($ws, $pid), $aptId) ?? abort(404);
+        $p = StateWriter::project($ws, $pid) ?? abort(404);
+        $a = Apartments::find($p, $aptId) ?? abort(404);
         if ($a['status'] === 'reserve') {
             return back()->withErrors(['amount' => __('Квартира не в продаже — сначала поставьте бронь или продажу')])->with('open', $aptId);
+        }
+        if ($a['status'] === 'free' && ($err = $this->guardReady($p, 'booked'))) {   // первая оплата ставит бронь
+            return back()->withErrors(['amount' => $err])->with('open', $aptId);
         }
         $payId = Str::lower(Str::random(8));
         StateWriter::mutate($ws->id, function (array &$data) use ($pid, $aptId, $d, $a, $payId) {
