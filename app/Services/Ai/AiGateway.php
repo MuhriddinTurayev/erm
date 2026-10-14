@@ -46,11 +46,12 @@ class AiGateway
     }
 
     /**
-     * Вопрос по картинке (чек, накладная). DeepSeek картинки не понимает.
+     * Вопрос по картинке (чек, накладная, фасад дома). DeepSeek картинки не понимает.
+     * $maxTokens — запас на ответ: «думающим» моделям (Gemini 2.5) на разбор фасада нужно больше, чем на чек.
      *
      * @return array{text: string, in: int, out: int}
      */
-    public function vision(AiProvider $p, string $prompt, string $bytes, string $mime): array
+    public function vision(AiProvider $p, string $prompt, string $bytes, string $mime, int $maxTokens = 800): array
     {
         if (! $p->api_key) {
             throw new AiException(__('У подключения ИИ не указан ключ API'), 500);
@@ -62,7 +63,7 @@ class AiGateway
                 $r = $this->send(fn () => Http::withHeaders(['x-goog-api-key' => $p->api_key])->acceptJson()->timeout(self::TIMEOUT)
                     ->post(rtrim($base, '/').'/models/'.rawurlencode($p->model).':generateContent', [
                         'contents' => [['role' => 'user', 'parts' => [['text' => $prompt], ['inline_data' => ['mime_type' => $mime, 'data' => $b64]]]]],
-                        'generationConfig' => ['maxOutputTokens' => 800],
+                        'generationConfig' => ['maxOutputTokens' => $maxTokens],
                     ]));
                 $j = $r->json();
 
@@ -74,7 +75,7 @@ class AiGateway
                 $r = $this->send(fn () => Http::withToken($p->api_key)->acceptJson()->timeout(self::TIMEOUT)->post(rtrim($base, '/').'/chat/completions', [
                     'model' => $p->model,
                     'messages' => [['role' => 'user', 'content' => [['type' => 'text', 'text' => $prompt], ['type' => 'image_url', 'image_url' => ['url' => "data:$mime;base64,$b64"]]]]],
-                    $p->driver === 'openai' ? 'max_completion_tokens' : 'max_tokens' => 800,
+                    $p->driver === 'openai' ? 'max_completion_tokens' : 'max_tokens' => $maxTokens,
                 ]));
                 $j = $r->json();
 
@@ -83,7 +84,7 @@ class AiGateway
                 $client = new AnthropicClient(apiKey: $p->api_key, baseUrl: $p->base_url ?: null, requestOptions: ['timeout' => (float) self::TIMEOUT, 'maxRetries' => 1]);
                 try {
                     $msg = $client->messages->create(
-                        maxTokens: 2000,
+                        maxTokens: max(2000, $maxTokens),
                         messages: [MessageParam::with(role: 'user', content: [
                             ImageBlockParam::with(source: Base64ImageSource::with(data: $b64, mediaType: $mime)),
                             TextBlockParam::with(text: $prompt),
@@ -221,6 +222,11 @@ class AiGateway
         try {
             /** @var Response $r */
             $r = $fn();
+            // «модель перегружена» (503) у Gemini обычно проходит за секунды — одна повторная попытка
+            if ($r->status() === 503) {
+                usleep(2_000_000);
+                $r = $fn();
+            }
         } catch (ConnectionException) {
             throw new AiException(__('Нет связи с сервисом ИИ'), 504);
         }

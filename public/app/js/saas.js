@@ -182,18 +182,11 @@ function real3dBar(p, kind) {
 }
 /* ---------- загруженная модель здания вместо схемы программы: «Объект в 3D» и «Квартира для клиента» ----------
    Модель открывается страницей /company/objects/{id}/locate (assets/locate3d.js): квартира подсвечена на стене,
-   подъезд обведён. Схема программы остаётся — переключатель «Схема программы». */
+   подъезд обведён. Если модель загружена — показываем только её: схема программы нужна, лишь пока модели нет. */
 const hasReal3d = p => !!(SAAS && SAAS.media && SAAS.media[p.id] && SAAS.media[p.id].exterior);
-const real3dOn = (p, a) => hasReal3d(p) && (a || {}).v !== 'scheme';
 function real3dFrame(p, aptId, cls) {
   return `<div class="real3d-frame ${cls || ''}"><iframe src="/company/objects/${encodeURIComponent(p.id)}/locate?embed=1${aptId ? '&u=' + encodeURIComponent(aptId) : ''}" title="3D" allow="fullscreen"></iframe></div>`;
 }
-function real3dSwitch(p, a) {
-  if (!hasReal3d(p)) return '';
-  const real = (a || {}).v !== 'scheme';
-  return `<div class="seg real3d-seg"><button class="btn-s${real ? ' btn-p' : ''}" data-act="r3v" data-v="real">📦 Загруженная 3D-модель</button><button class="btn-s${real ? '' : ' btn-p'}" data-act="r3v" data-v="scheme">🏗 Схема программы</button></div>`;
-}
-ACT.r3v = d => go(curPage, Object.assign({}, pageArgs, { v: d.v === 'scheme' ? 'scheme' : undefined }));
 // «Объект в 3D»: нажали квартиру на фасаде модели — открываем её карточку (цена, бронь, оплата)
 window.addEventListener('message', e => {
   if (e.origin !== location.origin || !e.data || e.data.type !== 'oftob-locate-pick' || curPage !== 'site' || !e.data.unit) return;
@@ -202,24 +195,23 @@ window.addEventListener('message', e => {
 if (PAGES.site) {
   const r = PAGES.site.render, m = PAGES.site.mounted;
   PAGES.site.render = function (p, a) {
-    return real3dBar(p, 'exterior') + real3dSwitch(p, a) + (real3dOn(p, a) ? real3dFrame(p, null, 'big') : r.call(this, p, a));
+    return real3dBar(p, 'exterior') + (hasReal3d(p) ? real3dFrame(p, null, 'big') : r.call(this, p, a));
   };
-  PAGES.site.mounted = function (p, a) { if (!real3dOn(p, a) && m) m.call(this, p, a); };
+  PAGES.site.mounted = function (p, a) { if (!hasReal3d(p) && m) m.call(this, p, a); };
 }
 if (PAGES.apt) {
   const r = PAGES.apt.render, m = PAGES.apt.mounted;
-  // вкладка «В доме»: вместо нарисованного дома — загруженная модель с подсвеченной квартирой
+  // вкладки «В доме» и «Как пройти»: вместо нарисованного дома — загруженная модель с подсвеченной квартирой и подъездом;
+  // шаги «как пройти» и схема участка остаются
+  const real = (p, a) => !!(a && a.id && ['house', 'route'].includes(a.tab || 'house') && hasReal3d(p));
   PAGES.apt.render = function (p, a) {
-    let html = r.call(this, p, a);
-    if (!a || !a.id || (a.tab || 'house') !== 'house' || !hasReal3d(p)) return html;
-    if (real3dOn(p, a)) {
-      html = html.replace('<div class="site-viewer" id="aptSite"><div class="v-tools" id="s3Tools"></div></div>', real3dFrame(p, a.id))
-        .replace('<div class="flex mt"><button class="btn-p" data-act="aptWin">🪟 Вид из окна</button><button data-act="aptFocus">🎯 Показать квартиру</button></div>', '');
-    }
-    return html.replace('<div class="grid apt-house">', real3dSwitch(p, a) + '<div class="grid apt-house">');
+    const html = r.call(this, p, a);
+    if (!real(p, a)) return html;
+    return html.replace(/<div class="site-viewer" id="aptSite"><div class="v-tools" id="s3Tools"><\/div>(<div class="v-help">[^<]*<\/div>)?<\/div>/, real3dFrame(p, a.id))
+      .replace('<div class="flex mt"><button class="btn-p" data-act="aptWin">🪟 Вид из окна</button><button data-act="aptFocus">🎯 Показать квартиру</button></div>', '');
   };
   PAGES.apt.mounted = function (p, a) {
-    if ((a.tab || 'house') === 'house' && real3dOn(p, a)) return;
+    if (real(p, a)) return;
     if (m) m.call(this, p, a);
   };
 }

@@ -1,7 +1,8 @@
 /* Квартира на настоящей 3D-модели дома (company/objects/locate.blade.php).
-   В модели нет квартир — их находим по рамке корпуса (Services\Locate): подъезды делят рамку по длине, этажи — по высоте,
-   квартиры этажа — по фасадам: первая половина на лицевой стороне (+Z рамки), остальные — на задней.
-   Режим настройки: рамку двигают, поворачивают и растягивают прямо на модели, номера квартир видны на фасаде. */
+   В модели нет квартир — их находим по рамке корпуса (Services\Locate): подъезды делят рамку по длине (границы можно сдвинуть),
+   этажи — по высоте, квартиры этажа — по фасадам: первая половина на лицевой стороне (+Z рамки), остальные — на задней.
+   Рамку сначала ставит автопривязка (assets/locate-auto.js: форма модели + ИИ смотрит на фасады), человек поправляет:
+   тянет точки на рамке (стороны, границы подъездов, высота 1-го этажа), смотрит спереди/сбоку/сверху, отменяет шаги. */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
@@ -16,21 +17,39 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue('--' + n).trim() || '#6c4cf1';
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/** Границы подъездов по длине рамки, доли от 0 до 1: [0, …, 1]. ex — сдвинутые вручную или по дверям, иначе поровну */
+export function splitsOf(B, C) {
+  const E = Math.max(1, B.entr.length), ex = Array.isArray(C.ex) && C.ex.length === E - 1 ? C.ex : null;
+  const sp = [0];
+  for (let k = 1; k < E; k++) sp.push(ex ? ex[k - 1] : k / E);
+  sp.push(1);
+  return sp;
+}
+/** Доля высоты рамки, где кончается 1-й этаж */
+function groundOf(C, F) {
+  const H = C.s ? C.s[1] : 0;
+  return F > 1 && C.gf > 0 && H > C.gf ? C.gf / H : 1 / F;
+}
 
 /** Ячейка помещения в рамке корпуса, координаты рамки от −0.5 до 0.5 */
 export function cellOf(u, B, C) {
-  const E = Math.max(1, B.entr.length), F = Math.max(1, C.floors || B.floors), n = Math.max(1, u.n);
+  const E = Math.max(1, B.entr.length), F = Math.max(1, C.floors || B.floors), n = Math.max(1, u.n), e = Math.min(E - 1, Math.max(0, u.e));
   const rows = C.rows === 1 || n < 2 ? 1 : 2, front = Math.ceil(n / rows);
   let side = 'all', col = u.i, cols = n;
   if (rows === 2) {
     if (u.i < front) { side = 'front'; col = u.i; cols = front; } else { side = 'back'; cols = n - front; col = u.i - front; if (C.back !== 'fwd') col = cols - 1 - col; }
   }
-  let x0 = (u.e + col / cols) / E, x1 = (u.e + (col + 1) / cols) / E;
+  const sp = splitsOf(B, C), w = sp[e + 1] - sp[e];
+  let x0 = sp[e] + (w * col) / cols, x1 = sp[e] + (w * (col + 1)) / cols;
   if (C.flipX) [x0, x1] = [1 - x1, 1 - x0];
   // первый этаж часто выше (магазины): gf — его высота в метрах, остальные этажи делят высоту поровну
-  const H = C.s ? C.s[1] : 0, g = F > 1 && C.gf > 0 && H > C.gf ? C.gf / H : 1 / F;
+  const g = groundOf(C, F);
   const yAt = (k) => (k <= 0 ? 0 : F === 1 ? 1 : g + ((k - 1) * (1 - g)) / (F - 1));
-  const f = Math.min(F, Math.max(1, u.f)), y0 = yAt(f - 1), y1 = yAt(f);
+  // в модели этажей меньше, чем в объекте (чужая или упрощённая модель): этаж объекта — на этаже модели той же доли высоты
+  const N = Math.max(1, B.floors || F), uf = Math.max(1, u.f);
+  const f = N > F ? Math.min(F, Math.ceil((uf * F) / N)) : Math.min(F, uf), y0 = yAt(f - 1), y1 = yAt(f);
   let z0 = 0, z1 = 1;
   if (side !== 'all') {
     const isFront = (side === 'front') !== !!C.flipZ;
@@ -42,10 +61,11 @@ export function cellOf(u, B, C) {
 
 export async function start(el, cfg) {
   const T = cfg.T || {};
-  const accent = css('accent'), accent2 = css('accent-2');
+  const accent = css('accent'), accent2 = css('accent-2'), amber = '#f59e0b';
   const units = cfg.data.units, blocks = cfg.data.blocks;
   const byId = Object.fromEntries(units.map((u) => [u.id, u]));
   const cal = JSON.parse(JSON.stringify(cfg.cal || {}));
+  const saved = new Set(Object.keys(cfg.cal || {}));
 
   // ---------- сцена ----------
   // логарифмический буфер глубины: и квартал на километры, и окно квартиры вблизи без мерцания
@@ -55,6 +75,7 @@ export async function start(el, cfg) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   el.appendChild(renderer.domElement);
+  const canvas = renderer.domElement;
   const labels = new CSS2DRenderer();
   labels.domElement.className = 'lc-labels';
   el.appendChild(labels.domElement);
@@ -64,7 +85,7 @@ export async function start(el, cfg) {
   scene.add(new THREE.HemisphereLight(0xffffff, 0x8a93a6, 0.55));
   const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(1, 2, 1.2); scene.add(sun);
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 10000);
-  const controls = new OrbitControls(camera, renderer.domElement);
+  const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = Math.PI * 0.495;
 
   const lineMats = [];   // толстые линии считают толщину в пикселях — им нужен размер окна
@@ -97,7 +118,7 @@ export async function start(el, cfg) {
 
   const blockIds = Object.keys(blocks);
   let curBlock = null, selected = null;
-  // где дом в файле: если в модели целый квартал (дороги, соседние дома, кран), ищем самое высокое и «толстое» здание —
+  // пока рамки нет: где дом в файле. Если в модели целый квартал (дороги, соседние дома, кран), ищем самое высокое и «толстое» здание —
   // не землю (огромная площадь) и не кран (высокий, но тонкий); к нему добавляем детали в его же пятне
   const auto = (() => {
     const boxes = [];
@@ -121,12 +142,12 @@ export async function start(el, cfg) {
     return out;
   })();
   function defaults(bid) {
-    // без настройки — рамка по найденному дому (или по всей модели, если в файле только сам дом)
     const c = auto.getCenter(new THREE.Vector3()), s = auto.getSize(new THREE.Vector3());
     return { c: [c.x, c.y, c.z], s: [s.x || 1, s.y || 1, s.z || 1], r: 0, floors: blocks[bid].floors, gf: 0, rows: 2, back: 'rev', flipX: false, flipZ: false };
   }
   const C = (bid) => (cal[bid] = cal[bid] || defaults(bid));
-  const isCalibrated = (bid) => !!(cfg.cal && cfg.cal[bid]);
+  const isCalibrated = (bid) => saved.has(bid);
+  const floorsOf = (bid) => Math.max(1, C(bid).floors || blocks[bid].floors);
   function applyFrame(bid) {
     const c = C(bid);
     frame.position.set(c.c[0], c.c[1], c.c[2]); frame.rotation.set(0, c.r, 0); frame.scale.set(c.s[0], c.s[1], c.s[2]);
@@ -150,11 +171,12 @@ export async function start(el, cfg) {
     const l = new Line2(g, m); if (dashed) l.computeLineDistances(); l.renderOrder = 30; overlay.add(l);
     return l;
   }
-  /** Прямоугольник на стене рамки (координаты рамки) → точки в мире, чуть впереди стены */
-  function wallRect(x0, y0, x1, y1, facing) {
+  /** Точки на стене рамки (координаты рамки) → мир, чуть впереди стены */
+  function onWall(pts, facing) {
     const z = facing > 0 ? 0.5 : -0.5, off = (growOf() * 1.6 / frame.scale.z) * facing;
-    return [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]].map(([x, y]) => frame.localToWorld(new THREE.Vector3(x, y, z + off)));
+    return pts.map(([x, y]) => frame.localToWorld(new THREE.Vector3(x, y, z + off)));
   }
+  const wallRect = (x0, y0, x1, y1, facing) => onWall([[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]], facing);
   function boxMesh(min, max, mat, grow = 0) {
     const m = new THREE.Mesh(unitBox, mat);
     const size = max.clone().sub(min), g = new THREE.Vector3(grow / frame.scale.x, grow / frame.scale.y, grow / frame.scale.z);
@@ -166,6 +188,19 @@ export async function start(el, cfg) {
     const size = max.clone().sub(min), g = new THREE.Vector3(grow / frame.scale.x, grow / frame.scale.y, grow / frame.scale.z);
     l.scale.copy(size.add(g.multiplyScalar(2))); l.position.copy(min.clone().add(max).multiplyScalar(0.5)); l.renderOrder = 21;
     return l;
+  }
+  const entrName = (B, e) => (B.name && blockIds.length > 1 ? B.name + ' · ' : '') + (B.entr[e] || e + 1) + '-' + (T.en || '');
+  /** Подпись подъезда у земли, посередине его участка фасада */
+  function entrLabel(B, c, e, facing, parent) {
+    const sp = splitsOf(B, c);
+    let x0 = sp[e], x1 = sp[e + 1];
+    if (c.flipX) [x0, x1] = [1 - x1, 1 - x0];
+    const div = document.createElement('div'); div.className = 'lc-entr'; div.textContent = entrName(B, e);
+    const o = new CSS2DObject(div);
+    o.position.copy(onWall([[(x0 + x1) / 2 - 0.5, -0.5]], facing)[0]);
+    o.center.set(0.5, -0.2);
+    parent.add(o);
+    return [x0, x1];
   }
 
   // ---------- показ квартиры ----------
@@ -184,18 +219,9 @@ export async function start(el, cfg) {
     fill.renderOrder = 19; layer.add(fill); pulse.push(fill.material);
     // контур квартиры на стене — толстая линия; подъезд — пунктир во всю высоту и подпись у земли: видно, в каком подъезде квартира
     thick(wallRect(cell.min.x, cell.min.y, cell.max.x, cell.max.y, cell.facing), accent, 5);
-    const E = Math.max(1, B.entr.length);
-    let ex0 = u.e / E, ex1 = (u.e + 1) / E;
-    if (c.flipX) [ex0, ex1] = [1 - ex1, 1 - ex0];
-    if (E > 1 || Object.keys(blocks).length > 1) {
+    if (B.entr.length > 1 || blockIds.length > 1) {
+      const [ex0, ex1] = entrLabel(B, c, Math.min(B.entr.length - 1, u.e), cell.facing, overlay);
       thick(wallRect(ex0 - 0.5, -0.5, ex1 - 0.5, 0.5, cell.facing), accent2, 2.5, true);
-      const en = document.createElement('div');
-      en.className = 'lc-entr';
-      en.textContent = (B.name && Object.keys(blocks).length > 1 ? B.name + ' · ' : '') + (B.entr[u.e] || u.e + 1) + '-' + (T.en || '');
-      const lo = new CSS2DObject(en);
-      lo.position.copy(wallRect(ex0 - 0.5, -0.5, ex1 - 0.5, -0.5, cell.facing)[0].clone().lerp(wallRect(ex0 - 0.5, -0.5, ex1 - 0.5, -0.5, cell.facing)[1], 0.5));
-      lo.center.set(0.5, -0.2);
-      overlay.add(lo);
     }
     // подпись над квартирой
     const div = document.createElement('div');
@@ -226,6 +252,25 @@ export async function start(el, cfg) {
     const dir = new THREE.Vector3(0.9, 0.6, 1.1).normalize();
     camera.position.copy(mCenter.clone().add(dir.multiplyScalar(D * 1.1))); controls.target.copy(mCenter); controls.update();
   }
+  /** Ровно спереди, сбоку или сверху на рамку — так удобнее ставить её по окнам и углам */
+  function view(name) {
+    if (curBlock == null) return;
+    if (name === '3d') { overview(); return; }
+    const c = C(curBlock), ctr = frame.getWorldPosition(new THREE.Vector3());
+    const ax = new THREE.Vector3(1, 0, 0).applyQuaternion(frame.quaternion), az = new THREE.Vector3(0, 0, c.flipZ ? -1 : 1).applyQuaternion(frame.quaternion);
+    // справа панель настройки: рамку ставим в середину свободной части экрана
+    const W = el.clientWidth || 1, Hh = el.clientHeight || 1, side = cfg.calibrate && W > 760 ? 360 : 0, aspect = (W - side) / Hh;
+    const t = Math.tan((camera.fov * Math.PI) / 360), fit = (w, h) => Math.max(h / 2 / t, w / 2 / (t * aspect)) * 1.3;
+    const [L, H, Dp] = c.s;
+    let dir, dist;
+    if (name === 'front') { dir = az; dist = fit(L, H) + Dp / 2; }
+    else if (name === 'side') { dir = ax; dist = fit(Dp, H) + L / 2; }
+    else { dir = new THREE.Vector3(0, 1, 0).addScaledVector(az, 0.002).normalize(); dist = fit(L, Dp) + H / 2; }
+    const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), dir).normalize();
+    if (name === 'top') right.crossVectors(new THREE.Vector3(0, 1, 0), az).normalize();
+    const shift = right.multiplyScalar(((side / 2) * (2 * dist * t)) / Hh), target = ctr.clone().add(shift);
+    tween(target.clone().addScaledVector(dir, dist), target, 700);
+  }
   let anim = null;
   function tween(pos, target, ms = 1100) {
     anim = { p0: camera.position.clone(), t0: controls.target.clone(), p1: pos, t1: target, start: performance.now(), ms };
@@ -236,7 +281,7 @@ export async function start(el, cfg) {
   const colors = [accent, accent2];
   function drawGrid(bid) {
     clear(); pulse.length = 0;
-    const B = blocks[bid], c = C(bid);
+    const B = blocks[bid], c = C(bid), F = floorsOf(bid);
     const grow = growOf() * 0.3;
     units.filter((u) => u.b === bid).forEach((u) => {
       const cell = cellOf(u, B, c);
@@ -249,15 +294,142 @@ export async function start(el, cfg) {
       const lab = document.createElement('div'); lab.className = 'lc-num'; lab.textContent = u.num;
       const o = new CSS2DObject(lab); o.position.set((min.x + max.x) / 2, (min.y + max.y) / 2, cell.facing > 0 ? max.z : min.z); o.userData.facing = cell.facing; layer.add(o);
     });
+    // лицевая сторона: подписи подъездов у земли, их границы — синие линии, верх 1-го этажа — оранжевая
+    const facing = c.flipZ ? -1 : 1, sp = splitsOf(B, c);
+    for (let e = 0; e < B.entr.length; e++) entrLabel(B, c, e, facing, overlay);
+    for (let k = 1; k < sp.length - 1; k++) { const x = (c.flipX ? 1 - sp[k] : sp[k]) - 0.5; thick(onWall([[x, -0.5], [x, 0.5]], facing), accent2, 3); }
+    if (F > 1) { const y = groundOf(c, F) - 0.5; thick(onWall([[-0.5, y], [0.5, y]], facing), amber, 2.5); }
+    buildHandles();
   }
+
+  // ---------- точки на рамке: тянуть сторону, границу подъезда, верх 1-го этажа ----------
+  const handles = new THREE.Group(); handles.visible = false; scene.add(handles);
+  const hGeo = new THREE.SphereGeometry(1, 20, 14), hMats = {};
+  const hMat = (col) => (hMats[col] ??= new THREE.MeshBasicMaterial({ color: col, depthTest: false, transparent: true, opacity: 0.96 }));
+  const hRing = new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false });
+  function buildHandles() {
+    while (handles.children.length) handles.remove(handles.children[0]);
+    if (!cfg.calibrate || curBlock == null) return;
+    const c = C(curBlock), B = blocks[curBlock], F = floorsOf(curBlock), fz = c.flipZ ? -0.5 : 0.5;
+    const add = (kind, local, data, col) => {
+      const m = new THREE.Mesh(hGeo, hMat(col)); m.renderOrder = 51;
+      const ring = new THREE.Mesh(hGeo, hRing); ring.scale.setScalar(1.35); ring.renderOrder = 50; m.add(ring);   // белая обводка — точку видно на любом фоне
+      m.userData = { kind, local: new THREE.Vector3(...local), ...data };
+      handles.add(m);
+    };
+    [[0, 1], [0, -1], [1, 1], [1, -1], [2, 1], [2, -1]].forEach(([axis, sign]) => { const l = [0, 0, 0]; l[axis] = 0.5 * sign; add('face', l, { axis, sign }, accent); });
+    const sp = splitsOf(B, c);
+    for (let k = 1; k < sp.length - 1; k++) add('entr', [(c.flipX ? 1 - sp[k] : sp[k]) - 0.5, 0.5, fz], { k }, accent2);
+    if (F > 1) add('gf', [-0.5, groundOf(c, F) - 0.5, fz], {}, amber);
+    placeHandles();
+  }
+  const _w = new THREE.Vector3();
+  function placeHandles() {
+    if (!handles.children.length) return;
+    const k = (2 * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, el.clientHeight);
+    for (const h of handles.children) {
+      h.position.copy(frame.localToWorld(_w.copy(h.userData.local)));
+      h.scale.setScalar(camera.position.distanceTo(h.position) * k * (h === hoverH ? 9 : 7));
+    }
+  }
+  let hoverH = null, drag = null, dirty = false;
+  const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
+  const setRay = (e) => {
+    const r = canvas.getBoundingClientRect();
+    ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ptr, camera);
+  };
+  const hitHandle = () => (handles.visible && handles.children.length ? ray.intersectObjects(handles.children, false)[0]?.object || null : null);
+
+  // ---------- отмена шагов ----------
+  const undoStack = [];
+  const snap = () => JSON.stringify(C(curBlock));
+  function remember(before, bid = curBlock) {
+    if (before && before !== JSON.stringify(C(bid))) { undoStack.push({ bid, s: before }); if (undoStack.length > 80) undoStack.shift(); }
+    cfg.onUndo && cfg.onUndo(undoStack.length);
+  }
+  function changed() { applyFrame(curBlock); drawGrid(curBlock); cfg.onChange && cfg.onChange(C(curBlock)); }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (!cfg.calibrate || e.button !== 0) return;
+    setRay(e);
+    const h = hitHandle();
+    if (!h) return;
+    // точку держим мы: вращение камеры и стрелки рамки в это время молчат
+    e.stopImmediatePropagation(); e.preventDefault();
+    const u = h.userData, plane = new THREE.Plane();
+    let axisW = null;
+    if (u.kind === 'face') {
+      axisW = new THREE.Vector3().setComponent(u.axis, 1).applyQuaternion(frame.quaternion).normalize();
+      const cd = camera.getWorldDirection(new THREE.Vector3()), n = cd.clone().addScaledVector(axisW, -cd.dot(axisW));
+      if (n.lengthSq() < 1e-8) n.set(0, 1, 0).addScaledVector(axisW, -axisW.y);
+      plane.setFromNormalAndCoplanarPoint(n.normalize(), h.position);
+    } else plane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 0, 1).applyQuaternion(frame.quaternion), h.position);
+    const p0 = ray.ray.intersectPlane(plane, new THREE.Vector3());
+    if (!p0) return;
+    const c = C(curBlock);
+    drag = { u, plane, axisW, p0, c0: c.c.slice(), s0: c.s.slice(), before: snap(), id: e.pointerId };
+    controls.enabled = false; if (tc) tc.enabled = false;
+    canvas.setPointerCapture(e.pointerId);
+    canvas.style.cursor = 'grabbing';
+  }, { capture: true });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!cfg.calibrate) return;
+    setRay(e);
+    if (!drag) {
+      if (e.buttons) return;
+      const h = hitHandle();
+      if (h !== hoverH) { hoverH = h; canvas.style.cursor = h ? 'grab' : ''; }
+      return;
+    }
+    const p = ray.ray.intersectPlane(drag.plane, new THREE.Vector3());
+    if (!p) return;
+    const c = C(curBlock), u = drag.u;
+    if (u.kind === 'face') {
+      // сторона едет за мышью, противоположная стоит на месте
+      const t = p.clone().sub(drag.p0).dot(drag.axisW), s0 = drag.s0[u.axis];
+      const sN = Math.max(s0 * 0.03 + 0.05, s0 + t * u.sign), d = ((sN - s0) / 2) * u.sign;
+      c.s = drag.s0.slice(); c.s[u.axis] = +sN.toFixed(4);
+      c.c = drag.c0.map((v, i) => +(v + drag.axisW.getComponent(i) * d).toFixed(4));
+    } else {
+      const l = frame.worldToLocal(p.clone());
+      if (u.kind === 'entr') {
+        const B = blocks[curBlock], sp = splitsOf(B, c);
+        let x = clamp(l.x + 0.5, 0, 1); if (c.flipX) x = 1 - x;
+        sp[u.k] = clamp(x, sp[u.k - 1] + 0.03, sp[u.k + 1] - 0.03);
+        c.ex = sp.slice(1, -1).map((v) => +v.toFixed(4));
+      } else if (u.kind === 'gf') {
+        const F = floorsOf(curBlock), g = clamp(l.y + 0.5, 0.35 / F, 0.6);
+        c.gf = +(g * c.s[1]).toFixed(2);
+      }
+    }
+    dirty = true;
+  });
+  const endDrag = () => {
+    if (!drag) return;
+    try { canvas.releasePointerCapture(drag.id); } catch (e) { /* уже отпущен */ }
+    const before = drag.before; drag = null; dirty = false;
+    controls.enabled = true; if (tc) tc.enabled = true;
+    canvas.style.cursor = hoverH ? 'grab' : '';
+    changed(); remember(before);
+  };
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+
   function setCalibrate(on) {
     if (on && !tc) {
-      tc = new TransformControls(camera, renderer.domElement);
-      tc.addEventListener('dragging-changed', (e) => { controls.enabled = !e.value; if (!e.value) { readFrame(curBlock); cfg.onChange && cfg.onChange(C(curBlock)); drawGrid(curBlock); } });
-      tc.addEventListener('objectChange', () => { if (tc.getMode() === 'rotate') { frame.rotation.x = 0; frame.rotation.z = 0; } });
+      tc = new TransformControls(camera, canvas);
+      let before = null;
+      tc.addEventListener('dragging-changed', (e) => {
+        controls.enabled = !e.value;
+        if (e.value) { before = snap(); return; }
+        readFrame(curBlock); changed(); remember(before);
+      });
+      tc.addEventListener('objectChange', () => { if (tc.getMode() === 'rotate') { frame.rotation.x = 0; frame.rotation.z = 0; } placeHandles(); });
       scene.add(tc.getHelper ? tc.getHelper() : tc);
       tc.attach(frame);
       mode('translate');
+      handles.visible = true;
     }
   }
   function mode(m) {
@@ -303,41 +475,34 @@ export async function start(el, cfg) {
     }
     selected = null;
   }
-  const pick = (e) => {
-    const r = renderer.domElement.getBoundingClientRect();
-    ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-    ray.setFromCamera(ptr, camera);
-    return ray.intersectObject(statusGroup, true)[0]?.object || null;
-  };
-  renderer.domElement.addEventListener('pointermove', (e) => {
+  const pickTile = (e) => { setRay(e); return ray.intersectObject(statusGroup, true)[0]?.object || null; };
+  canvas.addEventListener('pointermove', (e) => {
     if (!statusGroup.children.length || e.buttons) return;
-    const o = pick(e);
+    const o = pickTile(e);
     if (o === hovered) return;
     if (hovered) hovered.material = tileMat(byId[hovered.userData.unit]?.s || 'free', false);
     hovered = o;
-    renderer.domElement.style.cursor = o ? 'pointer' : '';
+    canvas.style.cursor = o ? 'pointer' : '';
     if (o) { o.material = tileMat(byId[o.userData.unit]?.s || 'free', true); cfg.onHover && cfg.onHover(byId[o.userData.unit]); }
   });
   let downAt = null;
-  renderer.domElement.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
-  renderer.domElement.addEventListener('pointerup', (e) => {
+  canvas.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
+  canvas.addEventListener('pointerup', (e) => {
     if (!statusGroup.children.length || !downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;   // это было вращение, а не клик
-    const o = pick(e);
+    const o = pickTile(e);
     if (o && cfg.onPick) cfg.onPick(byId[o.userData.unit]);
   });
 
-  // ---------- выбор кликом (двойной клик в настройке: поставить рамку в точку) ----------
-  const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
-  renderer.domElement.addEventListener('dblclick', (e) => {
+  // ---------- двойной щелчок в настройке: поставить рамку в точку ----------
+  canvas.addEventListener('dblclick', (e) => {
     if (!cfg.calibrate) return;
-    const r = renderer.domElement.getBoundingClientRect();
-    ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-    ray.setFromCamera(ptr, camera);
+    setRay(e);
     const hit = ray.intersectObject(model, true)[0];
     if (!hit) return;
+    const before = snap();
     frame.position.x = hit.point.x; frame.position.z = hit.point.z;
     frame.position.y = hit.point.y + frame.scale.y / 2 - 0.01;
-    frame.updateMatrixWorld(true); readFrame(curBlock); cfg.onChange && cfg.onChange(C(curBlock)); drawGrid(curBlock);
+    frame.updateMatrixWorld(true); readFrame(curBlock); changed(); remember(before);
   });
 
   // номера на задней стене не показываем поверх лицевых: подпись видна, только если её фасад смотрит на камеру
@@ -351,6 +516,16 @@ export async function start(el, cfg) {
     }
   }
 
+  // ---------- автопривязка ----------
+  /** Спрятать рамку, подсветку и точки на время снимков фасада */
+  function hideAll() {
+    const list = [frame, overlay, statusGroup, handles, tc && (tc.getHelper ? tc.getHelper() : tc)].filter(Boolean), was = list.map((o) => o.visible);
+    list.forEach((o) => { o.visible = false; });
+    return () => list.forEach((o, i) => { o.visible = was[i]; });
+  }
+  let autoMod = null;
+  const loadAuto = async () => (autoMod ??= await import(cfg.autoSrc));
+
   // ---------- цикл ----------
   const clock = new THREE.Clock();
   const loop = () => {
@@ -360,7 +535,8 @@ export async function start(el, cfg) {
       camera.position.lerpVectors(anim.p0, anim.p1, e); controls.target.lerpVectors(anim.t0, anim.t1, e);
       if (k >= 1) anim = null;
     }
-    if (cfg.calibrate) hideBackLabels();
+    if (dirty) { dirty = false; applyFrame(curBlock); drawGrid(curBlock); cfg.onChange && cfg.onChange(C(curBlock)); }
+    if (cfg.calibrate) { hideBackLabels(); placeHandles(); }
     pulse.forEach((m) => { m.opacity = 0.45 + 0.22 * (0.5 + 0.5 * Math.sin(t * 3)); });
     controls.update();
     renderer.render(scene, camera); labels.render(scene, camera);
@@ -370,22 +546,72 @@ export async function start(el, cfg) {
   overviewModel();
   const api = {
     blocks: blockIds, isCalibrated, units: byId,
-    show(id, fly = true) { const u = showUnit(id, fly); if (u && cfg.onShow) cfg.onShow(u, isCalibrated(u.b)); return u; },
+    isAuto: (bid) => !!(cal[bid] && cal[bid].auto),
+    cal: (bid) => C(bid),
+    markSaved(bid) { saved.add(bid); },
+    show(id, fly = true) { const u = showUnit(id, fly); if (u && cfg.onShow) cfg.onShow(u, isCalibrated(u.b), api.isAuto(u.b)); return u; },
     focusSelected() { if (selected) focus(cellOf(selected, blocks[selected.b], C(selected.b))); },
-    overview, overviewModel, statusView,
+    overview, overviewModel, statusView, view,
     // настройка
     calibrate(bid) { cfg.calibrate = true; frameLines.visible = true; curBlock = bid; applyFrame(bid); setCalibrate(true); drawGrid(bid); overview(); return C(bid); },
     mode,
     get: () => C(curBlock),
-    set(patch) { Object.assign(C(curBlock), patch); applyFrame(curBlock); drawGrid(curBlock); return C(curBlock); },
-    fitModel() { const d = defaults(curBlock); Object.assign(C(curBlock), { c: d.c, s: d.s, r: 0 }); applyFrame(curBlock); drawGrid(curBlock); overview(); return C(curBlock); },
+    set(patch) { const before = snap(); Object.assign(C(curBlock), patch); changed(); remember(before); return C(curBlock); },
+    /** Подъезды снова поровну */
+    even() { const before = snap(); delete C(curBlock).ex; changed(); remember(before); return C(curBlock); },
+    undo() {
+      const u = undoStack.pop();
+      if (u) { cal[u.bid] = JSON.parse(u.s); if (u.bid === curBlock) changed(); }
+      cfg.onUndo && cfg.onUndo(undoStack.length);
+      return C(curBlock);
+    },
+    /** Человек подтвердил привязку — отметка «расставил ИИ» снимается */
+    confirm(bid = curBlock) { delete C(bid).auto; },
+    /**
+     * Автопривязка всех корпусов (или only): форма модели + ИИ (opts.ai). Рамки ставятся, отчёт — в cal[bid].auto.
+     * @returns {Promise<Object<string, {by, mf, doors, warn}>>}
+     */
+    async autoFit(opts = {}) {
+      const mod = await loadAuto(), meshes = mod.meshesOf(model), zones = mod.candidates(THREE, meshes, mBox);
+      const ids = opts.only || blockIds, out = {};
+      const restore = hideAll();
+      try {
+        for (const bid of ids) {
+          const i = blockIds.indexOf(bid), zone = zones[i] || zones[0];
+          const keep = (x, z) => x >= zone.min.x && x <= zone.max.x && z >= zone.min.z && z <= zone.max.z;
+          const r = await mod.fitBlock({ THREE, renderer, scene, meshes, keep, nearR: null, block: blocks[bid], ai: opts.ai || null, debug: opts.debug });
+          if (!r) continue;
+          if (opts.debug) api.lastDebug = r.dbg;
+          if (i >= zones.length) r.report.warn.push('blocks');
+          const before = cal[bid] ? JSON.stringify(cal[bid]) : null;
+          cal[bid] = Object.assign(r.cal, { auto: r.report });
+          if (before) remember(before, bid);
+          out[bid] = r.report;
+        }
+      } finally { restore(); }
+      if (curBlock != null) { applyFrame(curBlock); if (cfg.calibrate) { drawGrid(curBlock); overview(); } }
+      return out;
+    },
+    /** «Прижать к дому»: рамку — по стенам здания там, где она стоит сейчас (крыша и земля не в счёт); этажи и подъезды не трогаем */
+    async snap(opts = {}) {
+      const mod = await loadAuto(), c = C(curBlock), cs = Math.cos(c.r), sn = Math.sin(c.r);
+      const keep = (x, z) => { const dx = x - c.c[0], dz = z - c.c[2]; return Math.abs(dx * cs - dz * sn) <= c.s[0] * 0.6 && Math.abs(dx * sn + dz * cs) <= c.s[2] * 0.6; };
+      const restore = hideAll();
+      let r = null;
+      try { r = await mod.fitBlock({ THREE, renderer, scene, meshes: mod.meshesOf(model), keep, nearR: c.r, block: { floors: floorsOf(curBlock), entr: blocks[curBlock].entr }, ai: null, debug: opts.debug }); if (opts.debug && r) api.lastDebug = r.dbg; } finally { restore(); }
+      if (!r) return null;
+      const before = snap();
+      Object.assign(c, { c: r.cal.c, s: r.cal.s, r: r.cal.r });
+      changed(); remember(before);
+      return c;
+    },
     block: () => curBlock,
     // карточка закрыта — не рисуем (в iframe внутри закрытого окна)
     pause(on) { renderer.setAnimationLoop(on ? null : loop); },
     // проверка из консоли / тестов: рамка и подсветка в мировых координатах
     debug() {
       const hl = layer.children.find((o) => o.isMesh), b = hl ? new THREE.Box3().setFromObject(hl) : null;
-      return { frame: { p: frame.position.toArray(), s: frame.scale.toArray(), r: frame.rotation.y }, cell: b && { min: b.min.toArray(), max: b.max.toArray() }, model: { min: mBox.min.toArray(), max: mBox.max.toArray() }, D, grow: growOf() };
+      return { frame: { p: frame.position.toArray(), s: frame.scale.toArray(), r: frame.rotation.y }, cell: b && { min: b.min.toArray(), max: b.max.toArray() }, model: { min: mBox.min.toArray(), max: mBox.max.toArray() }, D, grow: growOf(), handles: handles.children.length };
     },
   };
   return api;

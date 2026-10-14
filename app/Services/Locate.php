@@ -3,12 +3,17 @@
 namespace App\Services;
 
 use App\Models\ObjectMedia;
+use App\Models\User;
+use App\Models\Workspace;
+use App\Services\Ai\AiService;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * «Где квартира в доме» на настоящей 3D-модели (assets/locate3d.js).
  * В модели нет сведений о квартирах, поэтому администратор объектов один раз ставит рамку на здание (корпус):
  * её положение, размер и поворот, число этажей. Дальше квартира находится сама: подъезды делят рамку по длине,
  * этаж — по высоте, квартиры этажа — по фасадам (половина — на лицевой стороне, остальные — на задней).
+ * Рамку сначала ставит автопривязка (assets/locate-auto.js: геометрия модели + ИИ смотрит на фасады), человек только поправляет.
  * Настройка хранится в meta.locate файла «Фасад и здание 3D».
  */
 class Locate
@@ -87,12 +92,86 @@ class Locate
     {
         $v3 = fn ($a) => array_map(fn ($x) => round((float) $x, 4), array_slice(array_pad((array) $a, 3, 0), 0, 3));
         $s = array_map(fn ($x) => max(0.01, abs($x)), $v3($d['s'] ?? [1, 1, 1]));
-
-        return [
+        $out = [
             'c' => $v3($d['c'] ?? [0, 0, 0]), 's' => $s, 'r' => round((float) ($d['r'] ?? 0), 5),
             'floors' => max(1, min(200, (int) ($d['floors'] ?? 1))), 'gf' => round(max(0, min(30, (float) ($d['gf'] ?? 0))), 2),
             'rows' => ((int) ($d['rows'] ?? 2)) === 1 ? 1 : 2,
             'back' => ($d['back'] ?? 'rev') === 'fwd' ? 'fwd' : 'rev', 'flipX' => (bool) ($d['flipX'] ?? false), 'flipZ' => (bool) ($d['flipZ'] ?? false),
         ];
+        // границы подъездов вдоль рамки (доли длины): подъезды бывают разной ширины; нет — делим поровну
+        $ex = array_values(array_filter(array_map(fn ($x) => round((float) $x, 4), (array) ($d['ex'] ?? [])), fn ($x) => $x > 0 && $x < 1));
+        sort($ex);
+        if ($ex && count($ex) <= 60) {
+            $out['ex'] = $ex;
+        }
+        // рамку поставил ИИ (или расчёт по геометрии) и человек её ещё не проверял
+        if (! empty($d['auto']) && is_array($d['auto'])) {
+            $a = $d['auto'];
+            $out['auto'] = array_filter([
+                'by' => ($a['by'] ?? '') === 'ai' ? 'ai' : 'geo',
+                'mf' => isset($a['mf']) ? max(0, min(300, (int) $a['mf'])) : null,
+                'doors' => isset($a['doors']) ? max(0, min(100, (int) $a['doors'])) : null,
+                'warn' => array_values(array_intersect((array) ($a['warn'] ?? []), self::WARN)) ?: null,
+                'at' => now()->toDateString(),
+            ], fn ($v) => $v !== null);
+        }
+
+        return $out;
+    }
+
+    /** Что автопривязка сообщает человеку: этажей в модели не столько, входов не столько, это не один дом, корпусов меньше */
+    public const WARN = ['floors', 'doors', 'notBuilding', 'blocks'];
+
+    /**
+     * ИИ смотрит на два фасада дома (картинка из assets/locate-auto.js) и отвечает: сколько этажей, где входы, какая сторона лицевая.
+     * Ответ кэшируется по картинке: одна и та же модель второй раз лимит не тратит.
+     *
+     * @return array{ok: bool, a?: array, note?: string}
+     */
+    public static function askAi(Workspace $ws, ?User $user, string $jpeg, int $entrances): array
+    {
+        $ai = app(AiService::class);
+        if (! $ws->aiAllowed() || ! $ai->providerFor($ws)) {
+            return ['ok' => false, 'note' => 'off'];
+        }
+        $limit = $ws->aiLimit();
+        if ($limit > 0 && $ws->aiUsedThisMonth() >= $limit) {
+            return ['ok' => false, 'note' => 'limit'];
+        }
+        $key = 'locai:'.md5($jpeg).':'.$entrances;
+        if ($hit = Cache::get($key)) {
+            return ['ok' => true, 'a' => $hit];
+        }
+        $prompt = 'You analyze a 3D model of an apartment building for a real-estate app. The image has two orthographic elevation renders of the SAME building, '
+            .'panel "A" (left) and panel "B" (right) show opposite facades. Each panel is the gray rectangle under its letter. '
+            .'Coordinates for each panel: x from 0 (panel left edge) to 1000 (panel right edge), y from 0 (panel top edge) to 1000 (panel bottom edge).'
+            ."\nThe building should have {$entrances} entrance(s) (stairwell doors, often with a canopy or porch) — use it only as a hint where to look; report what you actually see."
+            ."\nAnswer ONLY with JSON, no comments:"
+            .'{"is_building":true|false (false if it is not one building: a city district, terrain, interior, furniture, a car…),'
+            .'"floors":N (above-ground storeys with regular rows of windows, the ground floor included, roof/attic not included),'
+            .'"attic":true|false (a mansard/attic storey with dormer windows above the eaves),'
+            .'"front":"A"|"B" (the facade with the entrance doors),'
+            .'"doors":[x,…] (centers of the entrance doors on the front facade, left to right, x in that panel; shop doors not included),'
+            .'"ground_y":y (where the walls meet the ground on the front panel),'
+            .'"eave_y":y (top of the walls of the highest full storey on the front panel — where the roof or parapet starts),'
+            .'"first_floor_top_y":y|null (top of the ground storey on the front panel if it is clearly taller than the others — shops, lobby; else null)}';
+        $text = $ai->see($ws, $user, 'locate', $prompt, $jpeg, 'image/jpeg', 6000);
+        if ($text === null || ! preg_match('/\{.*\}/s', $text, $m) || ! is_array($j = json_decode($m[0], true))) {
+            return ['ok' => false, 'note' => 'fail'];
+        }
+        $n = fn ($v, $max = 1000) => is_numeric($v) ? max(0, min($max, (float) $v)) : null;
+        $doors = array_values(array_filter(array_map($n, array_slice((array) ($j['doors'] ?? []), 0, 40)), fn ($v) => $v !== null));
+        sort($doors);
+        $a = [
+            'is_building' => ($j['is_building'] ?? true) !== false,
+            'floors' => is_numeric($j['floors'] ?? null) ? max(0, min(300, (int) $j['floors'])) : null,
+            'attic' => (bool) ($j['attic'] ?? false),
+            'front' => ($j['front'] ?? 'A') === 'B' ? 'B' : 'A',
+            'doors' => $doors,
+            'ground_y' => $n($j['ground_y'] ?? null), 'eave_y' => $n($j['eave_y'] ?? null), 'first_floor_top_y' => $n($j['first_floor_top_y'] ?? null),
+        ];
+        Cache::put($key, $a, now()->addDays(30));
+
+        return ['ok' => true, 'a' => $a];
     }
 }

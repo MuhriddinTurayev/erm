@@ -79,6 +79,32 @@ class AiService
             'date' => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($j['date'] ?? '')) ? $j['date'] : null];
     }
 
+    /**
+     * Вопрос по картинке с учётом расхода (фасад дома для привязки квартир). null — ИИ не подключён или не ответил.
+     */
+    public function see(Workspace $ws, ?User $user, string $kind, string $prompt, string $bytes, string $mime, int $maxTokens = 800): ?string
+    {
+        $p = $this->providerFor($ws);
+        if ($p && $p->driver === 'deepseek') {   // DeepSeek не видит картинки — берём другое подключение
+            $p = AiProvider::active()->where('driver', '!=', 'deepseek')->first();
+        }
+        if (! $p) {
+            return null;
+        }
+        $t = microtime(true);
+        $log = ['workspace_id' => $ws->id, 'user_id' => $user?->id, 'ai_provider_id' => $p->id, 'driver' => $p->driver, 'model' => $p->model, 'kind' => $kind];
+        try {
+            $r = $this->gateway->vision($p, $prompt, $bytes, $mime, $maxTokens);
+        } catch (AiException $e) {
+            AiUsage::create($log + ['ok' => false, 'error' => mb_substr($e->getMessage(), 0, 500), 'ms' => (int) ((microtime(true) - $t) * 1000)]);
+
+            return null;
+        }
+        AiUsage::create($log + ['ok' => true, 'input_tokens' => $r['in'], 'output_tokens' => $r['out'], 'ms' => (int) ((microtime(true) - $t) * 1000)]);
+
+        return $r['text'];
+    }
+
     /** @return array{text: string, provider: array} */
     public function ask(?Workspace $ws, ?User $user, string $kind, string $system, array $messages, ?int $providerId = null, ?int $maxTokens = null): array
     {

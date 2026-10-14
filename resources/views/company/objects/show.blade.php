@@ -161,7 +161,8 @@ const RH = @json($roleHelp); document.getElementById('acc-role')?.addEventListen
                 · {{ strtoupper($m->ext) }}@if (! empty($m->meta['src'])) ({{ __('из') }} {{ strtoupper(pathinfo($m->meta['src'], PATHINFO_EXTENSION)) }})@endif · {{ file_size($m->size) }}@if (! empty($m->meta['views'])) · {{ __('комнат в 3D') }}: {{ count($m->meta['views']) }}@endif</small></div>
               @if ($canMedia && $kind === 'exterior')
               {{-- привязка корпусов: квартиры подсвечиваются на этой модели в продажах, на сайте и в кабинете покупателя --}}
-              <div class="mc-edit"><a class="btn btn-s {{ empty($m->meta['locate']) ? 'btn-soft' : '' }}" href="/company/objects/{{ $pid }}/locate?calibrate=1&m={{ $m->id }}" target="_blank" style="width:100%">{!! ic('target', '', 15) !!}{{ empty($m->meta['locate']) ? __('Привязать квартиры к модели') : __('Квартиры привязаны ✓') }}</a></div>
+              <div class="mc-edit">@php $byAi = collect($m->meta['locate']['blocks'] ?? [])->contains(fn ($b) => ! empty($b['auto'])); @endphp
+                <a class="btn btn-s {{ empty($m->meta['locate']) || $byAi ? 'btn-soft' : '' }}" href="/company/objects/{{ $pid }}/locate?calibrate=1&m={{ $m->id }}" target="_blank" style="width:100%">{!! ic($byAi ? 'sparkles' : 'target', '', 15) !!}{{ empty($m->meta['locate']) ? __('Привязать квартиры к модели') : ($byAi ? __('Квартиры расставил ИИ — проверить') : __('Квартиры привязаны ✓')) }}</a></div>
               @endif
               @if ($canMedia)
               <details class="mc-edit"><summary>{!! ic('pencil', '', 14) !!}{{ __('Настроить') }}</summary>
@@ -340,6 +341,7 @@ const RH = @json($roleHelp); document.getElementById('acc-role')?.addEventListen
   /* загрузка частями по 5 МБ (большие модели проходят даже при маленьком лимите сервера) */
   async function upload(items) {
     busy(true); $('cv-go').disabled = true; $('up-prog').hidden = false;
+    let lastId = null;
     for (const [f, extra] of items) {
       const CH = 5 * 1024 * 1024, total = Math.max(1, Math.ceil(f.size / CH)), id = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join('');
       $('up-name').textContent = (extra.src ? extra.src + ' → ' : '') + f.name;
@@ -355,8 +357,11 @@ const RH = @json($roleHelp); document.getElementById('acc-role')?.addEventListen
         do { r = await fetch('/company/objects/{{ $pid }}/media', { method: 'POST', body: fd, headers: { Accept: 'application/json' } }).catch(() => null); } while ((!r || r.status >= 500) && ++tries < 3);
         if (!r || !r.ok) { let m = @json(__('Ошибка загрузки')); try { const j = await r.json(); m = j.error || j.message || m; } catch (e) {} await ui.alert(m); location.reload(); return; }
         const p = Math.round((i + 1) / total * 100); $('up-pct').textContent = p + '%'; $('up-bar').style.width = p + '%';
+        if (i === total - 1) { try { lastId = (await r.json()).id || null; } catch (e) { lastId = null; } }
       }
     }
+    // новая модель здания: сразу к привязке — ИИ сам расставит квартиры, останется проверить
+    if (kind.value === 'exterior' && items.length === 1 && lastId && !$('up-attach').value) { location.href = '/company/objects/{{ $pid }}/locate?calibrate=1&auto=1&m=' + lastId; return; }
     location.href = '?tab=media';
   }
   @if (request('kind')) document.getElementById('upload-card')?.scrollIntoView({ block: 'start' }); @endif

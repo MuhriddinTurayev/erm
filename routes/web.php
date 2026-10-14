@@ -140,6 +140,7 @@ Route::middleware(['auth', 'role:company'])->group(function () {
                 // квартира на 3D-модели дома; привязка корпусов к модели
                 Route::get('/objects/{pid}/locate', [Company\LocateController::class, 'show']);
                 Route::post('/media/{media}/locate', [Company\LocateController::class, 'save']);
+                Route::post('/media/{media}/locate/ai', [Company\LocateController::class, 'ai'])->middleware('throttle:12,1');
                 Route::post('/objects/{pid}/account', [Company\ObjectController::class, 'account']);
                 Route::post('/objects/{pid}/users/{user}/password', [Company\ObjectController::class, 'resetPassword']);
                 Route::post('/objects/{pid}/media', [Company\ObjectController::class, 'mediaUpload']);
