@@ -35,6 +35,25 @@ Artisan::command('oftob:user {email} {password} {--name=Руководитель
     return 0;
 })->purpose('Создать пользователя Oftob_Sohtumon');
 
+/* Забыли пароль (например, владельца платформы): php artisan oftob:password email@mail.uz НовыйПароль — «запомнить меня» на других устройствах сбрасывается */
+Artisan::command('oftob:password {email} {password}', function (string $email, string $password) {
+    $u = User::byEmail($email);
+    if (! $u) {
+        $this->error('Такого email нет');
+
+        return 1;
+    }
+    if (mb_strlen($password) < 8) {
+        $this->error('Пароль — не короче 8 символов');
+
+        return 1;
+    }
+    $u->forceFill(['password' => $password, 'remember_token' => \Illuminate\Support\Str::random(60)])->save();
+    $this->info("Готово: пароль для {$email} изменён");
+
+    return 0;
+})->purpose('Сменить пароль пользователя');
+
 /* Ежедневные отчёты руководителям: проверка каждую минуту, отправка в выбранное компанией время */
 Artisan::command('oftob:reports', function (DailyReportService $svc) {
     $n = $svc->runDue();
