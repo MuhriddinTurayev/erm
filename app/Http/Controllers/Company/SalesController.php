@@ -66,6 +66,7 @@ class SalesController extends ErpController
             'overdueList' => array_values(array_filter($deals, fn ($a) => $a['overdue'] > 0)),
             'leads' => LeadInbox::where('workspace_id', $ws->id)->latest('id')->limit(8)->get(),
             'media' => $media, 'types' => ObjectController::layouts($p), 'ready' => Inventory::ready($p),
+            'model' => \App\Services\Locate::model($ws->id, $pid),   // дом в 3D: квартира подсвечивается в карточке
             'links' => BuyerLink::where('workspace_id', $ws->id)->where('project_id', $pid)->pluck('token', 'apt_id'),
             'canSell' => auth()->user()->canEdit() && in_array(auth()->user()->role, ['admin', 'manager', 'accountant', 'cashier'], true),
         ]);

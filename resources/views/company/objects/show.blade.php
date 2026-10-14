@@ -159,6 +159,10 @@ const RH = @json($roleHelp); document.getElementById('acc-role')?.addEventListen
               </a>
               <div class="mc-b"><b>{{ $m->title }}</b><small class="muted">{{ $m->layout && isset($types[$m->layout]) ? $types[$m->layout]['name'] : ($m->rooms !== null ? ($m->rooms ? $m->rooms.__('-комн.') : __('коммерция')) : __('для всех')) }}@if (! empty($m->meta['room'])) · {{ $m->meta['room'] }}@endif
                 · {{ strtoupper($m->ext) }}@if (! empty($m->meta['src'])) ({{ __('из') }} {{ strtoupper(pathinfo($m->meta['src'], PATHINFO_EXTENSION)) }})@endif · {{ file_size($m->size) }}@if (! empty($m->meta['views'])) · {{ __('комнат в 3D') }}: {{ count($m->meta['views']) }}@endif</small></div>
+              @if ($canMedia && $kind === 'exterior')
+              {{-- привязка корпусов: квартиры подсвечиваются на этой модели в продажах, на сайте и в кабинете покупателя --}}
+              <div class="mc-edit"><a class="btn btn-s {{ empty($m->meta['locate']) ? 'btn-soft' : '' }}" href="/company/objects/{{ $pid }}/locate?calibrate=1&m={{ $m->id }}" target="_blank" style="width:100%">{!! ic('target', '', 15) !!}{{ empty($m->meta['locate']) ? __('Привязать квартиры к модели') : __('Квартиры привязаны ✓') }}</a></div>
+              @endif
               @if ($canMedia)
               <details class="mc-edit"><summary>{!! ic('pencil', '', 14) !!}{{ __('Настроить') }}</summary>
                 <form method="post" action="/company/media/{{ $m->id }}" class="form" style="grid-template-columns:1fr 1fr;gap:8px">@csrf

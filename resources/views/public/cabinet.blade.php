@@ -9,7 +9,11 @@
     <p class="muted">{{ $a['buyer'] }} · {{ __('Подъезд') }} {{ $a['section'] }}, {{ __('этаж') }} {{ $a['floor'] }} · {{ $a['rooms'] ? $a['rooms'].__('-комн.') : __('Коммерция') }} · {{ $a['area'] }} {{ __('м²') }}</p>
   </div>
   @if (\App\Models\ObjectMedia::of($ws->id)->where('project_id', $bl->project_id)->where('is_public', true)->whereIn('kind', ['exterior', 'interior', 'pano'])->exists())
-  <div><a class="btn btn-p btn-l" href="/b/{{ $bl->token }}/3d" target="_blank">{!! ic('box') !!}{{ __('3D-тур по дому и квартире') }}</a></div>
+  @php $locM = \App\Services\Locate::model($ws->id, $bl->project_id, null, true); @endphp
+  <div class="flex">
+    @if ($locM && ! empty($locM->meta['locate']['blocks']))<a class="btn btn-p btn-l" href="/b/{{ $bl->token }}/locate" target="_blank">{!! ic('target') !!}{{ __('Где моя квартира в доме') }}</a>@endif
+    <a class="btn btn-l" href="/b/{{ $bl->token }}/3d" target="_blank">{!! ic('box') !!}{{ __('3D-тур по дому и квартире') }}</a>
+  </div>
   @endif
 </section>
 

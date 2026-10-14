@@ -90,6 +90,10 @@
   <div class="modal-h"><h3 id="ap-title"></h3><button type="button" class="icon-btn" data-close>{!! ic('x') !!}</button></div>
   <div class="modal-b">
     <div class="sum-line" id="ap-sub" style="margin-bottom:14px"></div>
+    @if ($model)
+    {{-- где квартира в доме: 3D-модель здания, квартира подсвечена (company/objects/locate) --}}
+    <div class="ap-3d"><iframe id="ap-3d" title="{{ __('Квартира в 3D') }}" allow="fullscreen"></iframe></div>
+    @endif
     <div class="grid g2">
       <form method="post" id="ap-form" class="form" style="grid-template-columns:1fr 1fr;align-content:start">@csrf
         <label class="field"><span>{{ __('Статус') }}</span><select name="status">@foreach ($ST as $k => $v)<option value="{{ $k }}">{{ __($v) }}</option>@endforeach</select></label>
@@ -124,7 +128,7 @@
 @push('scripts')
 <script>
 (() => {
-  const A = @json($js), M = @json($mediaJs), KN = @json($kinds), CUR = @json(__($cur)), PID = @json($pid), canDel = @json(auth()->user()->isAdmin() || auth()->user()->role === 'accountant');
+  const MODEL = @json($model?->id), A = @json($js), M = @json($mediaJs), KN = @json($kinds), CUR = @json(__($cur)), PID = @json($pid), canDel = @json(auth()->user()->isAdmin() || auth()->user()->role === 'accountant');
   const ST = @json(collect($ST)->map(fn ($v) => __($v))), T = { kv: @json(__('Кв.')), k: @json(__('Коммерция')), r: @json(__('-комн.')), sec: @json(__('Подъезд')), fl: @json(__('этаж')),
     none: @json(__('Оплат пока нет')), next: @json(__('Следующий платёж')), od: @json(__('Просрочено')), link: @json(__('Ссылка для покупателя')), mk: @json(__('Создать кабинет покупателя')),
     t3: @json(__('3D-интерьер')), pano: @json(__('Панорамы комнат 360°')), plan: @json(__('Планировка')), m2: @json(__('м²')), del: @json(__('Удалить оплату?')) };
@@ -150,7 +154,22 @@
       + (panos.length ? `<a class="btn btn-s" href="/company/objects/${PID}/3d?m=${panos[0].id}" target="_blank">${T.pano} (${panos.length})</a>` : '')
       + (planDoc ? `<a class="btn btn-s" href="/company/media/${planDoc.id}/file" target="_blank">${T.plan} (PDF)</a>` : '');
     dlg.dataset.apt = a.id; dlg.showModal();
+    show3d(a.id);
   }
+  // 3D дома: модель грузится один раз, следующие квартиры переключаются сообщением
+  const fr = document.getElementById('ap-3d'); let frReady = false, frWant = null;
+  function show3d(id) {
+    if (!fr) return;
+    frWant = id;
+    if (!fr.src) fr.src = `/company/objects/${PID}/locate?embed=1&m=${MODEL}&u=${encodeURIComponent(id)}`;
+    else if (frReady) fr.contentWindow.postMessage({ type: 'oftob-locate', unit: id }, location.origin);
+  }
+  window.addEventListener('message', e => {
+    if (e.origin !== location.origin || !e.data || e.data.type !== 'oftob-locate-ready') return;
+    frReady = true; if (frWant) fr.contentWindow.postMessage({ type: 'oftob-locate', unit: frWant }, location.origin);
+    if (!dlg.open) fr.contentWindow.postMessage({ type: 'oftob-locate-pause', on: true }, location.origin);
+  });
+  dlg.addEventListener('close', () => { if (fr && frReady) fr.contentWindow.postMessage({ type: 'oftob-locate-pause', on: true }, location.origin); });
   document.addEventListener('click', async e => {
     const b = e.target.closest('[data-apt]'); if (b) { e.preventDefault(); open(b.dataset.apt); return; }
     const d = e.target.closest('[data-del]'); if (d && await ui.confirm(T.del)) { const f = document.getElementById('ap-del'); f.action = `/company/sales/${PID}/apt/${dlg.dataset.apt}/pay/${d.dataset.del}`; f.submit(); }

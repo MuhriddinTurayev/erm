@@ -505,7 +505,8 @@ class DemoSeeder extends Seeder
         foreach ($names as $pid => [$key, $title, $close]) {
             $s = $sites[$key];
             $theta = round(rad2deg($s['rot'])) + 35;   // fasad (bino old tomoni) kameraga qaragan
-            $base = ['exposure' => 0.75, 'sky' => true, 'daynight' => true, 'finished_file' => "tsh-{$key}-finished.glb"];
+            // locate — где дом в сцене: квартира подсвечивается прямо на модели (продажи, сайт, кабинет покупателя)
+            $base = ['exposure' => 0.75, 'sky' => true, 'daynight' => true, 'finished_file' => "tsh-{$key}-finished.glb", 'locate' => \App\Services\Locate::demo($pid)];
             $this->media($ws, $pid, 'exterior', "tsh-{$key}-current.glb", $title, null, true,
                 $base + ['camera' => "{$theta}deg 63deg 340m", 'target' => "{$s['x']}m ".round($s['top'] / 3)."m {$s['z']}m"]);
             $this->media($ws, $pid, 'exterior', "tsh-{$key}-current.glb", $close." — {$s['done']}/{$s['floors']} qavat", null, false,

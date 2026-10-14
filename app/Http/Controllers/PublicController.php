@@ -142,6 +142,39 @@ class PublicController extends Controller
             'src' => fn ($m, bool $poster = false) => url("/b/{$token}/m/{$m->id}".($poster ? '?poster=1' : '')), 'public' => true, 'canEdit' => false]);
     }
 
+    /** Квартира на 3D-модели дома — для сайта застройщика (шахматка) */
+    public function chessLocate(Request $request, string $key)
+    {
+        $ws = Workspace::where('public_key', $key)->where('public_enabled', true)->firstOrFail();
+        $pid = (string) $request->query('o', '');
+        $p = StateWriter::project($ws, $pid) ?? abort(404);
+        abort_unless(Inventory::ready($p), 404);
+        $model = \App\Services\Locate::model($ws->id, $pid, null, true);
+
+        return $this->locateView($p, $pid, $model, (string) $request->query('u', ''), fn ($m) => url("/s/{$key}/m/{$m->id}"), url("/s/{$key}?o={$pid}"), $request->boolean('embed'));
+    }
+
+    /** Квартира покупателя на 3D-модели дома — из его кабинета */
+    public function cabinetLocate(Request $request, string $token)
+    {
+        [$bl, $ws, $p, $a] = $this->buyer($token);
+        $model = \App\Services\Locate::model($ws->id, $bl->project_id, null, true);
+
+        return $this->locateView($p, $bl->project_id, $model, (string) $a['id'], fn ($m) => url("/b/{$token}/m/{$m->id}"), url("/b/{$token}"), $request->boolean('embed'));
+    }
+
+    private function locateView(array $p, string $pid, $model, string $unit, \Closure $src, string $back, bool $embed)
+    {
+        $data = \App\Services\Locate::data($p);
+        // покупателям — только привязанные корпуса: без настройки рамка по всей модели может указать не туда
+        $cal = (array) ($model?->meta['locate']['blocks'] ?? []);
+
+        return view('company.objects.locate', [
+            'p' => $p, 'pid' => $pid, 'model' => $model && $cal ? $model : null, 'data' => $data, 'unit' => $unit, 'embed' => $embed, 'calibrate' => false, 'canEdit' => false,
+            'src' => $model && $cal ? $src($model).(! empty($model->meta['finished']) ? '?v=finished' : '') : null, 'saveUrl' => null, 'back' => $back, 'public' => true,
+        ]);
+    }
+
     public function cabinetMedia(Request $request, string $token, int $id)
     {
         [$bl] = $this->buyer($token);

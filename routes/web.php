@@ -68,8 +68,10 @@ Route::middleware('throttle:public')->group(function () {
     Route::post('/s/{key}', [PublicController::class, 'chessLead'])->middleware('throttle:10,1');
     Route::get('/b/{token}', [PublicController::class, 'cabinet']);
     Route::get('/b/{token}/3d', [PublicController::class, 'cabinet3d']);
+    Route::get('/b/{token}/locate', [PublicController::class, 'cabinetLocate']);
     Route::get('/b/{token}/m/{id}', [PublicController::class, 'cabinetMedia'])->whereNumber('id');
     Route::get('/s/{key}/3d', [PublicController::class, 'chess3d']);
+    Route::get('/s/{key}/locate', [PublicController::class, 'chessLocate']);
     Route::get('/s/{key}/m/{id}', [PublicController::class, 'chessMedia'])->whereNumber('id');
     Route::get('/b/{token}/photo/{log}/{i}', [PublicController::class, 'cabinetPhoto'])->whereNumber('i');
     Route::get('/w', [GeoController::class, 'page']);
@@ -135,6 +137,9 @@ Route::middleware(['auth', 'role:company'])->group(function () {
                 Route::post('/objects/{pid}/inventory/ready', [Company\InventoryController::class, 'ready']);
                 Route::get('/objects/{pid}', [Company\ObjectController::class, 'show']);
                 Route::get('/objects/{pid}/3d', [Company\ObjectController::class, 'viewer']);
+                // квартира на 3D-модели дома; привязка корпусов к модели
+                Route::get('/objects/{pid}/locate', [Company\LocateController::class, 'show']);
+                Route::post('/media/{media}/locate', [Company\LocateController::class, 'save']);
                 Route::post('/objects/{pid}/account', [Company\ObjectController::class, 'account']);
                 Route::post('/objects/{pid}/users/{user}/password', [Company\ObjectController::class, 'resetPassword']);
                 Route::post('/objects/{pid}/media', [Company\ObjectController::class, 'mediaUpload']);

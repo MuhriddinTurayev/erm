@@ -643,3 +643,7 @@ dialog.modal::backdrop{background:rgba(15,13,40,.5)}
   .tb{gap:6px;padding:8px}.tb-r{gap:4px}.tb-find{padding:0 10px}.tb-find input{font-size:13.5px}
   .kpis>.kpi:last-child:nth-child(even){grid-column:1/-1}
 }
+/* карточка квартиры в продажах: дом в 3D с подсвеченной квартирой */
+.ap-3d{position:relative;height:360px;border-radius:14px;overflow:hidden;border:1px solid var(--border-2);margin-bottom:16px;background:radial-gradient(circle at 50% 30%,color-mix(in srgb,var(--accent) 10%,var(--surface)),var(--sunken))}
+.ap-3d iframe{display:block;width:100%;height:100%;border:0}
+@media (max-width:640px){.ap-3d{height:280px}}
