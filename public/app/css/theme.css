@@ -393,3 +393,12 @@ button,.btn,select,input.txt,.inp{border-radius:10px}
 #toast{border-radius:12px}
 .modal-box{border:1px solid var(--border-2)}
 @media(max-width:860px){#topbar{margin:10px 12px 0;top:10px}#topbar::before{left:-12px;right:-12px;top:-11px;height:11px}#main{padding:16px 12px 56px}}
+
+/* загруженная модель здания с подсвеченной квартирой (saas.js → real3dFrame, страница company/objects/locate) */
+.real3d-frame{height:62vh;min-height:420px;border-radius:var(--r);overflow:hidden;border:1px solid var(--border-2);box-shadow:var(--sh-card);background:radial-gradient(circle at 50% 30%,color-mix(in srgb,var(--accent) 10%,var(--surface)),var(--sunken));margin-bottom:16px}
+.real3d-frame.big{height:74vh}
+.real3d-frame iframe{display:block;width:100%;height:100%;border:0}
+.apt-house .real3d-frame{height:100%;min-height:460px;margin:0}
+.real3d-seg{display:inline-flex;gap:4px;padding:4px;border-radius:12px;background:var(--surface);border:1px solid var(--border-2);box-shadow:var(--sh-card);margin:0 0 14px}
+.real3d-seg button{border-color:transparent}
+@media(max-width:860px){.real3d-frame{height:56vh;min-height:320px}.apt-house .real3d-frame{min-height:340px}}

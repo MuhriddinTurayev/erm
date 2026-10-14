@@ -10,6 +10,9 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue('--' + n).trim() || '#6c4cf1';
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -64,8 +67,10 @@ export async function start(el, cfg) {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = Math.PI * 0.495;
 
+  const lineMats = [];   // толстые линии считают толщину в пикселях — им нужен размер окна
   function resize() {
     const w = el.clientWidth || 1, h = el.clientHeight || 1;
+    lineMats.forEach((m) => m.resolution.set(w, h));
     renderer.setSize(w, h); labels.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
   }
   new ResizeObserver(resize).observe(el); resize();
@@ -88,6 +93,7 @@ export async function start(el, cfg) {
   const frameLines = new THREE.LineSegments(unitEdges, new THREE.LineBasicMaterial({ color: accent, transparent: true, opacity: 0.9, depthTest: false }));
   frameLines.renderOrder = 20; frameLines.visible = !!cfg.calibrate; frame.add(frameLines);
   const layer = new THREE.Group(); frame.add(layer);   // ячейки, подсветка, подписи
+  const overlay = new THREE.Group(); scene.add(overlay);   // контуры на стене — в мировых координатах (рамка растянута неравномерно)
 
   const blockIds = Object.keys(blocks);
   let curBlock = null, selected = null;
@@ -132,7 +138,23 @@ export async function start(el, cfg) {
   }
   // насколько подсветка выступает за фасад: от размера корпуса, а не всей сцены (в квартале на километры она была бы с этаж толщиной)
   const growOf = () => Math.min(0.6, Math.max(0.1, Math.min(frame.scale.x, frame.scale.y, frame.scale.z) * 0.02));
-  const clear = () => { while (layer.children.length) { const o = layer.children.pop(); if (o.element) o.element.remove(); } };
+  const clear = () => {
+    for (const g of [layer, overlay]) while (g.children.length) { const o = g.children.pop(); if (o.element) o.element.remove(); }
+    lineMats.length = 0;
+  };
+  /** Толстая линия по точкам (мир), поверх модели. dashed — пунктир */
+  function thick(points, color, width, dashed = false) {
+    const g = new LineGeometry(); g.setPositions(points.flatMap((p) => [p.x, p.y, p.z]));
+    const m = new LineMaterial({ color, linewidth: width, transparent: true, depthTest: false, dashed, dashSize: 1.2, gapSize: 0.8 });
+    m.resolution.set(el.clientWidth || 1, el.clientHeight || 1); lineMats.push(m);
+    const l = new Line2(g, m); if (dashed) l.computeLineDistances(); l.renderOrder = 30; overlay.add(l);
+    return l;
+  }
+  /** Прямоугольник на стене рамки (координаты рамки) → точки в мире, чуть впереди стены */
+  function wallRect(x0, y0, x1, y1, facing) {
+    const z = facing > 0 ? 0.5 : -0.5, off = (growOf() * 1.6 / frame.scale.z) * facing;
+    return [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]].map(([x, y]) => frame.localToWorld(new THREE.Vector3(x, y, z + off)));
+  }
   function boxMesh(min, max, mat, grow = 0) {
     const m = new THREE.Mesh(unitBox, mat);
     const size = max.clone().sub(min), g = new THREE.Vector3(grow / frame.scale.x, grow / frame.scale.y, grow / frame.scale.z);
@@ -150,6 +172,7 @@ export async function start(el, cfg) {
   const pulse = [];
   function showUnit(id, fly = true) {
     const u = byId[id]; if (!u) return null;
+    clearStatus();
     if (curBlock !== u.b || cfg.calibrate) { curBlock = u.b; applyFrame(u.b); }
     clear(); pulse.length = 0; selected = u;
     const B = blocks[u.b], c = C(u.b), cell = cellOf(u, B, c);
@@ -159,7 +182,21 @@ export async function start(el, cfg) {
     // квартира — светящийся объём поверх модели (виден с любой стороны)
     const fill = boxMesh(cell.min, cell.max, new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.42, depthTest: false, depthWrite: false }), grow);
     fill.renderOrder = 19; layer.add(fill); pulse.push(fill.material);
-    layer.add(edges(cell.min, cell.max, '#ffffff', 0.95, grow));
+    // контур квартиры на стене — толстая линия; подъезд — пунктир во всю высоту и подпись у земли: видно, в каком подъезде квартира
+    thick(wallRect(cell.min.x, cell.min.y, cell.max.x, cell.max.y, cell.facing), accent, 5);
+    const E = Math.max(1, B.entr.length);
+    let ex0 = u.e / E, ex1 = (u.e + 1) / E;
+    if (c.flipX) [ex0, ex1] = [1 - ex1, 1 - ex0];
+    if (E > 1 || Object.keys(blocks).length > 1) {
+      thick(wallRect(ex0 - 0.5, -0.5, ex1 - 0.5, 0.5, cell.facing), accent2, 2.5, true);
+      const en = document.createElement('div');
+      en.className = 'lc-entr';
+      en.textContent = (B.name && Object.keys(blocks).length > 1 ? B.name + ' · ' : '') + (B.entr[u.e] || u.e + 1) + '-' + (T.en || '');
+      const lo = new CSS2DObject(en);
+      lo.position.copy(wallRect(ex0 - 0.5, -0.5, ex1 - 0.5, -0.5, cell.facing)[0].clone().lerp(wallRect(ex0 - 0.5, -0.5, ex1 - 0.5, -0.5, cell.facing)[1], 0.5));
+      lo.center.set(0.5, -0.2);
+      overlay.add(lo);
+    }
     // подпись над квартирой
     const div = document.createElement('div');
     div.className = 'lc-pin';
@@ -229,6 +266,66 @@ export async function start(el, cfg) {
     tc.showX = m !== 'rotate'; tc.showZ = m !== 'rotate'; tc.showY = true;
   }
 
+  // ---------- весь дом: квартиры цветом статуса прямо на фасаде (3D-шахматка) ----------
+  const ST_COL = { free: '#22c55e', booked: '#f59e0b', sold: '#ef4444', reserve: '#94a3b8' };
+  const statusGroup = new THREE.Group(); scene.add(statusGroup);
+  const tileMats = {};
+  const tileMat = (st, hover) => (tileMats[st + hover] ??= new THREE.MeshBasicMaterial({ color: ST_COL[st] || ST_COL.reserve, transparent: true, opacity: hover ? 0.85 : 0.5, depthWrite: false, side: THREE.DoubleSide }));
+  let hovered = null;
+  function clearStatus() { while (statusGroup.children.length) statusGroup.remove(statusGroup.children[0]); hovered = null; }
+  /** Плитки всех помещений на наружных стенах корпусов; клик по плитке — квартира */
+  function statusView() {
+    clear(); clearStatus();
+    const box = new THREE.Box3();
+    blockIds.forEach((bid) => {
+      const c = C(bid), g = new THREE.Group();
+      g.position.set(c.c[0], c.c[1], c.c[2]); g.rotation.set(0, c.r, 0); g.scale.set(c.s[0], c.s[1], c.s[2]);
+      statusGroup.add(g);
+      const B = blocks[bid];
+      units.filter((u) => u.b === bid).forEach((u) => {
+        const cell = cellOf(u, B, c), min = cell.min.clone(), max = cell.max.clone();
+        const pad = 0.12;   // зазор между плитками — видно, где кончается одна квартира и начинается другая
+        const dx = (max.x - min.x) * pad / 2, dy = (max.y - min.y) * pad / 2;
+        min.x += dx; max.x -= dx; min.y += dy; max.y -= dy;
+        const out = 0.004 + (growOf() / c.s[2]);
+        if (cell.facing > 0) { min.z = 0.5 + out * 0.5; max.z = 0.5 + out; } else { max.z = -0.5 - out * 0.5; min.z = -0.5 - out; }
+        const m = new THREE.Mesh(unitBox, tileMat(u.s || 'free', false));
+        m.scale.copy(max.clone().sub(min)); m.position.copy(min.clone().add(max).multiplyScalar(0.5));
+        m.userData.unit = u.id; m.renderOrder = 12;
+        g.add(m);
+      });
+      g.updateMatrixWorld(true);
+      box.union(new THREE.Box3().setFromObject(g));
+    });
+    if (!box.isEmpty()) {
+      const ctr = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3()), L = Math.max(size.x, size.y, size.z);
+      tween(ctr.clone().add(new THREE.Vector3(0.9, 0.55, 1.1).normalize().multiplyScalar(L * 1.6)), ctr);
+    }
+    selected = null;
+  }
+  const pick = (e) => {
+    const r = renderer.domElement.getBoundingClientRect();
+    ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ptr, camera);
+    return ray.intersectObject(statusGroup, true)[0]?.object || null;
+  };
+  renderer.domElement.addEventListener('pointermove', (e) => {
+    if (!statusGroup.children.length || e.buttons) return;
+    const o = pick(e);
+    if (o === hovered) return;
+    if (hovered) hovered.material = tileMat(byId[hovered.userData.unit]?.s || 'free', false);
+    hovered = o;
+    renderer.domElement.style.cursor = o ? 'pointer' : '';
+    if (o) { o.material = tileMat(byId[o.userData.unit]?.s || 'free', true); cfg.onHover && cfg.onHover(byId[o.userData.unit]); }
+  });
+  let downAt = null;
+  renderer.domElement.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
+  renderer.domElement.addEventListener('pointerup', (e) => {
+    if (!statusGroup.children.length || !downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;   // это было вращение, а не клик
+    const o = pick(e);
+    if (o && cfg.onPick) cfg.onPick(byId[o.userData.unit]);
+  });
+
   // ---------- выбор кликом (двойной клик в настройке: поставить рамку в точку) ----------
   const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
   renderer.domElement.addEventListener('dblclick', (e) => {
@@ -275,7 +372,7 @@ export async function start(el, cfg) {
     blocks: blockIds, isCalibrated, units: byId,
     show(id, fly = true) { const u = showUnit(id, fly); if (u && cfg.onShow) cfg.onShow(u, isCalibrated(u.b)); return u; },
     focusSelected() { if (selected) focus(cellOf(selected, blocks[selected.b], C(selected.b))); },
-    overview, overviewModel,
+    overview, overviewModel, statusView,
     // настройка
     calibrate(bid) { cfg.calibrate = true; frameLines.visible = true; curBlock = bid; applyFrame(bid); setCalibrate(true); drawGrid(bid); overview(); return C(bid); },
     mode,

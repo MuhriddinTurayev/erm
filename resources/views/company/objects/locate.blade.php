@@ -6,7 +6,7 @@
   $T = [
     'kv' => __('Кв.'), 'fl' => __('этаж'), 'en' => __('подъезд'), 'rooms' => __('-комн.'), 'm2' => __('м²'), 'k' => __('Коммерция'),
     'approx' => __('Примерное место: корпус ещё не привязан к 3D-модели.'), 'setup' => __('Привязать'), 'saved' => __('Сохранено'),
-    'err' => __('Не удалось сохранить'), 'load' => __('Загружаю 3D-модель…'), 'fail' => __('Не удалось открыть 3D-модель'), 'none' => __('Выберите квартиру'),
+    'err' => __('Не удалось сохранить'), 'load' => __('Загружаю 3D-модель…'), 'fail' => __('Не удалось открыть 3D-модель'), 'none' => __('Выберите квартиру'), 'pickHint' => __('Наведите на квартиру на фасаде — нажмите, чтобы выбрать.'),
     'st' => ['free' => __('Свободна'), 'booked' => __('Бронь'), 'sold' => __('Продана'), 'reserve' => __('Не в продаже')],
   ];
 @endphp
@@ -25,6 +25,8 @@
   .lc-pin b{font:700 14px var(--font-head)}
   .lc-pin span{opacity:.9;font-weight:500}
   .lc-pin::after{content:'';position:absolute;left:50%;bottom:-6px;width:12px;height:12px;background:var(--accent);transform:translateX(-50%) rotate(45deg);border-radius:2px}
+  .lc-entr{font:700 13px var(--font-head);color:#fff;background:var(--accent-2);border-radius:99px;padding:4px 12px;box-shadow:0 6px 16px -6px rgba(59,130,246,.7);white-space:nowrap;pointer-events:none}
+  .lc-leg{display:flex;gap:12px;flex-wrap:wrap;margin-top:6px;font-size:12.5px;color:var(--text-2)}.lc-leg span{display:inline-flex;gap:6px;align-items:center}.lc-leg i{width:11px;height:11px;border-radius:3px}
   .lc-num{font:700 11px var(--font);color:#fff;background:rgba(31,29,54,.72);border-radius:6px;padding:1px 5px;pointer-events:none}
   .lc-card{position:absolute;left:16px;top:16px;z-index:5;max-width:min(420px,calc(100% - 32px));background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(12px);border:1px solid var(--border-2);border-radius:14px;padding:12px 16px;box-shadow:var(--sh)}
   .lc-card a{font-size:13px;color:var(--muted);display:inline-flex;gap:6px;align-items:center;text-decoration:none;margin-bottom:6px}
@@ -156,6 +158,9 @@ try {
       @if ($canEdit) n.innerHTML = `${T.approx} <a href="/company/objects/{{ $pid }}/locate?calibrate=1&m={{ $model->id }}" target="_top">${T.setup}</a>`; @else n.textContent = T.approx; @endif
     },
     onChange: (c) => fill(c),
+    // весь дом: наведение — номер и статус, клик — квартира (в программе откроется её карточка)
+    onHover: (u) => { if (u) $('#lcU').innerHTML = `<strong>${u.label}</strong> · ${u.sub}` + (u.s && T.st[u.s] ? ` · ${T.st[u.s]}` : ''); },
+    onPick: (u) => { if (!u) return; L.show(u.id); if (window.parent !== window) window.parent.postMessage({ type: 'oftob-locate-pick', unit: u.id }, location.origin); },
   });
 } catch (e) {
   $('#lcLoad').innerHTML = `<div>${T.fail}</div>`; throw e;
@@ -195,7 +200,11 @@ if (CALIB) {
 } else if (first) {
   L.show(first);
 } else {
-  $('#lcU').textContent = T.none;
+  L.statusView();
+  $('#lcU').innerHTML = T.pickHint + legend();
+}
+function legend() {
+  return `<div class="lc-leg">${[['free', '#22c55e'], ['booked', '#f59e0b'], ['sold', '#ef4444']].map(([k, c]) => `<span><i style="background:${c}"></i>${T.st[k]}</span>`).join('')}</div>`;
 }
 function fill(c) {
   if (!c || !$('#cL')) return;
@@ -206,7 +215,7 @@ function fill(c) {
 document.querySelectorAll('#lcBar [data-act]').forEach((b) => b.addEventListener('click', (e) => {
   const a = b.dataset.act;
   if (a === 'unit') L.focusSelected();
-  if (a === 'house') L.overview();
+  if (a === 'house') { if (CALIB) L.overview(); else { L.statusView(); $('#lcU').innerHTML = T.pickHint + legend(); $('#lcNote').hidden = true; } }
   if (a === 'full') { e.preventDefault(); const u = new URL(location.href); u.searchParams.delete('embed'); window.open(u, '_blank'); }
 }));
 // продажи: одна загрузка модели, квартиры переключаются сообщением из карточки
