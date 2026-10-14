@@ -3900,5 +3900,7 @@
     "Лоджия": "Lodjiya",
     "Кабинет": "Kabinet",
     "Терраса": "Terrasa",
-    "Вы вошли в другую компанию. Страница обновится.": "Siz boshqa kompaniyaga kirdingiz. Sahifa yangilanadi."
+    "Вы вошли в другую компанию. Страница обновится.": "Siz boshqa kompaniyaga kirdingiz. Sahifa yangilanadi.",
+    "Не найдено текстур: :n — модель загрузится без них, с цветом материалов. Чтобы на фасаде были картинки, выберите вместе с моделью и файлы текстур (вся папка: Ctrl+A).": "Teksturalar topilmadi: :n — model ularsiz, materiallar rangi bilan yuklanadi. Fasadda rasmlar bo‘lishi uchun model bilan birga tekstura fayllarini ham tanlang (butun papka: Ctrl+A).",
+    "Текстуры этой модели сохранить не удалось — модель загрузится без них, с цветом материалов.": "Bu model teksturalarini saqlab bo‘lmadi — model ularsiz, materiallar rangi bilan yuklanadi."
 }

@@ -270,6 +270,8 @@ const RH = @json($roleHelp); document.getElementById('acc-role')?.addEventListen
     'x_c4d' => __('Cinema 4D (.c4d): Файл → Экспорт → glTF или FBX и загрузите полученный файл.'),
     'fail' => __('Не удалось перевести модель'), 'tris' => __('треугольников'), 'mats' => __('материалов'), 'texs' => __('текстур'), 'size' => __('Размер'), 'unit' => __('единицы'),
     'heavy' => __('Модель тяжёлая — на телефоне может открываться долго. Выберите текстуры 1024 px.'), 'tiny' => __('Модель получилась крошечной — проверьте единицы.'), 'huge' => __('Модель получилась огромной — проверьте единицы.'),
+    'missTex' => __('Не найдено текстур: :n — модель загрузится без них, с цветом материалов. Чтобы на фасаде были картинки, выберите вместе с моделью и файлы текстур (вся папка: Ctrl+A).'),
+    'stripTex' => __('Текстуры этой модели сохранить не удалось — модель загрузится без них, с цветом материалов.'),
     'w' => __('Ш'), 'd' => __('Г'), 'h' => __('В'), 'm' => __('м'), 'MB' => __('МБ'), 'from' => __('из'), 'ok' => __('Модель готова. Покрутите её мышью и загрузите.'),
   ];
   $mcUrl = asset('assets/model-convert.js').'?v='.@filemtime(public_path('assets/model-convert.js'));
@@ -316,8 +318,11 @@ const RH = @json($roleHelp); document.getElementById('acc-role')?.addEventListen
     } catch (e) { busy(false); step(''); console.error(e); return ui.alert(e && e.message ? e.message : T.fail); }
     const i = cvRes.info, s = i.size, mb = (i.bytes / 1048576).toFixed(1), n = v => (Math.round(v * 10) / 10).toLocaleString('ru-RU');
     const warn = i.bytes > 120 * 1048576 || i.tris > 4e6 ? `<div class="cv-warn">${T.heavy}</div>` : Math.max(s.x, s.y, s.z) < 0.5 ? `<div class="cv-warn">${T.tiny}</div>` : Math.max(s.x, s.y, s.z) > 3000 ? `<div class="cv-warn">${T.huge}</div>` : '';
+    const esc = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const miss = i.stripped ? `<div class="cv-warn">${T.stripTex}</div>`
+      : i.dropped || i.missing.length ? `<div class="cv-warn">${T.missTex.replace(':n', Math.max(i.dropped, i.missing.length))}${i.missing.length ? `<br><small>${i.missing.slice(0, 8).map(esc).join(', ')}${i.missing.length > 8 ? ' …' : ''}</small>` : ''}</div>` : '';
     $('cv-info').innerHTML = `<b>${i.format} → GLB</b> · ${mb} ${T.MB} · ${Math.round(i.tris).toLocaleString('ru-RU')} ${T.tris} · ${i.materials} ${T.mats} · ${i.textures} ${T.texs}<br>
-      ${T.size}: ${T.w} ${n(s.x)} × ${T.d} ${n(s.z)} × ${T.h} ${n(s.y)} ${T.m} · ${T.unit}: ${i.unit}${warn}`;
+      ${T.size}: ${T.w} ${n(s.x)} × ${T.d} ${n(s.z)} × ${T.h} ${n(s.y)} ${T.m} · ${T.unit}: ${i.unit}${warn}${miss}`;
     $('cv').hidden = false; step(T.ok); busy(false);
     if (cvView) cvView.dispose();
     cvView = await mod.preview($('cv-view'), cvRes.scene);

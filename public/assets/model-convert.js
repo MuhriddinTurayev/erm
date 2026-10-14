@@ -60,15 +60,24 @@ async function collect(files, step) {
 }
 
 /* ---------- чтение модели ---------- */
-async function load(list, main, step, T) {
+// прозрачная картинка 1×1 вместо текстуры, которой нет среди выбранных файлов (потом такие текстуры убираем)
+const EMPTY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+const IMG = /\.(jpe?g|png|webp|tga|bmp|gif|tiff?|dds|ktx2?|hdr|exr|psd)$/i;
+
+async function load(list, main, step, T, missing) {
   const byName = new Map(), urls = [];
   for (const f of list) byName.set(base(f.name).toLowerCase(), f);
   const manager = new THREE.LoadingManager();
   // текстуры и .bin ищем среди выбранных файлов по имени (пути внутри модели часто абсолютные, с диска автора)
   manager.setURLModifier(url => {
     if (/^(blob|data):/.test(url)) return url;
-    const f = byName.get(decodeURIComponent(base(url.split('?')[0])).toLowerCase());
-    if (!f) return url;
+    const name = decodeURIComponent(base(url.split('?')[0]));
+    const f = byName.get(name.toLowerCase());
+    if (!f) {
+      // текстуры нет (её не выбрали вместе с моделью) — не ходим за ней на сервер, модель загрузится без неё
+      if (IMG.test(name)) { missing.add(name); return EMPTY_PNG; }
+      return url;
+    }
     const u = URL.createObjectURL(f); urls.push(u); return u;
   });
   // ждать текстуры нужно, только если модель их действительно запросила (STL, PLY, IFC и т. п. ничего не грузят)
@@ -247,9 +256,10 @@ export async function convert(files, opt = {}, onStep = () => {}) {
   const list = await collect(files, step);
   const main = mainFile(list);
   if (!main) throw new Error(nativeHint(list, T) || T.noModel);
-  const e = ext(main.name);
-  let root = await load(list, main, step, T);
+  const e = ext(main.name), missing = new Set();
+  let root = await load(list, main, step, T, missing);
   if (!root) throw new Error(T.unknown);
+  const dropped = dropBadTextures(root);
   root.traverse(o => {
     if (o.isLight || o.isCamera) { o.visible = false; return; }
     if (o.isMesh || o.isLine || o.isPoints) {
@@ -283,10 +293,47 @@ export async function convert(files, opt = {}, onStep = () => {}) {
   const size = box.getSize(new THREE.Vector3());
   step('glb');
   const { GLTFExporter } = await import(ADDONS + 'exporters/GLTFExporter.js');
-  const glb = await new GLTFExporter().parseAsync(holder, { binary: true, onlyVisible: true, maxTextureSize: +opt.tex || 2048 });
+  const exportGlb = () => new GLTFExporter().parseAsync(holder, { binary: true, onlyVisible: true, maxTextureSize: +opt.tex || 2048 });
+  let glb, stripped = 0;
+  try {
+    glb = await exportGlb();
+  } catch (err) {
+    // необычные текстуры (сжатые, видео, повреждённые) экспортёр не берёт — сохраняем модель без них, а не останавливаемся
+    console.warn(err);
+    stripped = stripTextures(holder);
+    if (!stripped) throw err;
+    glb = await exportGlb();
+  }
   const name = base(main.name).replace(/\.[^.]+$/, '') + '.glb';
   const file = new File([glb], name, { type: 'model/gltf-binary' });
-  return { file, scene: holder, info: Object.assign({ format: e.toUpperCase(), unit, size: { x: size.x, y: size.y, z: size.z }, bytes: file.size, source: main.name }, stats(holder)) };
+  return { file, scene: holder, info: Object.assign({ format: e.toUpperCase(), unit, size: { x: size.x, y: size.y, z: size.z }, bytes: file.size, source: main.name,
+    missing: [...missing], dropped, stripped }, stats(holder)) };
+}
+
+/** Текстуры без картинки (файл не выбрали вместе с моделью, формат не прочитался) — убираем: остаётся цвет материала */
+function dropBadTextures(root) {
+  let n = 0;
+  root.traverse(o => (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => {
+    if (!m) return;
+    for (const k of Object.keys(m)) {
+      const t = m[k];
+      if (!t || !t.isTexture || t.isCompressedTexture || t.isVideoTexture) continue;
+      const im = t.image, w = im ? (im.naturalWidth || im.width || 0) : 0, h = im ? (im.naturalHeight || im.height || 0) : 0;
+      if (im && (im.data ? im.data.length > 4 : w > 1 && h > 1)) continue;
+      m[k] = null; m.needsUpdate = true; n++;
+    }
+  }));
+  return n;
+}
+
+/** Убрать все текстуры (если экспорт с ними не удался) */
+function stripTextures(root) {
+  let n = 0;
+  root.traverse(o => (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => {
+    if (!m) return;
+    for (const k of Object.keys(m)) if (m[k] && m[k].isTexture) { m[k] = null; m.needsUpdate = true; n++; }
+  }));
+  return n;
 }
 
 /* ---------- просмотр результата перед загрузкой ---------- */
