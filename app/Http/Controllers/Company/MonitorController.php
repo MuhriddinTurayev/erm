@@ -20,6 +20,7 @@ use Illuminate\Http\Request;
 class MonitorController extends ErpController
 {
     public const WIDGETS = [
+        'ai' => ['ИИ-анализ', 'sparkles'],
         'money' => ['Деньги в кассах', 'wallet'],
         'today' => ['Сегодня по объектам', 'calendar'],
         'approvals' => ['Ждут моего решения', 'file-check'],
@@ -35,7 +36,11 @@ class MonitorController extends ErpController
 
     private function widgets(): array
     {
-        $saved = $this->ws()->setting('widgets.'.auth()->id());
+        // widgets2 — выбор после появления «ИИ-анализа»; старый выбор (widgets) дополняем им
+        $saved = $this->ws()->setting('widgets2.'.auth()->id());
+        if (! is_array($saved) && is_array($old = $this->ws()->setting('widgets.'.auth()->id()))) {
+            $saved = array_merge(['ai'], $old);
+        }
 
         return is_array($saved) ? array_values(array_intersect($saved, array_keys(self::WIDGETS))) : array_keys(self::WIDGETS);
     }
@@ -55,8 +60,11 @@ class MonitorController extends ErpController
             $bal = Cash::balances($ws);
             $w['money'] = ['total' => Cash::totalBase($ws), 'desks' => CashDesk::of($ws->id)->where('is_active', true)->get()->map(fn ($d) => ['d' => $d, 'b' => $bal[$d->id] ?? 0]), 'rate' => Money::usdRate($ws)];
         }
+        // показатели сверху: деньги к прошлому периоду, что ждёт решения
+        $stats = $money ? CompanyStats::build($ws, null, $u->allowedObjects()) : null;
+        $kpi = $this->kpi($ws, $u, $stats);
         if (in_array('today', $on) && $money) {
-            $w['today'] = CompanyStats::build($ws, null, $u->allowedObjects());
+            $w['today'] = $stats;
         }
         if (in_array('approvals', $on)) {
             $prs = PaymentRequest::of($ws->id)->where('status', 'pending')->with('user')->latest('id')->get()->filter(fn ($r) => Payments::canDecide($u, $r));
@@ -111,13 +119,48 @@ class MonitorController extends ErpController
             $w['photos'] = SiteLog::with('user')->where('workspace_id', $ws->id)->whereNotNull('photos')->tap(fn ($q) => $this->scopeProjects($q))->latest('id')->limit(8)->get();
         }
 
-        return view('company.erp.monitor', ['ws' => $ws, 'w' => $w, 'on' => $on, 'cur' => $cur, 'base' => $base, 'projects' => StateWriter::projects($ws)]);
+        return view('company.erp.monitor', ['ws' => $ws, 'w' => $w, 'kpi' => $kpi, 'money' => $money, 'on' => $on, 'cur' => $cur, 'base' => $base, 'projects' => StateWriter::projects($ws)]);
+    }
+
+    /**
+     * Четыре показателя над панелью. С деньгами: в кассах (к неделе назад), потрачено и поступило за месяц (к тем же дням прошлого месяца),
+     * ждут решения. Без денег: задачи, просрочки, снабжение, готовность объектов.
+     */
+    private function kpi($ws, $u, ?array $stats): array
+    {
+        $only = $u->allowedObjects();
+        $decide = 0;
+        if ($u->canModule('payments')) {
+            $decide += PaymentRequest::of($ws->id)->where('status', 'pending')->get()->filter(fn ($r) => Payments::canDecide($u, $r))->count();
+        }
+        if ($u->isAdmin()) {
+            $decide += \App\Models\Expense::where('workspace_id', $ws->id)->where('status', 'pending')->count();
+        }
+        if ($u->canModule('supply') && \App\Services\Erp\Supply::canDecide($u)) {
+            $decide += SupplyRequest::of($ws->id)->where('status', 'new')->count();
+        }
+        if ($stats) {
+            $prev = CompanyStats::build($ws, $ws->localNow()->subMonthNoOverflow()->toDateString(), $only)['totals'];
+            $total = Cash::totalBase($ws);
+            $net7 = (float) \App\Models\CashOp::of($ws->id)->whereNull('transfer_key')->where('date', '>=', $ws->localNow()->subDays(6)->toDateString())
+                ->selectRaw("sum(case when type = 'in' then amount_base else -amount_base end) s")->value('s');
+
+            return ['money' => true, 'cash' => $total, 'cash_prev' => $total - $net7, 'out' => $stats['totals']['out_month'], 'out_prev' => $prev['out_month'],
+                'in' => $stats['totals']['in_month'], 'in_prev' => $prev['in_month'], 'decide' => $decide];
+        }
+        $tq = Task::of($ws->id)->where('status', '!=', 'done')->tap(fn ($q) => $this->scopeProjects($q));
+        $prog = collect($ws->projects())->filter(fn ($p) => $only === null || in_array((string) ($p['id'] ?? ''), $only, true))
+            ->map(fn ($p) => ObjectController::summary($p)['progress']);
+
+        return ['money' => false, 'tasks' => (clone $tq)->count(), 'overdue' => (clone $tq)->whereDate('due_date', '<', now())->count(),
+            'supply' => SupplyRequest::of($ws->id)->whereIn('status', ['new', 'approved', 'ordered', 'partial'])->tap(fn ($q) => $this->scopeProjects($q))->count(),
+            'progress' => $prog->count() ? round($prog->avg()) : 0, 'decide' => $decide];
     }
 
     public function saveWidgets(Request $request)
     {
         $list = array_values(array_intersect((array) $request->input('w', []), array_keys(self::WIDGETS)));
-        $this->ws()->putSetting('widgets.'.$request->user()->id, $list);
+        $this->ws()->putSetting('widgets2.'.$request->user()->id, $list);
 
         return back()->with('ok', __('Панель настроена'));
     }

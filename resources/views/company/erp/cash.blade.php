@@ -72,8 +72,9 @@
 </div>
 
 @php $lim = array_filter($limits, fn ($r) => $r['limit'] > 0); @endphp
+<div class="grid {{ $lim ? 'g2' : '' }}" style="margin-top:20px;align-items:start">
 @if ($lim)
-<div class="card mt">
+<div class="card">
   <div class="card-h"><h3>{!! ic('gauge') !!}{{ __('Лимиты по статьям в этом месяце') }}</h3></div>
   @foreach ($lim as $r)
     <div class="hbar"><div class="hb-t"><span>{{ __($r['cat']->name) }}</span><b class="{{ $r['pct'] >= 100 ? 'out-c' : '' }}">{{ money_s($r['spent'], $cur) }} / {{ money_s($r['limit'], $cur) }} · {{ $r['pct'] }}%</b></div>
@@ -81,6 +82,10 @@
   @endforeach
 </div>
 @endif
+@if (auth()->user()->seesMoney())
+  @include('partials.insights', ['topic' => 'cash', 'title' => __('ИИ-анализ касс и расходов')])
+@endif
+</div>
 
 {{-- ===== операция ===== --}}
 <dialog class="modal" id="dlg-op"><form method="post" action="/company/cash">@csrf

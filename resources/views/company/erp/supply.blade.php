@@ -14,6 +14,9 @@
   @foreach ($stl as $k => $v)<a class="chip {{ $st === $k ? 'on' : '' }}" href="?status={{ $k }}">{{ __($v) }}<span class="n">{{ $counts[$k] ?? 0 }}</span></a>@endforeach
 </div>
 <div class="alert alert-info">{!! ic('truck') !!}<div>{{ __('Прораб создаёт заявку → снабженец/бухгалтер согласует и заказывает у поставщика (видно, сколько уже есть на складе) → кладовщик принимает товар, можно частями.') }}</div></div>
+@if ($boss && ! $st)
+  @include('partials.insights', ['topic' => 'supply', 'title' => __('ИИ-анализ снабжения')])
+@endif
 
 @forelse ($list as $sr)
 <div class="card mt">

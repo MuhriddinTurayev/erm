@@ -1,20 +1,26 @@
 @extends('layouts.panel')
 @section('title', __('Прогноз денег'))
-@php $fx = max(1, max(array_map(fn ($r) => max(abs($r['close']), $r['in'], $r['out']), $rows))); $neg = collect($rows)->first(fn ($r) => $r['close'] < 0); @endphp
+@php $neg = collect($rows)->first(fn ($r) => $r['close'] < 0); @endphp
 @section('content')
 <div class="alert alert-info">{!! ic('trending-up') !!}<div>{{ __('Прогноз на 12 недель: остаток во всех кассах + платежи покупателей по графикам рассрочки − утверждённые заявки на оплату − остатки по договорам с поставщиками (по сроку).') }}</div></div>
 @if ($neg)
 <div class="alert alert-bad">{!! ic('triangle-alert') !!}<div><b>{{ __('Кассовый разрыв') }}:</b> {{ __('на неделе с :d не хватит :s. Перенесите платежи или ускорьте сбор денег с покупателей.', ['d' => $neg['from']->format('d.m.Y'), 's' => money_s(abs($neg['close']), $cur)]) }}</div></div>
 @endif
 <div class="kpis">
-  <div class="kpi"><div class="k-l">{!! ic('wallet') !!}{{ __('Сейчас в кассах') }}</div><div class="k-v">{{ money_s($total, $cur) }}</div></div>
-  <div class="kpi"><div class="k-l">{!! ic('arrow-down-left') !!}{{ __('Ожидается поступлений') }}</div><div class="k-v in-c">{{ money_s(array_sum(array_column($rows, 'in')), $cur) }}</div></div>
-  <div class="kpi"><div class="k-l">{!! ic('arrow-up-right') !!}{{ __('Ожидается платежей') }}</div><div class="k-v out-c">{{ money_s(array_sum(array_column($rows, 'out')), $cur) }}</div></div>
-  <div class="kpi"><div class="k-l">{!! ic('flag') !!}{{ __('Через 12 недель') }}</div><div class="k-v {{ end($rows)['close'] < 0 ? 'out-c' : '' }}">{{ money_s(end($rows)['close'], $cur) }}</div></div>
+  <div class="kpi hero"><span class="k-ic">{!! ic('wallet') !!}</span><div class="k-l">{{ __('Сейчас в кассах') }}</div><div class="k-v">{{ money_s($total, $cur) }}</div></div>
+  <div class="kpi tone-ok"><span class="k-ic">{!! ic('arrow-down-left') !!}</span><div class="k-l">{{ __('Ожидается поступлений') }}</div><div class="k-v in-c">{{ money_s(array_sum(array_column($rows, 'in')), $cur) }}</div></div>
+  <div class="kpi tone-warn"><span class="k-ic">{!! ic('arrow-up-right') !!}</span><div class="k-l">{{ __('Ожидается платежей') }}</div><div class="k-v out-c">{{ money_s(array_sum(array_column($rows, 'out')), $cur) }}</div></div>
+  <div class="kpi {{ end($rows)['close'] < 0 ? 'tone-bad' : 'tone-info' }}"><span class="k-ic">{!! ic('flag') !!}</span><div class="k-l">{{ __('Через 12 недель') }}</div><div class="k-v {{ end($rows)['close'] < 0 ? 'out-c' : '' }}">{{ money_s(end($rows)['close'], $cur) }}</div></div>
 </div>
-<div class="card">
-  <div class="card-h"><h3>{!! ic('chart-column') !!}{{ __('Остаток на конец недели') }}</h3></div>
-  <div class="fc" style="height:200px">@foreach ($rows as $r)<div class="b" title="{{ money_s($r['close'], $cur) }}"><i class="{{ $r['close'] < 0 ? 'neg' : '' }}" style="height:{{ max(2, abs($r['close']) / $fx * 100) }}%"></i><small>{{ $r['from']->format('d.m') }}</small></div>@endforeach</div>
+<div class="wgrid">
+  <div class="card w8">
+    <div class="card-h"><h3>{!! ic('chart-column') !!}{{ __('Деньги по неделям') }}</h3><p>{{ __('Столбики — сколько придёт и сколько уйдёт за неделю, линия — сколько останется в кассах (шкала справа).') }}</p></div>
+    <div class="chart-box lg" data-chart="{{ chart_json(['type' => 'bar', 'money' => $cur, 'labels' => array_map(fn ($r) => $r['from']->format('d.m'), $rows),
+      'series' => [['name' => __('Придёт'), 'data' => array_map(fn ($r) => round($r['in']), $rows), 'color' => 'c3', 'soft' => true],
+        ['name' => __('Уйдёт'), 'data' => array_map(fn ($r) => round($r['out']), $rows), 'color' => 'c4', 'soft' => true],
+        ['name' => __('Останется'), 'type' => 'line', 'axis' => 'y1', 'data' => array_map(fn ($r) => round($r['close']), $rows), 'color' => 'c1', 'neg' => 'c5']]]) }}"></div>
+  </div>
+  @include('partials.insights', ['topic' => 'forecast', 'class' => 'w4', 'title' => __('ИИ: что делать с деньгами')])
 </div>
 <div class="card mt">
   <div class="tbl-wrap"><table class="tbl"><thead><tr><th>{{ __('Неделя') }}</th><th class="n">{{ __('На начало') }}</th><th class="n">{{ __('Поступит') }}</th><th class="n">{{ __('Уйдёт') }}</th><th class="n">{{ __('На конец') }}</th><th>{{ __('Из чего') }}</th></tr></thead><tbody>

@@ -119,6 +119,8 @@ Route::middleware(['auth', 'role:company'])->group(function () {
                 Route::post('/monitor/widgets', [Company\MonitorController::class, 'saveWidgets']);
             });
             Route::get('/forecast', [Company\MonitorController::class, 'forecast'])->middleware('module:forecast');
+            // ИИ-анализ раздела: правила сразу, разбор ИИ — вторым запросом (права на раздел — в контроллере)
+            Route::get('/insights/{topic}', [Company\InsightController::class, 'show'])->whereIn('topic', \App\Services\Ai\Insights::TOPICS)->middleware('throttle:40,1');
             Route::post('/journal/photo', [Company\MonitorController::class, 'photo'])->middleware('module:journal');
 
             // объекты: каждый отдельно — команда, учётные записи, 3D-модели и панорамы

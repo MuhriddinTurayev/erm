@@ -285,7 +285,7 @@ body.nav-open .nav .burger .i-close{display:block}
 .lrow input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--surface);border:3px solid var(--c);box-shadow:var(--sh-sm);cursor:grab}
 .lrow input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--surface);border:3px solid var(--c);cursor:grab}
 .lrow input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var(--ring)}
-.calc-out{position:sticky;top:84px;border-radius:22px;padding:28px;color:#fff;background:radial-gradient(420px 260px at 100% 0%,rgba(96,165,250,.35),transparent 70%),linear-gradient(160deg,#0f2547 0%,#16305a 55%,#1d4ed8 140%);box-shadow:0 24px 60px -18px rgba(15,37,71,.55);display:flex;flex-direction:column;gap:6px}
+.calc-out{position:sticky;top:84px;border-radius:22px;padding:28px;color:#fff;background:radial-gradient(420px 260px at 100% 0%,rgba(236,72,153,.28),transparent 70%),linear-gradient(150deg,#4b2fd6 0%,#6c4cf1 55%,#3b82f6 140%);box-shadow:0 24px 60px -18px rgba(76,47,214,.55);display:flex;flex-direction:column;gap:6px}
 .co-l{font-size:13px;font-weight:600;color:rgba(255,255,255,.72);text-transform:uppercase;letter-spacing:.06em}
 .co-big{font-size:clamp(30px,3.4vw,40px);font-weight:700;letter-spacing:-.03em;line-height:1.1;font-variant-numeric:tabular-nums}
 .co-pct{color:rgba(255,255,255,.75);font-size:15px}.co-pct span{color:#fff;font-weight:700}
@@ -297,7 +297,7 @@ body.nav-open .nav .burger .i-close{display:block}
 .co-save span{display:block;font-size:13px;color:rgba(255,255,255,.75)}
 .co-save b{display:block;font-size:22px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .co-roi{margin:6px 0 10px;font-size:14px;color:rgba(255,255,255,.85)}.co-roi b{color:#34d399}
-.calc-out .btn-p{background:#fff;color:#0f2547;border-color:#fff;margin-top:6px}
+.calc-out .btn-p{background:#fff;color:#4b2fd6;border-color:#fff;margin-top:6px;box-shadow:none}
 .calc-out .btn-p:hover{background:#eaf1ff}
 .co-note{color:rgba(255,255,255,.6);font-size:12.5px;line-height:1.5;margin-top:6px}
 

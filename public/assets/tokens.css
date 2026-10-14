@@ -1,32 +1,40 @@
-/* Oftob — цветовые токены: корпоративный синий, светлая и тёмная тема (общие для сайта, панели и программы) */
+/* Oftob — цветовые токены: фиолетовый акцент, белые карточки на светло-лавандовом фоне; светлая и тёмная тема
+   (общие для сайта, панели и программы). Графики берут цвета --c1…--c7 (assets/charts.js). */
 :root,[data-theme=light]{
-  --bg:#f3f5f9;--surface:#fff;--surface-2:#f8fafc;--sunken:#eef2f7;--hover:#f1f5f9;
-  --border:#dde3ec;--border-2:#e9edf3;--ring:rgba(37,99,235,.2);
-  --text:#0f172a;--text-2:#334155;--muted:#64748b;--faint:#94a3b8;
-  --accent:#1d4ed8;--accent-hover:#1e40af;--accent-soft:#eaf1ff;--accent-text:#1d4ed8;--on-accent:#fff;
-  --ok:#15803d;--ok-soft:#ecf8f0;--ok-text:#15803d;
-  --warn:#b45309;--warn-soft:#fdf6e9;--warn-text:#a16207;
-  --bad:#c81e1e;--bad-soft:#fdf0f0;--bad-text:#b91c1c;
-  --info:#0369a1;--info-soft:#ebf6fc;--info-text:#0369a1;
-  --chart:#1d4ed8;--chart-2:#93b4f5;--chart-muted:#dde3ec;
-  /* боковое меню — тёмно-синее в обеих темах */
-  --nav-bg:#0f2547;--nav-bg-2:#16305a;--nav-text:#c7d3e6;--nav-muted:#7f93b3;--nav-active:#1f3d6e;--nav-line:#1c3561;--nav-accent:#60a5fa;
-  --sh-sm:0 1px 2px rgba(15,23,42,.05);--sh:0 1px 3px rgba(15,23,42,.08),0 1px 2px rgba(15,23,42,.04);--sh-lg:0 16px 40px -12px rgba(15,23,42,.25);
-  --r:10px;--r-s:6px;--r-l:12px;
+  --bg:#f4f5fa;--surface:#fff;--surface-2:#f9f9fd;--sunken:#f2f2f8;--hover:#f5f3ff;
+  --border:#e6e6f0;--border-2:#efeff6;--ring:rgba(108,76,241,.2);
+  --text:#1f1d36;--text-2:#46445f;--muted:#76748f;--faint:#a3a1b8;
+  --accent:#6c4cf1;--accent-hover:#5a3ae0;--accent-soft:#f0ecfe;--accent-text:#5a3ae0;--on-accent:#fff;
+  --accent-2:#3b82f6;--accent-2-soft:#ebf3ff;
+  --ok:#16a34a;--ok-soft:#e8f8ee;--ok-text:#15803d;
+  --warn:#f59e0b;--warn-soft:#fff5e5;--warn-text:#b45309;
+  --bad:#ef4444;--bad-soft:#fdeded;--bad-text:#dc2626;
+  --info:#3b82f6;--info-soft:#ebf3ff;--info-text:#2563eb;
+  --chart:#6c4cf1;--chart-2:#c9bdfb;--chart-muted:#ececf4;
+  --c1:#6c4cf1;--c2:#3b82f6;--c3:#22c55e;--c4:#f59e0b;--c5:#ef4444;--c6:#06b6d4;--c7:#ec4899;--c8:#94a3b8;
+  /* боковое меню — белое, активный пункт фиолетовый */
+  --nav-bg:#fff;--nav-bg-2:#f6f4ff;--nav-text:#4a4864;--nav-muted:#9a98b0;--nav-active:#f0ecfe;--nav-line:#efeff6;--nav-accent:#6c4cf1;--nav-head:#1f1d36;
+  --sh-sm:0 1px 2px rgba(31,29,54,.04);--sh:0 1px 2px rgba(31,29,54,.03),0 8px 24px -10px rgba(31,29,54,.12);--sh-lg:0 24px 48px -16px rgba(31,29,54,.28);
+  --sh-card:0 1px 2px rgba(31,29,54,.03),0 4px 18px -8px rgba(31,29,54,.08);--sh-accent:0 6px 16px -6px rgba(108,76,241,.55);
+  --r:14px;--r-s:10px;--r-l:18px;
   --font:Inter,ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;
+  --font-head:Montserrat,Inter,ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;
   color-scheme:light;
 }
 [data-theme=dark]{
-  --bg:#0b1220;--surface:#111a2b;--surface-2:#0f1726;--sunken:#0c1422;--hover:#17233a;
-  --border:#22314b;--border-2:#1b2840;--ring:rgba(96,165,250,.3);
-  --text:#e8eef8;--text-2:#c3cfe2;--muted:#8a9ab4;--faint:#5f7090;
-  --accent:#3b82f6;--accent-hover:#60a5fa;--accent-soft:rgba(59,130,246,.14);--accent-text:#93c5fd;--on-accent:#fff;
-  --ok:#22c55e;--ok-soft:rgba(34,197,94,.12);--ok-text:#4ade80;
-  --warn:#f59e0b;--warn-soft:rgba(245,158,11,.12);--warn-text:#fbbf24;
-  --bad:#ef4444;--bad-soft:rgba(239,68,68,.13);--bad-text:#f87171;
-  --info:#38bdf8;--info-soft:rgba(56,189,248,.12);--info-text:#7dd3fc;
-  --chart:#3b82f6;--chart-2:#1e3a6e;--chart-muted:#22314b;
-  --nav-bg:#08101d;--nav-bg-2:#0e1a2e;--nav-text:#b6c3d9;--nav-muted:#6b7c99;--nav-active:#16253f;--nav-line:#16233a;--nav-accent:#60a5fa;
-  --sh-sm:none;--sh:none;--sh-lg:0 20px 50px -12px rgba(0,0,0,.7);
+  --bg:#0e0f1d;--surface:#16172a;--surface-2:#1a1b30;--sunken:#121325;--hover:#1f2040;
+  --border:#282a48;--border-2:#202238;--ring:rgba(139,116,255,.32);
+  --text:#ecebff;--text-2:#c4c2de;--muted:#8f8dad;--faint:#636184;
+  --accent:#8b74ff;--accent-hover:#a18eff;--accent-soft:rgba(139,116,255,.15);--accent-text:#b6a8ff;--on-accent:#fff;
+  --accent-2:#60a5fa;--accent-2-soft:rgba(96,165,250,.14);
+  --ok:#22c55e;--ok-soft:rgba(34,197,94,.13);--ok-text:#4ade80;
+  --warn:#f59e0b;--warn-soft:rgba(245,158,11,.13);--warn-text:#fbbf24;
+  --bad:#f05252;--bad-soft:rgba(240,82,82,.14);--bad-text:#f87171;
+  --info:#60a5fa;--info-soft:rgba(96,165,250,.13);--info-text:#93c5fd;
+  --chart:#8b74ff;--chart-2:#3d3570;--chart-muted:#24263f;
+  --c1:#8b74ff;--c2:#60a5fa;--c3:#34d399;--c4:#fbbf24;--c5:#f87171;--c6:#22d3ee;--c7:#f472b6;--c8:#64748b;
+  --nav-bg:#131425;--nav-bg-2:#1c1d36;--nav-text:#bebcd9;--nav-muted:#76749a;--nav-active:rgba(139,116,255,.16);--nav-line:#1f2137;--nav-accent:#a18eff;--nav-head:#fff;
+  --sh-sm:none;--sh:0 10px 30px -12px rgba(0,0,0,.6);--sh-lg:0 24px 56px -12px rgba(0,0,0,.75);
+  --sh-card:0 1px 0 rgba(255,255,255,.02);--sh-accent:0 6px 18px -6px rgba(139,116,255,.6);
   color-scheme:dark;
 }

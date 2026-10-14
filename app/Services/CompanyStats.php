@@ -18,9 +18,10 @@ class CompanyStats
         $yest = $d->copy()->subDay()->toDateString();
         $month = substr($date, 0, 7);
         $weekFrom = $d->copy()->subDays(6)->toDateString();
-        $days14 = [];
+        $days14 = $in14 = [];
         for ($i = 13; $i >= 0; $i--) {
             $days14[$d->copy()->subDays($i)->toDateString()] = 0.0;
+            $in14[$d->copy()->subDays($i)->toDateString()] = 0.0;
         }
 
         $T = ['balance' => 0.0, 'in_all' => 0.0, 'out_all' => 0.0, 'out_day' => 0.0, 'in_day' => 0.0, 'out_yest' => 0.0, 'in_yest' => 0.0,
@@ -63,6 +64,9 @@ class CompanyStats
                 }
                 if (! $in && isset($days14[$td])) {
                     $days14[$td] += $amt;
+                }
+                if ($in && isset($in14[$td])) {
+                    $in14[$td] += $amt;
                 }
             }
             // готовность: средняя по этапам с весом длительности
@@ -107,6 +111,7 @@ class CompanyStats
             'top' => array_slice($top, 0, 7),
             'objects' => $objects,
             'days14' => $days14,
+            'in14' => $in14,
         ];
     }
 

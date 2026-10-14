@@ -21,11 +21,10 @@
 @endsection
 @section('content')
 <div class="kpis">
-  <div class="kpi"><div class="k-l">{!! ic('key-round') !!}{{ __('Продано') }}</div><div class="k-v">{{ $s['sold'] }}</div><div class="k-s">{{ __('бронь') }}: {{ $s['booked'] }} · {{ __('свободно') }}: {{ $s['free'] }}</div><div class="prog"><i style="width:{{ $s['apts'] ? round(($s['sold'] + $s['booked']) / $s['apts'] * 100) : 0 }}%"></i></div></div>
-  <div class="kpi"><div class="k-l">{!! ic('file-pen-line') !!}{{ __('Сумма сделок') }}</div><div class="k-v">{{ money_s($s['revenue'], $cur) }}</div></div>
-  <div class="kpi"><div class="k-l">{!! ic('circle-check') !!}{{ __('Получено') }}</div><div class="k-v in-c">{{ money_s($s['paid'], $cur) }}</div><div class="k-s">{{ __('в этом месяце') }}: {{ money_s($monthIn, $cur) }}</div></div>
-  <div class="kpi"><div class="k-l">{!! ic('alarm-clock') !!}{{ __('Просрочка покупателей') }}</div><div class="k-v {{ $s['overdue'] ? 'out-c' : '' }}">{{ money_s($s['overdue'], $cur) }}</div><div class="k-s">{{ count($overdueList) }} {{ __('покупателей') }}</div></div>
-  <div class="kpi"><div class="k-l">{!! ic('building-2') !!}{{ __('Осталось продать') }}</div><div class="k-v">{{ money_s($s['stock_value'], $cur) }}</div></div>
+  <div class="kpi hero"><span class="k-ic">{!! ic('key-round') !!}</span><div class="k-l">{{ __('Продано') }}</div><div class="k-v">{{ $s['sold'] }} <small style="font-size:15px;opacity:.8">/ {{ $s['apts'] }}</small></div><div class="k-s">{{ __('бронь') }}: {{ $s['booked'] }} · {{ __('свободно') }}: {{ $s['free'] }}</div><div class="prog" style="margin-top:8px;background:rgba(255,255,255,.25)"><i style="background:#fff;width:{{ $s['apts'] ? round(($s['sold'] + $s['booked']) / $s['apts'] * 100) : 0 }}%"></i></div></div>
+  <div class="kpi tone-ok"><span class="k-ic">{!! ic('circle-check') !!}</span><div class="k-l">{{ __('Получено от покупателей') }}</div><div class="k-v">{{ money_s($s['paid'], $cur) }}</div><div class="k-s">{{ __('из') }} {{ money_s($s['revenue'], $cur) }} · {{ __('в этом месяце') }}: {{ money_s($monthIn, $cur) }}</div><div class="prog" style="margin-top:8px"><i style="width:{{ $s['revenue'] > 0 ? round($s['paid'] / $s['revenue'] * 100) : 0 }}%"></i></div></div>
+  <div class="kpi {{ $s['overdue'] ? 'tone-bad' : 'tone-ok' }}"><span class="k-ic">{!! ic('alarm-clock') !!}</span><div class="k-l">{{ __('Просрочка покупателей') }}</div><div class="k-v {{ $s['overdue'] ? 'out-c' : '' }}">{{ money_s($s['overdue'], $cur) }}</div><div class="k-s">{{ count($overdueList) }} {{ __('покупателей') }}</div></div>
+  <div class="kpi tone-info"><span class="k-ic">{!! ic('building-2') !!}</span><div class="k-l">{{ __('Осталось продать') }}</div><div class="k-v">{{ money_s($s['stock_value'], $cur) }}</div><div class="k-s">{{ __('свободно') }}: {{ $s['free'] }}</div></div>
 </div>
 
 @unless ($ready)
@@ -64,7 +63,9 @@
   <small class="muted">{{ __('Полоска внизу квартиры — сколько оплачено. Красная рамка — просрочка платежа. Нажмите на квартиру, чтобы забронировать, продать или принять оплату.') }}</small>
 </div>
 
-<div class="grid g3 mt">
+@include('partials.insights', ['topic' => 'sales', 'o' => $pid, 'class' => 'mt', 'title' => __('ИИ-анализ продаж')])
+
+<div class="grid g3" style="margin-top:20px">
   <div class="card">
     <div class="card-h"><h3>{!! ic('alarm-clock') !!}{{ __('Просрочили оплату') }}</h3><span class="badge {{ count($overdueList) ? 'b-bad' : '' }}">{{ count($overdueList) }}</span></div>
     @forelse (collect($overdueList)->sortByDesc('overdue')->take(10) as $a)

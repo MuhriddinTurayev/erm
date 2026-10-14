@@ -1,6 +1,5 @@
 @extends('layouts.panel')
 @section('title', __('Обзор платформы'))
-@php $maxReg = max(1, ...array_values($reg)); @endphp
 @section('content')
 @if (! $aiProviders)
 <div class="alert alert-warn">{!! ic('bot') !!}<div>{{ __('ИИ ещё не подключён — компании не смогут пользоваться ИИ-консультантом.') }} <a href="/admin/ai"><b>{{ __('Подключить Gemini, ChatGPT, DeepSeek или Claude') }}</b></a></div></div>
@@ -16,7 +15,7 @@
 <div class="grid g32">
   <div class="card">
     <div class="card-h"><h3>{!! ic('trending-up') !!}{{ __('Регистрации за 30 дней') }}</h3><span class="muted">{{ array_sum($reg) }}</span></div>
-    <div class="bars">@foreach ($reg as $d => $v)<div class="b" title="{{ dmy($d) }}: {{ $v }}"><i style="height:{{ $v / $maxReg * 100 }}%"></i><span>{{ (int) substr($d, 8) % 5 === 0 ? substr($d, 8, 2) : '' }}</span></div>@endforeach</div>
+    <div class="chart-box" data-chart="{{ chart_json(['type' => 'bar', 'thin' => true, 'labels' => array_map(fn ($d) => substr($d, 8, 2).'.'.substr($d, 5, 2), array_keys($reg)), 'series' => [['name' => __('Регистрации'), 'data' => array_values($reg), 'color' => 'c1', 'highlightLast' => true]]]) }}"></div>
   </div>
   <div class="card">
     <div class="card-h"><h3>{!! ic('gem') !!}{{ __('Компании по тарифам') }}</h3></div>

@@ -108,7 +108,8 @@ if (! function_exists('sys_tr')) {
             $phrases = ['Заявка на оплату', 'Заявка на снабжение', 'Заявка', 'согласована, далее —', 'утверждена', 'отклонена', 'оплачена', 'Приход', 'Выдача', 'Перемещение', 'Инвентаризация',
                 'Начальный остаток', 'Оплата за материал', 'заявка на снабжение', 'Перевод', 'курс', 'Новый пользователь', 'Новый контрагент', 'Договор', 'Тендер', 'победитель', 'Задача',
                 'Сервис', 'статус', 'создана', 'изменена', 'объектов', 'Оплата кв.', 'Удалена оплата по квартире', 'Отклонён расход', 'расход', 'Кв.', 'Удалена', 'Продана', 'Бронь', 'Свободна',
-                'Основная касса', 'Долларовая касса', 'Расчётный счёт', 'Центральный склад', 'Проверен', 'Подозрительный', 'Заблокирован', 'На проверке'];
+                'Основная касса', 'Долларовая касса', 'Расчётный счёт', 'Центральный склад', 'Проверен', 'Подозрительный', 'Заблокирован', 'На проверке',
+                'позиций', 'Удалён объект', 'Создан объект'];
             foreach (\App\Services\Erp\Cash::DEFAULT_CATS as $list) {
                 array_push($phrases, ...$list);
             }
@@ -159,5 +160,40 @@ if (! function_exists('file_size')) {
         $b = (int) $bytes;
 
         return $b < 1048576 ? max(1, round($b / 1024)).' '.__('КБ') : number_format($b / 1048576, 1, ',', ' ').' '.__('МБ');
+    }
+}
+
+if (! function_exists('trend')) {
+    /**
+     * Изменение к прошлому периоду: «↗ +15%». $upGood — рост это хорошо (поступления) или плохо (расходы).
+     * Пусто, если сравнивать не с чем.
+     */
+    function trend(float $cur, float $prev, bool $upGood = true, ?string $hint = null): string
+    {
+        if ($prev <= 0 && $cur <= 0) {
+            return '';
+        }
+        if ($prev <= 0) {
+            return '<span class="trend '.($upGood ? 't-good' : 't-bad').'" title="'.e($hint ?? '').'">'.ic('arrow-up-right', '', 14).__('новое').'</span>';
+        }
+        $p = (int) round(($cur - $prev) / abs($prev) * 100);
+        if ($p === 0) {
+            return '<span class="trend t-flat" title="'.e($hint ?? '').'">0%</span>';
+        }
+        $good = ($p > 0) === $upGood;
+
+        return '<span class="trend '.($good ? 't-good' : 't-bad').'" title="'.e($hint ?? '').'">'.ic($p > 0 ? 'arrow-up-right' : 'arrow-down-right', '', 14).($p > 0 ? '+' : '−').abs($p).'%</span>';
+    }
+}
+
+if (! function_exists('chart_json')) {
+    /** Данные графика для data-chart (assets/charts.js); валюта — на языке интерфейса. В шаблоне: data-chart="{{ chart_json([...]) }}" */
+    function chart_json(array $c): string
+    {
+        if (! empty($c['money'])) {
+            $c['money'] = __($c['money']);
+        }
+
+        return json_encode($c, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION);
     }
 }

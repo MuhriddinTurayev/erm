@@ -176,7 +176,7 @@ class Workspace extends Model
 
     public function aiUsedThisMonth(): int
     {
-        return $this->aiUsage()->where('kind', 'chat')->where('ok', true)->where('created_at', '>=', now()->startOfMonth())->count();
+        return $this->aiUsage()->whereIn('kind', ['chat', 'insight'])->where('ok', true)->where('created_at', '>=', now()->startOfMonth())->count();
     }
 
     /** Объекты (проекты) компании из данных CRM */

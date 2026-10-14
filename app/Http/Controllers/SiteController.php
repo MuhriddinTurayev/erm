@@ -139,7 +139,7 @@ class SiteController extends Controller
     {
         return response()->json([
             'name' => PlatformSetting::brand(), 'short_name' => PlatformSetting::brand(), 'start_url' => '/crm', 'scope' => '/', 'display' => 'standalone',
-            'background_color' => '#0b1220', 'theme_color' => '#1d4ed8', 'lang' => app()->getLocale(),
+            'background_color' => '#f4f5fa', 'theme_color' => '#6c4cf1', 'lang' => app()->getLocale(),
             'description' => __('ERP и CRM для строительных компаний'),
             'icons' => [['src' => '/icons/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png'], ['src' => '/icons/icon-512.png', 'sizes' => '512x512', 'type' => 'image/png'],
                 ['src' => '/icons/icon-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'maskable']],
