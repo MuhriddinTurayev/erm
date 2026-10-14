@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Company;
 use App\Models\AuditLog;
 use App\Models\Item;
 use App\Models\StockMove;
-use App\Models\SupplyLine;
 use App\Models\SupplyRequest;
 use App\Models\Tender;
 use App\Models\TenderBid;
@@ -210,28 +209,9 @@ class StockController extends ErpController
         if (! $lines) {
             return back()->withInput()->withErrors(['lines' => __('Добавьте хотя бы одну позицию')]);
         }
-        $sr = DB::transaction(function () use ($ws, $u, $d, $lines) {
-            $sr = SupplyRequest::create(['workspace_id' => $ws->id, 'number' => (int) SupplyRequest::of($ws->id)->lockForUpdate()->max('number') + 1, 'project_id' => $d['project_id'],
-                'user_id' => $u->id, 'need_by' => $d['need_by'] ?? null, 'note' => $d['note'] ?? null, 'status' => $u->isAdmin() ? 'approved' : 'new']);
-            foreach ($lines as $l) {
-                $name = trim($l['item']);
-                $item = Item::of($ws->id)->where('name', $name)->first() ?? Item::create(['workspace_id' => $ws->id, 'name' => $name, 'unit' => $l['unit'] ?: 'шт']);
-                SupplyLine::create(['supply_request_id' => $sr->id, 'item_id' => $item->id, 'qty' => (float) $l['qty'], 'price' => (float) $item->price]);
-            }
-
-            return $sr;
-        });
-        AuditLog::create(['workspace_id' => $ws->id, 'user_id' => $u->id, 'project' => $this->projects()[$sr->project_id] ?? null, 'action' => 'supply.add',
-            'summary' => 'Заявка на снабжение №'.$sr->number.' · позиций: '.count($lines)]);
-        if ($sr->status === 'new' && Telegram::enabled()) {
-            foreach ($ws->users()->whereIn('role', ['admin', 'accountant'])->whereNotNull('telegram_chat_id')->get() as $a) {
-                try {
-                    Telegram::message($a->telegram_chat_id, '📦 <b>'.__('Заявка на снабжение').' №'.$sr->number.'</b>'."\n".e($this->projects()[$sr->project_id] ?? '')."\n👤 ".e($u->name),
-                        [[['text' => __('Открыть'), 'url' => url('/company/supply')]]]);
-                } catch (\Throwable) {
-                }
-            }
-        }
+        // руководитель и бухгалтер получают её в Telegram с кнопками «Согласовать / Отклонить»
+        $sr = \App\Services\Erp\Supply::create($ws, $u, $d['project_id'], array_map(fn ($l) => ['name' => $l['item'], 'qty' => $l['qty'], 'unit' => $l['unit'] ?? ''], $lines),
+            $d['need_by'] ?? null, $d['note'] ?? null);
 
         return back()->with('ok', __('Заявка №:n создана', ['n' => $sr->number]));
     }
@@ -246,7 +226,10 @@ class StockController extends ErpController
         $boss = $u->isAdmin() || $u->role === 'accountant';
         if (in_array($a, ['approve', 'reject'], true)) {
             abort_unless($boss && $sr->status === 'new', 403);
-            $sr->update(['status' => $a === 'approve' ? 'approved' : 'rejected']);
+            // согласование и ответ автору в Telegram — так же, как кнопкой в боте (повторное решение не пройдёт)
+            \App\Services\Erp\Supply::decide($sr, $u, $a === 'approve');
+
+            return back()->with('ok', __('Сохранено'));
         } elseif ($a === 'order') {
             abort_unless($boss && in_array($sr->status, ['approved', 'ordered'], true), 403);
             $d = $request->validate(['counterparty_id' => ['required', Rule::exists('counterparties', 'id')->where('workspace_id', $ws->id)], 'price' => ['array'], 'price.*' => ['nullable', 'numeric', 'min:0']]);
@@ -260,6 +243,7 @@ class StockController extends ErpController
             $this->myWarehouse((int) $d['warehouse_id']);
             Stock::receiveSupply($ws, $u, $sr, $d['qty'] ?? [], (int) $d['warehouse_id']);
             if ($request->boolean('make_pr')) {
+                \App\Services\Erp\Supply::notifyAuthor($sr->fresh(), $u);
                 $lines = $sr->lines->map(fn ($l) => [$l->item_id, (float) ($d['qty'][$l->id] ?? 0), (float) $l->price])->all();
                 try {
                     $pr = $this->payFor($ws, $u, $lines, $sr->counterparty_id, (int) $d['warehouse_id'], 'заявка на снабжение №'.$sr->number);
@@ -274,6 +258,7 @@ class StockController extends ErpController
             abort(422);
         }
         AuditLog::create(['workspace_id' => $ws->id, 'user_id' => $u->id, 'action' => 'supply.edit', 'summary' => 'Заявка на снабжение №'.$sr->number.': '.$sr->fresh()->status]);
+        \App\Services\Erp\Supply::notifyAuthor($sr->fresh(), $u);   // прорабу в Telegram: заказана / принята
 
         return back()->with('ok', __('Сохранено'));
     }

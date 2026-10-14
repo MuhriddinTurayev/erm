@@ -8,6 +8,8 @@ use App\Models\SiteLog;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Ai\AiService;
+use App\Services\Erp\Supply;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -56,7 +58,7 @@ class TelegramBot
             return;
         }
         $chat = (string) $m['chat']['id'];
-        $text = trim((string) ($m['text'] ?? $m['caption'] ?? ''));
+        $text = trim((string) (($m['text'] ?? '') !== '' ? $m['text'] : ($m['caption'] ?? '')));
 
         if (preg_match('/^\/start(?:\s+(\S+))?/u', $text, $mm) && ! empty($mm[1]) && $this->link($chat, $mm[1], $m)) {
             return;
@@ -95,17 +97,53 @@ class TelegramBot
 
                 return;
             }
+            // заявка на материалы: /zayavka, затем список
+            if (preg_match('/^\/(zayavka|buyurtma|zakaz|заявка|заказ|order)\b/u', $text, $zm)) {
+                if (! $this->canSupply($user, $chat)) {
+                    return;
+                }
+                $rest = trim(mb_substr($text, mb_strlen($zm[0])));
+                if ($rest !== '') {
+                    $this->supplyDraft($user, $chat, $rest);
+
+                    return;
+                }
+                $user->forceFill(['tg_state' => ['supply' => true]])->save();
+                $this->say($chat, '📦 <b>'.__('Заявка на материалы').'</b>'."\n".__('Напишите, что нужно — каждую позицию с новой строки, с количеством:')
+                    ."\n\n<i>".__('Цемент М400 — 50 мешков')."\n".__('Песок 3 камаза')."\n".__('Арматура 12 мм 2 т')."\n".__('завтра')."</i>\n\n"
+                    .__('Срок можно указать словом «завтра» или датой «15.10». /bekor — отменить'));
+
+                return;
+            }
+            // как сдать отчёт за день
+            if (preg_match('/^\/(hisobot|otchet|отчет|отчёт|report)\b/u', $text)) {
+                $this->say($chat, '📓 <b>'.__('Отчёт за день').'</b>'."\n".__('Пришлите фото с объекта (можно сразу несколько, альбомом) и напишите, что сделано: какие работы, сколько людей работало, что мешает. Всё попадёт в журнал работ, руководитель увидит это в ежедневном отчёте.'));
+
+                return;
+            }
             // фото
             $photo = $m['photo'] ?? null;
             $doc = $m['document'] ?? null;
             if ($photo || ($doc && str_starts_with((string) ($doc['mime_type'] ?? ''), 'image/'))) {
                 $fileId = $photo ? end($photo)['file_id'] : $doc['file_id'];
                 $path = $this->store($user, $fileId, 'inbox');
+                $state = (array) ($user->tg_state ?? []);
+                $group = $m['media_group_id'] ?? null;
+                // альбом: остальные фото того же альбома добавляем к первому, второй раз не спрашиваем
+                if ($group && ($state['group'] ?? null) === $group && ! empty($state['photo'])) {
+                    $state['photos'] = array_values(array_merge((array) ($state['photos'] ?? [$state['photo']]), [$path]));
+                    if ($text !== '' && empty($state['text'])) {
+                        $state['text'] = $text;
+                    }
+                    $user->forceFill(['tg_state' => $state])->save();
+
+                    return;
+                }
                 $parsed = $text !== '' ? ExpenseService::parse($text) : null;
-                if ($parsed) {
+                if ($parsed && ! $group) {
                     $this->withProject($user, $chat, ['do' => 'expense', 'data' => $parsed, 'receipt' => $path]);
                 } else {
-                    $user->forceFill(['tg_state' => ['photo' => $path, 'text' => $text]])->save();
+                    $user->forceFill(['tg_state' => ['photo' => $path, 'photos' => [$path], 'group' => $group, 'text' => $text]])->save();
                     $this->say($chat, '📷 '.__('Что это за фото?'), [[
                         ['text' => '🧾 '.__('Чек — расход'), 'data' => 'ph:exp'], ['text' => '📓 '.__('Журнал работ'), 'data' => 'ph:log'],
                     ]]);
@@ -117,6 +155,19 @@ class TelegramBot
                 return;
             }
             $state = (array) ($user->tg_state ?? []);
+            // ждали список для заявки — или сообщение начинается со слова «заявка:» / «kerak:»
+            if (! empty($state['supply'])) {
+                $this->supplyDraft($user, $chat, $text);
+
+                return;
+            }
+            if (preg_match('/^(zayavka|buyurtma|заявка|заказ|kerak|нужно)\s*[:\n]\s*(.+)$/isu', $text, $zm)) {
+                if ($this->canSupply($user, $chat)) {
+                    $this->supplyDraft($user, $chat, $zm[2]);
+                }
+
+                return;
+            }
             $parsed = ExpenseService::parse($text);
             if (! empty($state['await_amount'])) {     // ждали сумму к фото чека
                 if (! $parsed) {
@@ -186,9 +237,14 @@ class TelegramBot
             '💸 '.__('Расход — просто напишите: «Бетон 25 млн БетонСтрой» или «солярка 850 000 АЗС».'),
             '🧾 '.__('Чек — пришлите фото, ИИ сам прочитает сумму.'),
             '📓 '.__('Журнал работ — пришлите фото с объекта или напишите, что сделано за день.'),
-            '',
-            '/obyekt — '.__('выбрать объект').($proj ? ' ('.e($proj).')' : ''),
         ];
+        if ($user->canEdit() && $user->canModule('supply')) {
+            $lines[] = '📦 '.__('Заявка на материалы — /zayavka и список: «Цемент М400 50 мешков», «Песок 3 камаза», «завтра».');
+        }
+        array_push($lines, '', '/obyekt — '.__('выбрать объект').($proj ? ' ('.e($proj).')' : ''), '/hisobot — '.__('как сдать отчёт за день'));
+        if ($user->canEdit() && $user->canModule('supply')) {
+            $lines[] = '/zayavka — '.__('заявка на материалы');
+        }
         if ($user->seesMoney()) {
             $lines[] = '/kassa — '.__('деньги компании сейчас');
         }
@@ -218,6 +274,43 @@ class TelegramBot
             $L[] = '⏳ '.__('Ждут согласования').': '.$pending;
         }
         $this->say($chat, implode("\n", $L));
+    }
+
+    /* ---------------- заявка на материалы ---------------- */
+
+    private function canSupply(User $user, string $chat): bool
+    {
+        if ($user->canEdit() && $user->canModule('supply')) {
+            return true;
+        }
+        $this->say($chat, __('Нет доступа к этому разделу'));
+
+        return false;
+    }
+
+    /** Разобрать список и показать, что получилось: «Отправить» / «Исправить» / «Отмена» */
+    private function supplyDraft(User $user, string $chat, string $text): void
+    {
+        $d = Supply::parse($text, $user->workspace->localNow());
+        if (! $d['lines']) {
+            $user->forceFill(['tg_state' => ['supply' => true]])->save();
+            $this->say($chat, '🤔 '.__('Не нашёл позиций с количеством. Напишите каждую с новой строки, например: «Цемент М400 — 50 мешков». /bekor — отменить'));
+
+            return;
+        }
+        $user->forceFill(['tg_state' => ['supply_draft' => $d]])->save();
+        $n = fn ($v) => rtrim(rtrim(number_format((float) $v, 3, ',', ' '), '0'), ',');
+        $L = ['📦 <b>'.__('Проверьте заявку').'</b>'];
+        foreach ($d['lines'] as $i => $l) {
+            $L[] = ($i + 1).'. '.e($l['name']).' — <b>'.$n($l['qty']).' '.e($l['unit']).'</b>';
+        }
+        if ($d['need_by']) {
+            $L[] = '📅 '.__('Нужно к').': <b>'.Carbon::parse($d['need_by'])->format('d.m.Y').'</b>';
+        }
+        if ($d['note'] !== '') {
+            $L[] = '✏️ '.e($d['note']);
+        }
+        $this->say($chat, implode("\n", $L), [[['text' => '✅ '.__('Отправить'), 'data' => 'sr:send'], ['text' => '✏️ '.__('Исправить'), 'data' => 'sr:edit'], ['text' => '✖ '.__('Отмена'), 'data' => 'sr:cancel']]]);
     }
 
     /* ---------------- объект ---------------- */
@@ -268,15 +361,21 @@ class TelegramBot
 
             return;
         }
+        if ($action['do'] === 'supply') {
+            $d = (array) $action['draft'];
+            $sr = Supply::create($ws, $user, $pid, (array) $d['lines'], $d['need_by'] ?? null, ($d['note'] ?? '') ?: null, 'telegram');
+            $this->say($chat, Supply::card($sr)."\n\n".($sr->status === 'new' ? '⏳ '.__('Отправлено на согласование. Ответ придёт сюда.') : '✅ '.__('Заявка согласована — снабжение получит её сразу.')));
+
+            return;
+        }
         if ($action['do'] === 'log') {
-            $photos = [];
-            if (! empty($action['photo'])) {
-                $photos[] = $this->move($action['photo'], "logs/{$ws->id}");
-            }
+            // одно фото или весь альбом
+            $photos = array_values(array_unique(array_filter(array_merge([$action['photo'] ?? null], (array) ($action['photos'] ?? [])))));
+            $photos = array_map(fn ($ph) => $this->move($ph, "logs/{$ws->id}"), $photos);
             SiteLog::create(['workspace_id' => $ws->id, 'project_id' => $pid, 'user_id' => $user->id, 'date' => $ws->localNow()->toDateString(),
                 'text' => ($action['text'] ?? '') ?: null, 'photos' => $photos ?: null, 'source' => 'telegram']);
             $proj = StateWriter::projects($ws)[$pid] ?? '';
-            $this->say($chat, '📓 '.__('Записано в журнал работ').' · '.e($proj));
+            $this->say($chat, '📓 '.__('Записано в журнал работ').' · '.e($proj).($photos ? ' · 📷 '.count($photos) : ''));
         }
     }
 
@@ -328,7 +427,7 @@ class TelegramBot
                 Telegram::edit($chat, (int) $q['message']['message_id'], $arg === 'exp' ? '🧾 '.__('Читаю чек…') : '📓 '.__('Журнал работ'));
                 if ($arg === 'log') {
                     $user->forceFill(['tg_state' => null])->save();
-                    $this->withProject($user, $chat, ['do' => 'log', 'photo' => $st['photo'], 'text' => $st['text'] ?? '']);
+                    $this->withProject($user, $chat, ['do' => 'log', 'photo' => $st['photo'], 'photos' => (array) ($st['photos'] ?? []), 'text' => $st['text'] ?? '']);
 
                     return;
                 }
@@ -341,6 +440,47 @@ class TelegramBot
                     $user->forceFill(['tg_state' => ['await_amount' => $st['photo']]])->save();
                     $this->say($chat, __('Не удалось прочитать сумму на чеке. Напишите сумму и что купили, например: «Цемент 4 500 000 СементСавдо».'));
                 }
+
+                return;
+            }
+            if ($cmd === 'sr') {   // черновик заявки: отправить / исправить / отмена
+                $draft = $user->tg_state['supply_draft'] ?? null;
+                if ($arg === 'cancel' || ! $draft) {
+                    $user->forceFill(['tg_state' => null])->save();
+                    Telegram::answer($q['id'], $draft ? '👌' : __('Заявка уже отправлена'));
+                    Telegram::edit($chat, (int) $q['message']['message_id'], $draft ? '✖ '.__('Заявка отменена') : '📦 '.__('Заявка уже отправлена'));
+
+                    return;
+                }
+                if ($arg === 'edit') {
+                    $user->forceFill(['tg_state' => ['supply' => true]])->save();
+                    Telegram::answer($q['id']);
+                    $this->say($chat, '✏️ '.__('Напишите список заново — каждую позицию с новой строки.'));
+
+                    return;
+                }
+                if (! $user->canEdit() || ! $user->canModule('supply')) {
+                    Telegram::answer($q['id'], __('Нет доступа к этому разделу'));
+
+                    return;
+                }
+                $user->forceFill(['tg_state' => null])->save();   // повторное нажатие не создаст вторую заявку
+                Telegram::answer($q['id'], '✓');
+                Telegram::edit($chat, (int) $q['message']['message_id'], '📦 '.__('Отправляю заявку…'));
+                $this->withProject($user, $chat, ['do' => 'supply', 'draft' => $draft]);
+
+                return;
+            }
+            if ($cmd === 'sa' || $cmd === 'sn') {   // заявка на снабжение: согласовать / отклонить
+                $sr = \App\Models\SupplyRequest::of($ws->id)->find((int) $arg);
+                if (! $sr || ! Supply::canDecide($user)) {
+                    Telegram::answer($q['id'], __('Нет доступа к этому разделу'));
+
+                    return;
+                }
+                $ok = Supply::decide($sr, $user, $cmd === 'sa');
+                Telegram::answer($q['id'], $ok ? ($cmd === 'sa' ? '✅ '.__('Согласовано') : '❌ '.__('Отклонено')) : __('Уже решено'));
+                Telegram::edit($chat, (int) $q['message']['message_id'], Supply::card($sr->fresh()), [[['text' => __('Открыть'), 'url' => url('/company/supply')]]]);
 
                 return;
             }
