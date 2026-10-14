@@ -362,3 +362,8 @@ button,.btn,select,input.txt,.inp{border-radius:6px}
 .erp-btn:hover{background:var(--accent);color:#fff}
 .u-drop{max-height:calc(100vh - 80px);overflow-y:auto}
 @media (max-width:760px){.erp-btn span{display:none}}
+
+/* «Настоящая 3D-модель» над схемами программы (saas.js → real3dBar) */
+.real3d{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-color:color-mix(in srgb,var(--accent) 35%,var(--border));background:color-mix(in srgb,var(--accent) 6%,var(--surface))}
+.real3d-t{display:grid;gap:4px;max-width:760px;min-width:0}
+.real3d .flex{gap:8px;flex-wrap:wrap}

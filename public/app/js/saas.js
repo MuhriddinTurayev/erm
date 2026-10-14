@@ -166,3 +166,19 @@ function planNotice() {
   if (pl.state === 'trial' && pl.daysLeft != null && pl.daysLeft <= 7) return `<div class="plan-note">⏳ ${T('Пробный период')}: ${T('осталось')} <b>${pl.daysLeft}</b> ${T('дн.')} ${SAAS.isAdmin ? `<a href="/company/billing">${T('Выбрать тариф')} →</a>` : ''}</div>`;
   return '';
 }
+
+/* ---------- Настоящие 3D-модели объекта ----------
+   Здесь, в программе, «Объект в 3D» и «Дизайн квартиры» — схемы, которые программа рисует сама по параметрам здания.
+   Модели архитектора и дизайнера загружаются в панели: «Объекты и 3D» → объект → «3D, панорамы, планировки». */
+function real3dBar(p, kind) {
+  if (!SAAS) return '';
+  const m = (SAAS.media && SAAS.media[p.id]) || {}, inner = kind === 'interior', n = inner ? (m.interior || 0) + (m.pano || 0) : (m.exterior || 0), id = encodeURIComponent(p.id);
+  const hint = inner ? 'Здесь — примерная квартира, нарисованная программой. Загрузите интерьер от дизайнера (GLB, FBX, OBJ, SketchUp, 3ds Max…) и панорамы 360° каждой комнаты.'
+    : 'Здесь — схема, нарисованная программой по параметрам здания. Загрузите модель архитектора (GLB, FBX, OBJ, SketchUp, Revit или ArchiCAD IFC…) — покупатели увидят настоящий дом.';
+  return `<div class="card real3d"><div class="real3d-t"><b>📦 ${inner ? 'Настоящий 3D-интерьер и панорамы комнат' : 'Настоящая 3D-модель здания'}</b>
+    <span class="small muted">${n ? `${inner ? 'Загружено файлов интерьера' : 'Загружено моделей'}: <b>${n}</b>. <span>Покупатели видят их в кабинете и на сайте.</span>` : hint}</span></div>
+    <div class="flex">${n ? `<a class="btn btn-p" href="/company/objects/${id}/3d" target="_blank">Открыть 3D-модель</a>` : ''}
+    ${SAAS.canMedia ? `<a class="btn${n ? '' : ' btn-p'}" href="/company/objects/${id}?tab=media&kind=${inner ? 'interior' : 'exterior'}#upload-card">⬆ Загрузить 3D-модель</a>` : ''}</div></div>`;
+}
+if (PAGES.site) { const r = PAGES.site.render; PAGES.site.render = function (p, a) { return real3dBar(p, 'exterior') + r.call(this, p, a); }; }
+if (PAGES.design) { const r = PAGES.design.render; PAGES.design.render = function (p, a) { return real3dBar(p, 'interior') + r.call(this, p, a); }; }

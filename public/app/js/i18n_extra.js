@@ -42,7 +42,19 @@ const _W2 = [
 ];
 _E2.forEach(([r, u, t]) => { L10N.uz[r] = u; L10N.tg[r] = t; });
 _W2.forEach(([r, u, t]) => { L10W.uz[r] = u; L10W.tg[r] = t; });
-[['Вы вошли в другую компанию', 'Siz boshqa kompaniyaga kirdingiz', 'Шумо ба ширкати дигар ворид шудед']].forEach(([r, u, t]) => { L10N.uz[r] = u; L10N.tg[r] = t; });
+[['Вы вошли в другую компанию', 'Siz boshqa kompaniyaga kirdingiz', 'Шумо ба ширкати дигар ворид шудед'],
+  ['📦 Настоящая 3D-модель здания', '📦 Binoning haqiqiy 3D-modeli', '📦 Модели ҳақиқии 3D-и бино'],
+  ['📦 Настоящий 3D-интерьер и панорамы комнат', '📦 Haqiqiy 3D-interyer va xonalar panoramalari', '📦 Интерери ҳақиқии 3D ва панорамаҳои ҳуҷраҳо'],
+  ['Здесь — схема, нарисованная программой по параметрам здания. Загрузите модель архитектора (GLB, FBX, OBJ, SketchUp, Revit или ArchiCAD IFC…) — покупатели увидят настоящий дом.',
+    'Bu yerda — dastur bino parametrlari bo‘yicha chizgan sxema. Arxitektor modelini yuklang (GLB, FBX, OBJ, SketchUp, Revit yoki ArchiCAD IFC…) — xaridorlar haqiqiy uyni ko‘radi.',
+    'Дар ин ҷо — схемае, ки барнома аз рӯи параметрҳои бино кашидааст. Модели меъморро боргузорӣ кунед (GLB, FBX, OBJ, SketchUp, Revit ё ArchiCAD IFC…) — харидорон хонаи ҳақиқиро мебинанд.'],
+  ['Здесь — примерная квартира, нарисованная программой. Загрузите интерьер от дизайнера (GLB, FBX, OBJ, SketchUp, 3ds Max…) и панорамы 360° каждой комнаты.',
+    'Bu yerda — dastur chizgan taxminiy xonadon. Dizayner interyerini (GLB, FBX, OBJ, SketchUp, 3ds Max…) va har bir xonaning 360° panoramasini yuklang.',
+    'Дар ин ҷо — хонаи тахминие, ки барнома кашидааст. Интерери тарроҳро (GLB, FBX, OBJ, SketchUp, 3ds Max…) ва панорамаҳои 360°-и ҳар ҳуҷраро боргузорӣ кунед.'],
+  ['Загружено моделей:', 'Yuklangan modellar:', 'Моделҳои боргузоришуда:'], ['Загружено файлов интерьера:', 'Yuklangan interyer fayllari:', 'Файлҳои интерери боргузоришуда:'],
+  ['Покупатели видят их в кабинете и на сайте.', 'Xaridorlar ularni kabinetda va saytda ko‘radi.', 'Харидорон онҳоро дар кабинет ва сайт мебинанд.'],
+  ['Открыть 3D-модель', '3D-modelni ochish', 'Кушодани модели 3D'], ['⬆ Загрузить 3D-модель', '⬆ 3D-model yuklash', '⬆ Боргузории модели 3D'],
+].forEach(([r, u, t]) => { L10N.uz[r] = u; L10N.tg[r] = t; });
 /* перечень помещений (Объекты → Помещения): «Блок A · подъезд 2», виды помещений в прайс-листе */
 [['Блок', 'Blok', 'Блок'], ['офис', 'ofis', 'офис'], ['паркинг', 'avtoturargoh', 'таваққуфгоҳ'], ['кладовая', 'omborxona', 'анбор'], ['коммерция', 'tijorat', 'тиҷоратӣ']]
   .forEach(([r, u, t]) => { L10W.uz[r] = u; L10W.tg[r] = t; });

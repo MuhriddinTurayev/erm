@@ -30,6 +30,9 @@ class AppController extends Controller
                 'seesMoney' => $user->seesMoney(),
                 'pages' => $user->allowedPages(),
                 'restricted' => $user->allowedObjects() !== null,
+                // загруженные 3D-модели и панорамы по объектам — в «Объект в 3D» и «Дизайн квартиры» показываем кнопки к ним
+                'media' => self::mediaCounts($ws->id),
+                'canMedia' => $user->canMedia(),
                 'firstObject' => $ws->setting('first_object'),
                 'plan' => [
                     'name' => $plan?->title(),
@@ -47,6 +50,17 @@ class AppController extends Controller
             // данные передаём отдельной строкой: это уже готовый JSON
             'state' => StateAccess::forUser($ws->data, $user),
         ]);
+    }
+
+    /** [id объекта => [exterior => n, interior => n, pano => n]] */
+    private static function mediaCounts(int $wsId): array
+    {
+        $out = [];
+        foreach (\App\Models\ObjectMedia::of($wsId)->whereIn('kind', ['exterior', 'interior', 'pano'])->selectRaw('project_id, kind, count(*) as n')->groupBy('project_id', 'kind')->get() as $r) {
+            $out[(string) $r->project_id][$r->kind] = (int) $r->n;
+        }
+
+        return $out;
     }
 
     /** Смена языка из программы */
