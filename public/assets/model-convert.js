@@ -64,7 +64,7 @@ async function collect(files, step) {
 const EMPTY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 const IMG = /\.(jpe?g|png|webp|tga|bmp|gif|tiff?|dds|ktx2?|hdr|exr|psd)$/i;
 
-async function load(list, main, step, T, missing) {
+async function load(list, main, step, T, missing, flags = {}) {
   const byName = new Map(), urls = [];
   for (const f of list) byName.set(base(f.name).toLowerCase(), f);
   const manager = new THREE.LoadingManager();
@@ -107,6 +107,8 @@ async function load(list, main, step, T, missing) {
       const lib = (text.match(/^mtllib\s+(.+)$/m) || [])[1];
       const mtl = (lib && byName.get(base(lib.trim()).toLowerCase())) || list.find(f => ext(f.name) === 'mtl');
       if (mtl) { const { MTLLoader } = await import(ADDONS + 'loaders/MTLLoader.js'); const m = new MTLLoader(manager).parse(await mtl.text(), path); m.preload(); l.setMaterials(m); }
+      // цвета и текстуры OBJ лежат в .mtl: без него модель была бы белой — запомним, раскрасим по названиям материалов и предупредим
+      else if (lib || /^usemtl\s/m.test(text)) flags.noMtl = lib ? base(lib.trim()) : true;
       root = l.parse(text); break;
     }
     case 'dae': { const { ColladaLoader } = await import(ADDONS + 'loaders/ColladaLoader.js'); root = new ColladaLoader(manager).parse(await txt(), path).scene; break; }
@@ -249,6 +251,34 @@ function stats(root) {
  * opt: {kind, units: auto|m|cm|mm|in|ft, up: auto|y|z, tex: 1024|2048|4096, merge: bool, T}
  * Возвращает {file: File(.glb), scene, info: {format, unit, size, tris, meshes, materials, textures, bytes}}
  */
+/**
+ * Модель без файла материалов (.mtl): все материалы белые. Красим по названию материала (glass, grass, road, roof…),
+ * остальным — спокойные оттенки отделки по хэшу названия, чтобы дома не сливались в одно белое пятно.
+ */
+const NAMED = [
+  [/glass|window|glazing|okno|окн|стекл|oyna/i, 0x8fb4d8, { transparent: true, opacity: 0.55, roughness: 0.1 }],
+  [/water|sea|river|suv|вода/i, 0x4f8fc0], [/grass|lawn|green|tree|leaf|foliage|bush|трав|дерев|зелен|o.t/i, 0x6f9a52],
+  [/road|asphalt|street|tarmac|асфальт|дорог|yo.l/i, 0x4a4d52], [/roof|tile|черепиц|крыш|tom/i, 0x9a5b42], [/brick|кирпич|g.isht/i, 0xa45a45],
+  [/wood|timber|plank|доск|брус|yog.och/i, 0x8a6a4a], [/metal|steel|iron|chrome|alumin|сталь|металл/i, 0x9aa1a9, { metalness: 0.6, roughness: 0.4 }],
+  [/concrete|cement|stone|бетон|камен|tosh/i, 0xb9b6ae], [/sand|песок|qum/i, 0xd8c79a], [/line|marking|stripe|разметк/i, 0xf2f2ee],
+  [/red/i, 0xc0504d], [/blue/i, 0x4f7fbf], [/yellow/i, 0xd9b44a], [/white/i, 0xf1f1ee], [/black|dark/i, 0x2f3236], [/gr[ae]y/i, 0x9a9da3],
+  [/orange/i, 0xd98a3a], [/brown/i, 0x8a6a4a], [/pink/i, 0xd98aa8], [/purple|violet/i, 0x8a6ac0],
+];
+const SOFT = [0xd9d4c7, 0xc9d3dc, 0xe2d6c3, 0xcfd8c6, 0xd8c9c4, 0xc8ccd8, 0xe0dccf, 0xbfc7cc, 0xd6cfc1, 0xc4cfc8];
+function autoColor(root) {
+  const hash = s => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => {
+      if (!m || m.map || !m.color || m.color.r + m.color.g + m.color.b < 2.9) return;   // уже своя краска — не трогаем
+      const name = m.name || o.name || '', hit = NAMED.find(([re]) => re.test(name));
+      m.color.setHex(hit ? hit[1] : SOFT[hash(name) % SOFT.length]);
+      if (hit && hit[2]) Object.assign(m, hit[2]);
+      m.needsUpdate = true;
+    });
+  });
+}
+
 export async function convert(files, opt = {}, onStep = () => {}) {
   const T = opt.T || {};
   const step = k => onStep(T['p_' + k] || k);
@@ -256,9 +286,10 @@ export async function convert(files, opt = {}, onStep = () => {}) {
   const list = await collect(files, step);
   const main = mainFile(list);
   if (!main) throw new Error(nativeHint(list, T) || T.noModel);
-  const e = ext(main.name), missing = new Set();
-  let root = await load(list, main, step, T, missing);
+  const e = ext(main.name), missing = new Set(), flags = {};
+  let root = await load(list, main, step, T, missing, flags);
   if (!root) throw new Error(T.unknown);
+  if (flags.noMtl) autoColor(root);
   const dropped = dropBadTextures(root);
   root.traverse(o => {
     if (o.isLight || o.isCamera) { o.visible = false; return; }
@@ -307,7 +338,7 @@ export async function convert(files, opt = {}, onStep = () => {}) {
   const name = base(main.name).replace(/\.[^.]+$/, '') + '.glb';
   const file = new File([glb], name, { type: 'model/gltf-binary' });
   return { file, scene: holder, info: Object.assign({ format: e.toUpperCase(), unit, size: { x: size.x, y: size.y, z: size.z }, bytes: file.size, source: main.name,
-    missing: [...missing], dropped, stripped }, stats(holder)) };
+    missing: [...missing], dropped, stripped, noMtl: flags.noMtl || null }, stats(holder)) };
 }
 
 /** Текстуры без картинки (файл не выбрали вместе с моделью, формат не прочитался) — убираем: остаётся цвет материала */

@@ -183,6 +183,19 @@ document.getElementById('b-save').addEventListener('click', async () => {
   const r = await fetch('/company/media/{{ $cur->id }}', { method: 'POST', body: fd, headers: { Accept: 'application/json' } });
   toast(r.ok ? @json(__('Вид и превью сохранены')) : @json(__('Не удалось сохранить')));
 });
+@if (! $cur->poster)
+// у модели ещё нет превью (карточка объекта пустая) — при первом открытии снимок делаем сами; потом его можно заменить «Сохранить вид»
+mv.addEventListener('load', () => setTimeout(async () => {
+  try {
+    const blob = await mv.toBlob({ mimeType: 'image/jpeg', qualityArgument: 0.82, idealAspect: true });
+    const poster = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+    const fd = new FormData(); fd.append('_token', document.querySelector('meta[name=csrf-token]').content);
+    fd.append('title', @json($cur->title)); fd.append('rooms', @json($cur->rooms ?? '')); fd.append('sort', @json($cur->sort)); fd.append('is_public', @json($cur->is_public ? 1 : 0));
+    fd.append('poster', poster);
+    await fetch('/company/media/{{ $cur->id }}', { method: 'POST', body: fd, headers: { Accept: 'application/json' } });
+  } catch (e) { console.warn(e); }
+}, 1200), { once: true });
+@endif
 @endif
 @else
 pannellum.viewer('pano', { type: 'equirectangular', panorama: @json($src($cur)), autoLoad: true, autoRotate: -2, showControls: true, compass: false, hfov: 105 });
