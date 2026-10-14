@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\Workspace;
 use App\Services\Apartments;
 use App\Services\Inventory;
+use App\Services\Locate;
 use App\Services\StateWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -133,9 +134,69 @@ class InventoryController extends ErpController
 
             return ['rev' => self::rev($p)];
         });
+        if ($res->getStatusCode() !== 200) {
+            return $res;
+        }
+        // у рассчитанных квартир корпус без имени (''), в перечне он — b1: привязка 3D-модели переезжает вместе с ним
+        Locate::renameBlock($this->ws()->id, $pid, '', 'b1');
         $this->audit($pid, 'inv.save', __('Перечень помещений заведён из параметров здания'));
 
         return $res;
+    }
+
+    /**
+     * Одна квартира прямо из привязки к 3D-модели: число комнат и площадь (планировка подбирается по ним).
+     * Квартиры ещё рассчитаны по параметрам здания — сначала заводим перечень (номера и сделки сохраняются).
+     */
+    public function unit(Request $request, string $pid, string $uid)
+    {
+        $p0 = $this->guard($pid);
+        $d = $request->validate(['rooms' => ['required', 'integer', 'min:1', 'max:9'], 'area' => ['nullable', 'numeric', 'min:5', 'max:5000']]);
+        $a = Apartments::find($p0, $uid) ?? abort(404);
+        if (in_array($a['status'], ['sold', 'booked'], true)) {
+            return response()->json(['error' => __('По кв. №:n есть бронь или продажа — её планировку менять нельзя.', ['n' => $a['num']])], 422);
+        }
+        if (($a['kind'] ?? 'flat') !== 'flat') {
+            return response()->json(['error' => __('Это не квартира — у неё нет комнат')], 422);
+        }
+        $converted = false;
+        $res = $this->change($pid, function (array &$p) use ($uid, $d, &$converted) {
+            if (! Inventory::has($p)) {
+                $p['inv'] = Inventory::fromGenerator($p, $this->ws()->locale ?: null);
+                $converted = true;
+            }
+            $inv = (array) $p['inv'];
+            $types = array_values(array_filter((array) ($inv['types'] ?? []), fn ($t) => ($t['kind'] ?? 'flat') === 'flat' && (int) ($t['rooms'] ?? 0) === (int) $d['rooms']));
+            foreach ($inv['units'] as &$u) {
+                if ((string) $u['id'] !== $uid) {
+                    continue;
+                }
+                $area = isset($d['area']) ? round((float) $d['area'], 2) : (float) ($u['area'] ?? 0);
+                // планировка с тем же числом комнат и ближайшей площадью; другой нет — квартира без планировки
+                usort($types, fn ($x, $y) => abs((float) $x['area'] - $area) <=> abs((float) $y['area'] - $area));
+                $u['rooms'] = (int) $d['rooms'];
+                $u['area'] = $area;
+                $u['type'] = $types && abs((float) $types[0]['area'] - $area) <= max(0.5, $area * 0.02) ? (string) $types[0]['id'] : null;
+                if (! $u['type']) {
+                    unset($u['type']);
+                }
+            }
+            unset($u);
+            $p['inv'] = Inventory::clean($inv, self::deals(Apartments::list($p)), $inv);
+
+            return ['rev' => self::rev($p)];
+        });
+        if ($res->getStatusCode() !== 200) {
+            return $res;
+        }
+        if ($converted) {
+            Locate::renameBlock($this->ws()->id, $pid, '', 'b1');
+        }
+        $this->audit($pid, 'inv.save', __('Кв. №:n: комнат :r, площадь :a м²', ['n' => $a['num'], 'r' => $d['rooms'], 'a' => $d['area'] ?? $a['area']]));
+        $fresh = Apartments::find(StateWriter::project($this->ws()->fresh(), $pid) ?? [], $uid);   // данные компании только что переписаны — читаем заново
+        $data = $res->getData(true);
+
+        return response()->json($data + ['converted' => $converted, 'unit' => $fresh ? ['r' => (int) $fresh['rooms'], 'a' => (float) $fresh['area'], 't' => $fresh['type'] ?? null, 'b' => (string) ($fresh['blockId'] ?? '')] : null], $res->getStatusCode());
     }
 
     /** Вернуть перечень, каким он был до последнего сохранения */

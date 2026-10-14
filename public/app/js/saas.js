@@ -204,14 +204,26 @@ if (PAGES.apt) {
   // вкладки «В доме» и «Как пройти»: вместо нарисованного дома — загруженная модель с подсвеченной квартирой и подъездом;
   // шаги «как пройти» и схема участка остаются
   const real = (p, a) => !!(a && a.id && ['house', 'route'].includes(a.tab || 'house') && hasReal3d(p));
+  // вкладка «3D-интерьер»: загружен интерьер этой квартиры (своей планировки или по числу комнат) — показываем его, а не нарисованный
+  const ownInner = (p, a) => {
+    if (!a || !a.id || a.tab !== 'interior') return false;
+    const apt = genApts(p).find((x) => x.id === a.id), pairs = (SAAS && SAAS.media && SAAS.media[p.id] && SAAS.media[p.id].in) || [];
+    if (!apt) return false;
+    return apt.type && pairs.some(([l]) => l === apt.type) ? true : pairs.some(([l, rr]) => !l && (rr == null || +rr === +apt.rooms));
+  };
   PAGES.apt.render = function (p, a) {
     const html = r.call(this, p, a);
+    if (ownInner(p, a)) {
+      const k = html.indexOf('data-act="aptStyle"'), s = html.lastIndexOf('<div class="flex mb">', k), v = html.indexOf('<div class="v-move">', k), e = v < 0 ? -1 : html.indexOf('</div></div>', v);
+      if (k < 0 || s < 0 || e < 0) return html;
+      return html.slice(0, s) + `<div class="real3d-frame big"><iframe src="/company/objects/${encodeURIComponent(p.id)}/3d?embed=1&u=${encodeURIComponent(a.id)}" title="3D" allow="fullscreen; xr-spatial-tracking"></iframe></div>` + html.slice(e + 12);
+    }
     if (!real(p, a)) return html;
     return html.replace(/<div class="site-viewer" id="aptSite"><div class="v-tools" id="s3Tools"><\/div>(<div class="v-help">[^<]*<\/div>)?<\/div>/, real3dFrame(p, a.id))
       .replace('<div class="flex mt"><button class="btn-p" data-act="aptWin">🪟 Вид из окна</button><button data-act="aptFocus">🎯 Показать квартиру</button></div>', '');
   };
   PAGES.apt.mounted = function (p, a) {
-    if (real(p, a)) return;
+    if (real(p, a) || ownInner(p, a)) return;
     if (m) m.call(this, p, a);
   };
 }

@@ -49,11 +49,42 @@ class Locate
                 'id' => (string) $a['id'], 'num' => (string) $a['num'], 'b' => $bid, 'e' => $order[$bid][(int) $a['section']] ?? 0,
                 'f' => (int) $a['floor'], 'i' => (int) ($a['idx'] ?? 0), 'n' => $count[$a['section'].'|'.$a['floor']] ?? 1,
                 'k' => (string) ($a['kind'] ?? 'flat'), 'r' => (int) ($a['rooms'] ?? 0), 'a' => (float) ($a['area'] ?? 0),
+                't' => ($a['type'] ?? null) ?: null,   // планировка: по ней находится интерьер квартиры
+                'tn' => ($a['type'] ?? null) ? ((string) ($a['typeName'] ?? '') ?: null) : null,
                 's' => $withStatus ? (string) ($a['status'] ?? 'free') : null,
             ], fn ($v) => $v !== null);
         }
 
         return ['blocks' => $blocks, 'units' => $units];
+    }
+
+    /**
+     * Интерьеры квартир для показа «Внутри»: 3D, панорамы, рендеры, планы — с планировкой (l) или числом комнат (r).
+     * Какой файл к какой квартире — решает страница тем же правилом, что ObjectMedia::forUnit.
+     */
+    public static function media(int $wsId, string $pid, bool $public = false): array
+    {
+        return ObjectMedia::of($wsId)->where('project_id', $pid)->whereIn('kind', ['interior', 'pano', 'photo', 'plan'])
+            ->when($public, fn ($q) => $q->where('is_public', true))->orderBy('kind')->orderBy('sort')->orderBy('id')->get()
+            ->map(fn (ObjectMedia $m) => array_filter(['id' => $m->id, 'k' => $m->kind, 'l' => $m->layout, 'r' => $m->rooms, 'n' => $m->title,
+                'room' => $m->meta['room'] ?? null, 'ext' => $m->ext], fn ($v) => $v !== null))->values()->all();
+    }
+
+    /** Корпус сменил id (квартиры перешли из расчёта в перечень: '' → b1) — привязка во всех моделях объекта переезжает с ним */
+    public static function renameBlock(int $wsId, string $pid, string $from, string $to): void
+    {
+        foreach (ObjectMedia::of($wsId)->where('project_id', $pid)->where('kind', 'exterior')->get() as $m) {
+            $meta = (array) ($m->meta ?? []);
+            $blocks = (array) ($meta['locate']['blocks'] ?? []);
+            if (! array_key_exists($from, $blocks) || array_key_exists($to, $blocks)) {
+                continue;
+            }
+            $blocks[$to] = $blocks[$from];
+            unset($blocks[$from]);
+            $meta['locate']['blocks'] = $blocks;
+            $m->meta = $meta;
+            $m->save();
+        }
     }
 
     /** Модель здания для показа: выбранная, иначе главная, иначе первая. $public — только открытые покупателям */
@@ -103,6 +134,39 @@ class Locate
         sort($ex);
         if ($ex && count($ex) <= 60) {
             $out['ex'] = $ex;
+        }
+        // ряды окон на фасадах: середины окон вдоль рамки (доли длины), f — лицевая сторона (+Z рамки), b — задняя
+        $frac = fn ($x) => round(max(0, min(1, (float) $x)), 4);
+        foreach (['f', 'b'] as $side) {
+            $w = array_map($frac, array_slice(array_values((array) ($d['win'][$side] ?? [])), 0, 200));
+            sort($w);
+            if ($w) {
+                $out['win'][$side] = $w;
+            }
+        }
+        // где квартира на фасаде: s — сторона рамки (1 лицевая, −1 задняя), x0…x1 — доли длины. slots — по месту на этаже
+        // («подъезд|квартир на этаже|номер на этаже»: на всех таких этажах одинаково), ux — у одной квартиры; m=1 — поставил человек
+        $slot = function ($v, bool $withM) use ($frac) {
+            $v = array_values((array) $v);
+            if (count($v) < 3) {
+                return null;
+            }
+            [$x0, $x1] = [$frac($v[1]), $frac($v[2])];
+            if ($x1 - $x0 < 0.002) {
+                return null;
+            }
+
+            return $withM && ! empty($v[3]) ? [(float) $v[0] < 0 ? -1 : 1, $x0, $x1, 1] : [(float) $v[0] < 0 ? -1 : 1, $x0, $x1];
+        };
+        foreach (array_slice((array) ($d['slots'] ?? []), 0, 3000, true) as $k => $v) {
+            if (preg_match('/^\d{1,3}\|\d{1,3}\|\d{1,3}$/', (string) $k) && ($s = $slot($v, true))) {
+                $out['slots'][(string) $k] = $s;
+            }
+        }
+        foreach (array_slice((array) ($d['ux'] ?? []), 0, 6000, true) as $k => $v) {
+            if (preg_match('/^[A-Za-z0-9_\-]{1,40}$/', (string) $k) && ($s = $slot($v, false))) {
+                $out['ux'][(string) $k] = $s;
+            }
         }
         // рамку поставил ИИ (или расчёт по геометрии) и человек её ещё не проверял
         if (! empty($d['auto']) && is_array($d['auto'])) {

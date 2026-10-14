@@ -122,7 +122,7 @@ class PublicController extends Controller
         $media = $this->publicMedia($ws->id, $pid, $request->has('r') ? (int) $request->query('r') : ($layout ? (int) (\App\Http\Controllers\Company\ObjectController::layouts($p)[$layout]['rooms'] ?? 0) : null), $layout);
 
         return view('company.objects.viewer', ['ws' => $ws, 'p' => $p, 'pid' => $pid, 'media' => $media, 'cur' => $media->firstWhere('id', (int) $request->query('m')) ?? $media->first(),
-            'src' => fn ($m, bool $poster = false) => url("/s/{$key}/m/{$m->id}".($poster ? '?poster=1' : '')), 'public' => true, 'canEdit' => false]);
+            'src' => fn ($m, bool $poster = false) => url("/s/{$key}/m/{$m->id}".($poster ? '?poster=1' : '')), 'public' => true, 'canEdit' => false, 'embed' => $request->boolean('embed')]);
     }
 
     public function chessMedia(Request $request, string $key, int $id)
@@ -139,7 +139,7 @@ class PublicController extends Controller
         $media = $this->publicMedia($ws->id, $bl->project_id, (int) $a['rooms'], $a['type'] ?? null);
 
         return view('company.objects.viewer', ['ws' => $ws, 'p' => $p, 'pid' => $bl->project_id, 'media' => $media, 'cur' => $media->firstWhere('id', (int) $request->query('m')) ?? $media->first(),
-            'src' => fn ($m, bool $poster = false) => url("/b/{$token}/m/{$m->id}".($poster ? '?poster=1' : '')), 'public' => true, 'canEdit' => false]);
+            'src' => fn ($m, bool $poster = false) => url("/b/{$token}/m/{$m->id}".($poster ? '?poster=1' : '')), 'public' => true, 'canEdit' => false, 'embed' => $request->boolean('embed')]);
     }
 
     /** Квартира на 3D-модели дома — для сайта застройщика (шахматка) */
@@ -151,7 +151,8 @@ class PublicController extends Controller
         abort_unless(Inventory::ready($p), 404);
         $model = \App\Services\Locate::model($ws->id, $pid, null, true);
 
-        return $this->locateView($p, $pid, $model, (string) $request->query('u', ''), fn ($m) => url("/s/{$key}/m/{$m->id}"), url("/s/{$key}?o={$pid}"), $request->boolean('embed'));
+        return $this->locateView($p, $pid, $model, (string) $request->query('u', ''), fn ($m) => url("/s/{$key}/m/{$m->id}"), url("/s/{$key}?o={$pid}"), $request->boolean('embed'),
+            $ws->id, ['view' => url("/s/{$key}/3d?o={$pid}&t={t}&r={r}&embed=1"), 'file' => url("/s/{$key}/m/{id}")]);
     }
 
     /** Квартира покупателя на 3D-модели дома — из его кабинета */
@@ -160,10 +161,12 @@ class PublicController extends Controller
         [$bl, $ws, $p, $a] = $this->buyer($token);
         $model = \App\Services\Locate::model($ws->id, $bl->project_id, null, true);
 
-        return $this->locateView($p, $bl->project_id, $model, (string) $a['id'], fn ($m) => url("/b/{$token}/m/{$m->id}"), url("/b/{$token}"), $request->boolean('embed'));
+        return $this->locateView($p, $bl->project_id, $model, (string) $a['id'], fn ($m) => url("/b/{$token}/m/{$m->id}"), url("/b/{$token}"), $request->boolean('embed'),
+            $ws->id, ['view' => url("/b/{$token}/3d?embed=1"), 'file' => url("/b/{$token}/m/{id}")]);
     }
 
-    private function locateView(array $p, string $pid, $model, string $unit, \Closure $src, string $back, bool $embed)
+    /** $urls: view — страница 3D «Внутри квартиры» ({t} — планировка, {r} — комнат), file — файл интерьера ({id}) */
+    private function locateView(array $p, string $pid, $model, string $unit, \Closure $src, string $back, bool $embed, int $wsId, array $urls)
     {
         $data = \App\Services\Locate::data($p);
         // покупателям — только привязанные корпуса: без настройки рамка по всей модели может указать не туда
@@ -172,6 +175,7 @@ class PublicController extends Controller
         return view('company.objects.locate', [
             'p' => $p, 'pid' => $pid, 'model' => $model && $cal ? $model : null, 'data' => $data, 'unit' => $unit, 'embed' => $embed, 'calibrate' => false, 'canEdit' => false,
             'src' => $model && $cal ? $src($model).(! empty($model->meta['finished']) ? '?v=finished' : '') : null, 'saveUrl' => null, 'back' => $back, 'public' => true,
+            'inner' => \App\Services\Locate::media($wsId, $pid, true), 'viewUrl' => $urls['view'], 'fileUrl' => $urls['file'],
         ]);
     }
 

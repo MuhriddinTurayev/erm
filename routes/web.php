@@ -135,6 +135,7 @@ Route::middleware(['auth', 'role:company'])->group(function () {
                 Route::post('/objects/{pid}/inventory/convert', [Company\InventoryController::class, 'convert']);
                 Route::post('/objects/{pid}/inventory/undo', [Company\InventoryController::class, 'undo']);
                 Route::post('/objects/{pid}/inventory/ready', [Company\InventoryController::class, 'ready']);
+                Route::post('/objects/{pid}/units/{uid}', [Company\InventoryController::class, 'unit']);   // комнаты и площадь квартиры — из привязки к 3D
                 Route::get('/objects/{pid}', [Company\ObjectController::class, 'show']);
                 Route::get('/objects/{pid}/3d', [Company\ObjectController::class, 'viewer']);
                 // квартира на 3D-модели дома; привязка корпусов к модели

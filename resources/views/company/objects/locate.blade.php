@@ -2,6 +2,8 @@
   $public = $public ?? false;
   $auto = $auto ?? false;
   $aiUrl = $aiUrl ?? null;
+  $inner = $inner ?? [];
+  $canUnits = $canUnits ?? false;
   $cal = (array) ($model?->meta['locate']['blocks'] ?? []);
   $blocks = $data['blocks'];
   $multi = count($blocks) > 1;
@@ -22,7 +24,17 @@
     'wNotBuilding' => __('Похоже, в модели не один дом (район, земля или интерьер). Лучше загрузить модель только самого здания.'),
     'wBlocks' => __('В модели найдено меньше домов, чем корпусов в объекте — поставьте рамки остальных корпусов вручную.'),
     'fail2' => __('Не получилось разобрать модель — поставьте рамку вручную.'),
+    // разметка квартир и интерьер
+    'kinds' => ['interior' => __('Интерьер квартиры 3D'), 'pano' => __('Панорама 360°'), 'photo' => __('Рендер / фото'), 'plan' => __('Планировка')],
+    'noInner' => __('Интерьера этой квартиры ещё нет. Загрузите 3D-модель (GLB, FBX, OBJ…), панораму 360° или фото комнат.'),
+    'forType' => __('Интерьер покажется у всех квартир этой планировки: :t.'), 'forRooms' => __('Интерьер покажется у всех :r-комнатных квартир без своей планировки.'),
+    'upBusy' => __('Загружаю…'), 'upDone' => __('Загружено'), 'upFail' => __('Ошибка загрузки'), 'unitSaved' => __('Квартира сохранена'),
+    'realloc' => __('Заново расставить все квартиры по окнам? Ваша ручная разметка этого корпуса сбросится.'),
+    'convert' => __('Квартиры объекта сейчас рассчитаны по параметрам здания. Чтобы поменять одну квартиру, они будут переведены в перечень помещений (номера и сделки сохранятся). Продолжить?'),
+    'placedHand' => __('Стоит на окнах, которые отметили вручную.'), 'placedAuto' => __('Стоит на окнах по числу комнат (ИИ).'), 'placedNone' => __('Стоит на равной доле этажа — протяните мышью по её окнам.'),
+    'pickFirst' => __('Сначала выберите квартиру: щёлкните её на фасаде или в списке.'), 'findWin' => __('Ищу окна на фасаде…'),
   ];
+  $innerT = ['view' => $viewUrl ?? null, 'file' => $fileUrl ?? null];
 @endphp
 <!doctype html>
 <html lang="{{ app()->getLocale() }}">
@@ -93,6 +105,36 @@
   .lc-more summary{cursor:pointer;font:600 13px var(--font);color:var(--muted)}
   .lc-more[open] summary{margin-bottom:8px}
   .lc-foot{margin-top:auto;display:grid;gap:8px;padding-top:12px;border-top:1px solid var(--border)}
+  /* разметка квартир */
+  .lc-side{overflow-x:hidden}
+  .lc-tab{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}.lc-tab[hidden]{display:none}
+  .lc-ucard,.lc-inner,.lc-sec{grid-template-columns:minmax(0,1fr)}
+  .lc-tabs{position:sticky;top:-16px;z-index:2;margin:-4px 0 0}
+  .lc-tabs button{height:36px!important;font-size:13.5px!important}
+  .lc-num.on{background:var(--accent);box-shadow:0 0 0 2px #fff}
+  .lc-pick{display:flex;gap:6px;min-width:0}.lc-pick select{flex:1;min-width:0;width:100%;height:38px}
+  .lc-pick button{width:38px;flex:none;height:38px;border:1px solid var(--border-2);background:var(--surface);border-radius:10px;cursor:pointer;color:var(--text);display:grid;place-items:center}
+  .lc-pick button:hover{border-color:var(--accent);color:var(--accent-text)}
+  .lc-ucard{display:grid;gap:10px;padding:12px;border-radius:12px;border:1px solid var(--border-2);background:var(--sunken)}
+  .lc-uhead b{display:block;font:700 16px var(--font-head)}.lc-uhead small{color:var(--muted);font-size:12.5px}
+  .lc-place{font-size:12.5px;color:var(--text-2);display:flex;gap:6px;align-items:flex-start}.lc-place .ic{flex:none;color:var(--accent);margin-top:1px}
+  .lc-chk{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--text-2);cursor:pointer}.lc-chk input{margin-top:2px;accent-color:var(--accent)}
+  .lc-inner{display:grid;gap:8px}
+  .lc-ilist{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .lc-ilist button{position:relative;aspect-ratio:4/3;border:1px solid var(--border-2);border-radius:10px;background:var(--surface) center/cover no-repeat;cursor:pointer;display:grid;place-items:center;color:var(--muted);padding:0;overflow:hidden}
+  .lc-ilist button:hover{border-color:var(--accent)}
+  .lc-ilist button span{position:absolute;left:0;right:0;bottom:0;font:600 10.5px var(--font);color:#fff;background:linear-gradient(transparent,rgba(17,17,39,.8));padding:8px 5px 4px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lc-ilist button .ic{width:22px;height:22px}
+  .lc-iempty{font-size:12.5px;color:var(--muted);padding:10px;border:1px dashed var(--border-2);border-radius:10px;text-align:center}
+  .lc-prog{height:6px;border-radius:9px;background:var(--sunken);overflow:hidden}.lc-prog i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+  .lc-ptext{font-size:12px;color:var(--muted)}
+  /* «Внутри квартиры» — поверх 3D-дома */
+  .lc-ov{position:fixed;inset:0;z-index:20;background:rgba(17,17,39,.55);backdrop-filter:blur(3px);display:grid;place-items:center;padding:20px}
+  .lc-ov-in{position:relative;width:min(1200px,100%);height:min(820px,100%);background:var(--surface);border-radius:16px;overflow:hidden;box-shadow:var(--sh-lg)}
+  .lc-ov-in iframe,.lc-ov-in img{width:100%;height:100%;border:0;display:block;object-fit:contain;background:var(--bg)}
+  .lc-ov-x{position:absolute;right:12px;top:12px;z-index:2;width:40px;height:40px;border-radius:50%;border:1px solid var(--border-2);background:var(--surface);cursor:pointer;display:grid;place-items:center;color:var(--text);box-shadow:var(--sh)}
+  body.embed .lc-ov{padding:8px}
+  .lc-ov[hidden]{display:none}
   @media (max-width:760px){.lc-side{left:8px;right:8px;top:auto;bottom:70px;width:auto;max-height:50vh}.lc-card{left:8px;top:8px;padding:9px 12px}.lc-card b{font-size:14px}}
   body.embed .lc-card a.back,body.embed .lc-card>b{display:none}
   body.embed .lc-card{left:10px;top:10px;padding:8px 12px;border-radius:12px}
@@ -126,6 +168,7 @@
   <div class="lc-bar" id="lcBar">
     <button type="button" data-act="unit" title="{{ __('Показать квартиру') }}">{!! ic('target', '', 16) !!}<span>{{ __('Квартира') }}</span></button>
     <button type="button" data-act="house" title="{{ __('Весь дом') }}">{!! ic('building-2', '', 16) !!}<span>{{ __('Весь дом') }}</span></button>
+    <button type="button" data-act="inner" title="{{ __('Внутри квартиры') }}" hidden>{!! ic('sofa', '', 16) !!}<span>{{ __('Внутри') }}</span></button>
     @if ($canEdit && ! $calibrate)<a href="/company/objects/{{ $pid }}/locate?calibrate=1&m={{ $model->id }}" target="_top">{!! ic('sliders-horizontal', '', 16) !!}<span>{{ __('Настроить привязку') }}</span></a>@endif
     @if ($embed)<a href="#" data-act="full" target="_blank">{!! ic('external-link', '', 16) !!}<span>{{ __('Во весь экран') }}</span></a>@endif
   </div>
@@ -135,6 +178,47 @@
     @if ($multi)
     <label class="field"><span>{{ __('Корпус') }}</span><select id="cBlock">@foreach ($blocks as $bid => $b)<option value="{{ $bid }}">{{ $b['name'] ?: __('Корпус') }} · {{ count($b['entr']) }} {{ __('подъезд') }}@if (isset($cal[$bid])) ✓@endif</option>@endforeach</select></label>
     @endif
+    <div class="seg lc-tabs" id="cTabs"><button type="button" data-t="frame" class="on">{!! ic('box', '', 15) !!} {{ __('Рамка') }}</button><button type="button" data-t="units">{!! ic('layout-grid', '', 15) !!} {{ __('Квартиры') }}</button></div>
+    <div id="tabUnits" class="lc-tab" hidden>
+      <p class="lc-hint">{{ __('Щёлкните квартиру на фасаде — она выберется. Потом протяните мышью по её окнам — квартира встанет на них. Дом крутится мышью мимо стен.') }}</p>
+      <div class="lc-pick">
+        <button type="button" id="uPrev" title="{{ __('Предыдущая') }}">{!! ic('chevron-left', '', 16) !!}</button>
+        <select id="uSel" aria-label="{{ __('Квартира') }}"></select>
+        <button type="button" id="uNext" title="{{ __('Следующая') }}">{!! ic('chevron-right', '', 16) !!}</button>
+      </div>
+      <div class="lc-ucard" id="uCard" hidden>
+        <div class="lc-uhead" id="uHead"></div>
+        <div class="lc-place" id="uPlace"></div>
+        @if ($canUnits)
+        <div class="row2">
+          <label class="field"><span>{{ __('Комнат') }}</span><div class="lc-step" id="uRoomsStep"><button type="button" data-d="-1">−</button><input type="number" min="1" max="9" step="1" id="uRooms"><button type="button" data-d="1">+</button></div></label>
+          <label class="field"><span>{{ __('Площадь, м²') }}</span><input type="number" min="5" max="5000" step="0.1" id="uArea"></label>
+        </div>
+        <button type="button" class="btn btn-s" id="uSave" hidden>{!! ic('check', '', 15) !!}{{ __('Сохранить квартиру') }}</button>
+        @endif
+        <label class="lc-chk"><input type="checkbox" id="uAll" checked><span>{{ __('На всех этажах, где столько же квартир, — на тех же окнах') }}</span></label>
+      </div>
+      <div class="lc-inner" id="uInnerBox" hidden>
+        <span class="lc-lab">{{ __('Внутри квартиры') }}</span>
+        <div id="uInner"></div>
+        <small class="lc-ptext" id="uFor"></small>
+        <div class="lc-prog" id="uProg" hidden><i></i></div><small class="lc-ptext" id="uProgT" hidden></small>
+        <div class="row2">
+          <button type="button" class="btn btn-s" id="uUp">{!! ic('upload', '', 15) !!}{{ __('Загрузить') }}</button>
+          <button type="button" class="btn btn-s btn-p" id="uView">{!! ic('eye', '', 15) !!}{{ __('Смотреть') }}</button>
+        </div>
+        <input type="file" id="uFile" hidden multiple>
+      </div>
+      <div class="lc-sec">
+        <span class="lc-lab">{{ __('Окна на фасаде') }}</span>
+        <div class="row2">
+          <label class="field"><span>{{ __('Лицевая сторона') }}</span><div class="lc-step" data-w="f"><button type="button" data-d="-1">−</button><input type="number" min="1" max="120" id="wF"><button type="button" data-d="1">+</button></div></label>
+          <label class="field"><span>{{ __('Задняя сторона') }}</span><div class="lc-step" data-w="b"><button type="button" data-d="-1">−</button><input type="number" min="1" max="120" id="wB"><button type="button" data-d="1">+</button></div></label>
+        </div>
+        <button type="button" class="btn btn-s btn-ghost" id="uRealloc">{!! ic('refresh-cw', '', 15) !!}{{ __('Заново по окнам: окон — по числу комнат + 1') }}</button>
+      </div>
+    </div>
+    <div id="tabFrame" class="lc-tab">
     <div class="lc-ai">
       <div class="lc-ai-h">{!! ic('sparkles', '', 17) !!}{{ __('Автопривязка ИИ') }}</div>
       <p id="cAiText">{{ __('ИИ изучит модель: где дом, сколько в нём этажей, где входы в подъезды — и сам расставит квартиры. Вам останется проверить номера на фасаде.') }}</p>
@@ -156,7 +240,7 @@
     </div>
     <div class="lc-sec">
       <div class="row2">
-        <label class="field"><span>{{ __('Этажей в рамке') }}</span><div class="lc-step"><button type="button" data-d="-1" aria-label="−">−</button><input type="number" step="1" min="1" max="200" id="cF"><button type="button" data-d="1" aria-label="+">+</button></div></label>
+        <label class="field"><span>{{ __('Этажей в рамке') }}</span><div class="lc-step" id="cFStep"><button type="button" data-d="-1" aria-label="−">−</button><input type="number" step="1" min="1" max="200" id="cF"><button type="button" data-d="1" aria-label="+">+</button></div></label>
         <label class="field"><span>{{ __('Высота 1-го этажа, м') }}</span><input type="number" step="0.1" min="0" max="30" id="cG" placeholder="{{ __('как остальные') }}"></label>
       </div>
       <div class="row2">
@@ -179,12 +263,14 @@
         <label class="field" style="margin-top:8px"><span>{{ __('Поворот, °') }}</span><input type="number" step="1" id="cR"></label>
       </details>
     </div>
+    </div>
     <div class="lc-foot">
       <button type="button" class="btn btn-p" id="cSave">{!! ic('check') !!}{{ __('Сохранить привязку') }}</button>
       <a class="btn" href="/company/objects/{{ $pid }}/locate?m={{ $model->id }}">{!! ic('eye', '', 16) !!}{{ __('Проверить на квартире') }}</a>
     </div>
   </aside>
   @endif
+  <div class="lc-ov" id="lcOv" hidden><div class="lc-ov-in"><button type="button" class="lc-ov-x" id="lcOvX" aria-label="{{ __('Закрыть') }}">{!! ic('x', '', 18) !!}</button><div id="lcOvB" style="height:100%"></div></div></div>
 @endif
 
 @if ($model)
@@ -193,15 +279,24 @@ import { start } from '{{ asset('assets/locate3d.js') }}?v={{ @filemtime(public_
 const T = @json($T), DATA = @json($data), CAL = @json((object) $cal), UNIT = @json($unit), CALIB = @json((bool) $calibrate);
 const CAN = @json((bool) $canEdit), AUTO = @json((bool) $auto), AI_URL = @json($aiUrl), SAVE_URL = @json($saveUrl);
 const SETUP = @json($canEdit ? '/company/objects/'.$pid.'/locate?calibrate=1&m='.$model->id : null);
+// интерьеры квартир («Внутри»): файлы, адрес страницы 3D и файла; в настройке — загрузка к выбранной квартире и её комнаты
+const INNER = @json($inner), URLS = @json($innerT), CAN_UNITS = @json((bool) $canUnits), HAS_INV = @json((bool) ($hasInv ?? true));
+const UP_URL = @json($upUrl ?? null), UNIT_URL = @json($unitUrl ?? null), CVT = @json($cvt ?? []), MC_URL = @json($mcUrl ?? null);
+const ICON = {!! json_encode(['interior' => ic('box', '', 22), 'pano' => ic('compass', '', 22), 'photo' => ic('image', '', 22), 'plan' => ic('ruler', '', 22), 'pin' => ic('map-pin', '', 15)], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const CSRF = document.querySelector('meta[name=csrf-token]').content;
 // подписи помещений на языке интерфейса
-DATA.units.forEach((u) => {
+const labelUnit = (u) => {
   const B = DATA.blocks[u.b] || { name: '', entr: [] }, en = B.entr[u.e] || (u.e + 1);
   u.label = u.r ? `${T.kv} ${u.num}` : `${T.k} ${u.num}`;
   u.sub = [(B.name && Object.keys(DATA.blocks).length > 1 ? B.name + ' · ' : '') + `${en}-${T.en}`, `${u.f}-${T.fl}`, u.r ? `${u.r}${T.rooms}` : '', u.a ? `${u.a} ${T.m2}` : ''].filter(Boolean).join(' · ');
-});
-let L, aiNote = null;
+};
+DATA.units.forEach(labelUnit);
+// интерьер квартиры — тем же правилом, что ObjectMedia::forUnit: своей планировки, иначе по числу комнат, иначе общий
+const innerOf = (u) => { const own = u.t ? INNER.filter((m) => m.l === u.t) : []; return own.length ? own : INNER.filter((m) => !m.l && (m.r == null || +m.r === +u.r)); };
+const fileUrl = (m) => URLS.file.replace('{id}', m.id);
+let L, aiNote = null, current = null, tab = 'frame';
 try {
   L = await start(document.getElementById('lc'), {
     src: @json($src), data: DATA, cal: CAL, calibrate: CALIB, T,
@@ -210,6 +305,14 @@ try {
     onShow: (u, ok, isAuto) => {
       $('#lcU').innerHTML = `<strong>${u.label}</strong> · ${u.sub}` + (u.s && T.st[u.s] ? ` · ${T.st[u.s]}` : '');
       note(ok, isAuto);
+      current = u;
+      const ib = $('#lcBar [data-act=inner]'); if (ib) ib.hidden = CALIB || !URLS.view || !innerOf(u).length;
+    },
+    // разметка квартир: щёлкнули квартиру на фасаде; поставили её на окна — к следующей
+    onSelect: (u) => { $('#uSel').value = u.id; card(u); },
+    onAssign: (u) => {
+      const list = unitsList(), k = list.findIndex((x) => x.id === u.id), next = list[k + 1];
+      if (next && next.f === u.f && next.e === u.e) selectUnit(next.id); else card(u);
     },
     onChange: (c) => fill(c),
     onUndo: (n) => { const b = $('#cUndo'); if (b) b.disabled = !n; },
@@ -228,9 +331,27 @@ const first = UNIT && L.units[UNIT] ? UNIT : null;
 document.querySelectorAll('#lcBar [data-act]').forEach((b) => b.addEventListener('click', (e) => {
   const a = b.dataset.act;
   if (a === 'unit') L.focusSelected();
-  if (a === 'house') { if (CALIB) L.overview(); else { L.statusView(); $('#lcU').innerHTML = T.pickHint + legend(); $('#lcNote').hidden = true; } }
+  if (a === 'house') { if (CALIB) L.overview(); else { L.statusView(); $('#lcU').innerHTML = T.pickHint + legend(); $('#lcNote').hidden = true; b.parentNode.querySelector('[data-act=inner]').hidden = true; } }
+  if (a === 'inner' && current) openInner(current);
   if (a === 'full') { e.preventDefault(); const u = new URL(location.href); u.searchParams.delete('embed'); window.open(u, '_blank'); }
 }));
+/* ---------- «Внутри квартиры»: 3D-интерьер и панорамы — страница 3D только этой квартиры; рендер и план — картинкой ---------- */
+function openInner(u, m) {
+  const list = innerOf(u);
+  m = m || list.find((x) => x.k === 'interior' || x.k === 'pano') || list[0];
+  if (!m) return;
+  const box = $('#lcOvB');
+  if ((m.k === 'interior' || m.k === 'pano') && URLS.view) {
+    const url = URLS.view.replace('{u}', encodeURIComponent(u.id)).replace('{t}', encodeURIComponent(u.t || '')).replace('{r}', u.r || 0) + '&m=' + m.id;
+    box.innerHTML = `<iframe src="${esc(url)}" allow="fullscreen; xr-spatial-tracking" title="3D"></iframe>`;
+  } else box.innerHTML = m.ext === 'pdf' ? `<iframe src="${esc(fileUrl(m))}" title="PDF"></iframe>` : `<img src="${esc(fileUrl(m))}" alt="${esc(m.n)}">`;
+  $('#lcOv').hidden = false;
+  L.pause(true);
+}
+function closeInner() { $('#lcOv').hidden = true; $('#lcOvB').innerHTML = ''; L.pause(false); }
+$('#lcOvX').addEventListener('click', closeInner);
+$('#lcOv').addEventListener('click', (e) => { if (e.target.id === 'lcOv') closeInner(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#lcOv').hidden) closeInner(); });
 // продажи: одна загрузка модели, квартиры переключаются сообщением из карточки
 let shown = first;
 window.addEventListener('message', (e) => {
@@ -256,7 +377,8 @@ async function autoFit(ids, withAi) {
 async function save(bid, isAuto) {
   const c = L.cal(bid);
   if (!isAuto) L.confirm(bid);
-  const body = { block: bid, c: c.c, s: c.s, r: c.r, floors: c.floors, gf: c.gf || 0, rows: c.rows, back: c.back, flipX: !!c.flipX, flipZ: !!c.flipZ, ex: c.ex || [] };
+  const body = { block: bid, c: c.c, s: c.s, r: c.r, floors: c.floors, gf: c.gf || 0, rows: c.rows, back: c.back, flipX: !!c.flipX, flipZ: !!c.flipZ, ex: c.ex || [],
+    win: c.win || undefined, slots: c.slots || undefined, ux: c.ux || undefined };
   if (isAuto && c.auto) body.auto = { by: c.auto.by, mf: c.auto.mf ?? undefined, doors: c.auto.doors ?? undefined, warn: c.auto.warn || [] };
   const r = await fetch(SAVE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': CSRF }, body: JSON.stringify(body) });
   if (!r.ok) throw new Error(r.status);
@@ -299,7 +421,7 @@ if (CALIB) {
   const startBlock = first ? L.units[first].b : (sel ? sel.value : L.blocks[0]);
   if (sel) sel.value = startBlock;
   fill(L.calibrate(startBlock)); report(startBlock);
-  sel && sel.addEventListener('change', () => { fill(L.calibrate(sel.value)); report(sel.value); });
+  sel && sel.addEventListener('change', () => { fill(L.calibrate(sel.value)); report(sel.value); if (tab === 'units') { L.mark(true); fillSel(); $('#uCard').hidden = $('#uInnerBox').hidden = true; } });
   const mark = (bid) => { const o = sel && [...sel.options].find((x) => x.value === bid); if (o && !o.textContent.endsWith('✓')) o.textContent += ' ✓'; };
   // сразу после загрузки модели (auto=1) или пока корпус не привязан — ИИ расставляет сам и сохраняет; человек потом проверяет
   const runAuto = async (ids) => {
@@ -322,7 +444,7 @@ if (CALIB) {
   $('#cR').addEventListener('change', () => fill(L.set({ r: (num('#cR') || 0) * Math.PI / 180 })));
   const setFloors = (n) => fill(L.set({ floors: Math.max(1, Math.min(200, n || 1)) }));
   $('#cF').addEventListener('change', () => setFloors(parseInt($('#cF').value)));
-  document.querySelectorAll('.lc-step button').forEach((b) => b.addEventListener('click', () => setFloors((parseInt($('#cF').value) || 1) + +b.dataset.d)));
+  document.querySelectorAll('#cFStep button').forEach((b) => b.addEventListener('click', () => setFloors((parseInt($('#cF').value) || 1) + +b.dataset.d)));
   $('#cG').addEventListener('change', () => fill(L.set({ gf: Math.max(0, parseFloat($('#cG').value) || 0) })));
   $('#cRows').addEventListener('change', () => fill(L.set({ rows: +$('#cRows').value })));
   $('#cBack').addEventListener('change', () => fill(L.set({ back: $('#cBack').value })));
@@ -338,6 +460,64 @@ if (CALIB) {
       $('#cAiWarn').hidden = true;
     } catch (e) { alert(T.err); } finally { btn.disabled = false; }
   });
+
+  /* ---------- вкладка «Квартиры»: выбрать квартиру, поставить на окна, её комнаты и интерьер ---------- */
+  const setTab = async (t) => {
+    tab = t;
+    document.querySelectorAll('#cTabs button').forEach((x) => x.classList.toggle('on', x.dataset.t === t));
+    $('#tabFrame').hidden = t !== 'frame'; $('#tabUnits').hidden = t !== 'units';
+    L.mark(t === 'units');
+    if (t !== 'units') { fill(L.get()); return; }
+    // привязку сделали раньше, окон в ней нет — находим их на фасаде, чтобы квартиры встали по окнам
+    if (!L.get().win) { busy(true, T.findWin); try { await L.findWindows(); } catch (e) { console.error(e); } finally { busy(false); } }
+    fillSel(); winFill(); const u = L.selected(); if (u) card(u);
+  };
+  document.querySelectorAll('#cTabs button').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.t)));
+  $('#uSel').addEventListener('change', () => selectUnit($('#uSel').value));
+  const step = (d) => { const list = unitsList(), u = L.selected(), k = u ? list.findIndex((x) => x.id === u.id) : -1, n = list[Math.max(0, Math.min(list.length - 1, k + d))]; if (n) selectUnit(n.id); };
+  $('#uPrev').addEventListener('click', () => step(-1));
+  $('#uNext').addEventListener('click', () => step(1));
+  $('#uAll').addEventListener('change', () => L.markAll($('#uAll').checked));
+  // окна на фасаде: ИИ их нашёл; если ошибся — задайте число, окна встанут поровну, квартиры — заново по ним
+  const winFill = () => { $('#wF').value = L.winCount('f'); $('#wB').value = L.winCount('b'); };
+  const setWin = (side, n) => { L.setWin(side, n || 1); winFill(); const u = L.selected(); if (u) card(u); };
+  document.querySelectorAll('.lc-step[data-w]').forEach((s) => {
+    const side = s.dataset.w, inp = s.querySelector('input');
+    s.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => setWin(side, (parseInt(inp.value) || 1) + +b.dataset.d)));
+    inp.addEventListener('change', () => setWin(side, parseInt(inp.value)));
+  });
+  $('#uRealloc').addEventListener('click', () => { if (!confirm(T.realloc)) return; L.realloc(); const u = L.selected(); if (u) card(u); });
+  // комнаты и площадь — прямо отсюда (у квартиры со сделкой не меняются)
+  if (CAN_UNITS) {
+    const dirtyU = () => { $('#uSave').hidden = false; };
+    $('#uRooms').addEventListener('input', dirtyU); $('#uArea').addEventListener('input', dirtyU);
+    document.querySelectorAll('#uRoomsStep button').forEach((b) => b.addEventListener('click', () => { const i = $('#uRooms'); i.value = Math.max(1, Math.min(9, (parseInt(i.value) || 1) + +b.dataset.d)); dirtyU(); }));
+    $('#uSave').addEventListener('click', async () => {
+      const u = L.selected(); if (!u) return;
+      const rooms = parseInt($('#uRooms').value), area = parseFloat($('#uArea').value);
+      if (!(rooms >= 1)) return;
+      if (!HAS_INV && !confirm(T.convert)) return;
+      const btn = $('#uSave'); btn.disabled = true;
+      try {
+        if (!HAS_INV) await save(L.block(), false);   // корпус сменит id — привязку сохраняем до перевода
+        const r = await fetch(UNIT_URL.replace('{id}', encodeURIComponent(u.id)), { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': CSRF }, body: JSON.stringify({ rooms, area: area > 0 ? area : undefined }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { alert(j.error || j.message || T.err); return; }
+        if (j.converted) { const to = new URL(location.href); to.searchParams.set('mk', '1'); to.searchParams.set('u', u.id); to.searchParams.delete('auto'); location.href = to; return; }
+        if (j.unit) { L.updateUnit(u.id, { r: j.unit.r, a: j.unit.a, t: j.unit.t || undefined }); labelUnit(u); }
+        fillSel(); $('#uSel').value = u.id; card(u);
+        if (window.ui && ui.toast) ui.toast(T.unitSaved);
+      } finally { btn.disabled = false; }
+    });
+  }
+  // интерьер выбранной квартиры: 3D (GLB сразу, FBX/OBJ/… — через перевод в GLB), панорамы 360° (картинка 2:1), фото, план (PDF)
+  $('#uFile').accept = '.glb,.gltf,.bin,.fbx,.obj,.mtl,.dae,.3ds,.stl,.ply,.3mf,.ifc,.zip,.jpg,.jpeg,.png,.webp,.pdf,.tga,.bmp';
+  $('#uUp').addEventListener('click', () => { if (!L.selected()) return alert(T.pickFirst); $('#uFile').click(); });
+  $('#uFile').addEventListener('change', () => { const f = [...$('#uFile').files]; $('#uFile').value = ''; if (f.length) upInner(f); });
+  $('#uView').addEventListener('click', () => { const u = L.selected(); if (u) openInner(u); });
+  $('#uInner').addEventListener('click', (e) => { const b = e.target.closest('[data-m]'), u = L.selected(); if (b && u) openInner(u, INNER.find((m) => String(m.id) === b.dataset.m)); });
+  const params = new URLSearchParams(location.search);
+  if (params.get('mk')) { setTab('units'); if (first) selectUnit(first); }
 } else {
   if (first) L.show(first); else { L.statusView(); $('#lcU').innerHTML = T.pickHint + legend(); }
   // корпус не привязан: руководитель/администратор объектов — ИИ расставляет и сохраняет; остальным — по форме модели, без сохранения
@@ -348,6 +528,93 @@ if (CALIB) {
     if (rep && CAN) for (const bid of Object.keys(rep)) { try { await save(bid, true); } catch (e) { /* не страшно: в следующий раз */ } }
     if (shown) L.show(shown); else { L.statusView(); if (n) n.hidden = true; }
   }
+}
+/* ---------- разметка квартир: список, карточка, интерьер ---------- */
+function unitsList() {
+  return DATA.units.filter((u) => u.b === L.block()).sort((a, b) => a.e - b.e || a.f - b.f || a.i - b.i);
+}
+function fillSel() {
+  $('#uSel').innerHTML = `<option value="">— ${esc(T.none)} —</option>` + unitsList().map((u) => `<option value="${esc(u.id)}">${esc(u.label)} · ${esc(u.sub)}</option>`).join('');
+  const u = L.selected(); if (u) $('#uSel').value = u.id;
+}
+function selectUnit(id) { const u = id && L.select(id); if (u) { $('#uSel').value = u.id; card(u); } }
+function card(u) {
+  $('#uCard').hidden = false; $('#uInnerBox').hidden = !UP_URL;
+  $('#uHead').innerHTML = `<b>${esc(u.label)}</b><small>${esc(u.sub)}${u.s && T.st[u.s] ? ' · ' + esc(T.st[u.s]) : ''}</small>`;
+  const pl = L.placeOf(u.id);
+  $('#uPlace').innerHTML = ICON.pin + `<span>${pl && pl.slot ? (pl.own || pl.slot[3] ? T.placedHand : T.placedAuto) : T.placedNone}</span>`;
+  if ($('#uRooms')) {
+    const locked = u.k !== 'flat' || u.s === 'sold' || u.s === 'booked';
+    $('#uRooms').value = u.r || ''; $('#uArea').value = u.a || '';
+    $('#uRooms').disabled = $('#uArea').disabled = locked;
+    document.querySelectorAll('#uRoomsStep button').forEach((b) => { b.disabled = locked; });
+    $('#uSave').hidden = true;
+  }
+  innerList(u);
+}
+function innerList(u) {
+  const list = innerOf(u);
+  $('#uInner').innerHTML = list.length
+    ? `<div class="lc-ilist">${list.map((m) => `<button type="button" data-m="${m.id}" title="${esc(m.n)}"${m.k === 'photo' || (m.k === 'plan' && m.ext !== 'pdf') ? ` style="background-image:url('${esc(fileUrl(m))}')"` : ''}>${m.k === 'photo' || (m.k === 'plan' && m.ext !== 'pdf') ? '' : ICON[m.k] || ''}<span>${esc(m.room || T.kinds[m.k] || m.k)}</span></button>`).join('')}</div>`
+    : `<div class="lc-iempty">${esc(T.noInner)}</div>`;
+  $('#uView').disabled = !list.length;
+  $('#uFor').textContent = u.t ? T.forType.replace(':t', u.tn || u.t) : u.r ? T.forRooms.replace(':r', u.r) : '';
+}
+const prog = (k, text) => {
+  const p = $('#uProg'), t = $('#uProgT');
+  p.hidden = t.hidden = k === false;
+  if (k !== null && k !== false) p.firstElementChild.style.width = Math.round(k * 100) + '%';
+  if (text) t.textContent = text;
+};
+async function isPano(f) {
+  try { const b = await createImageBitmap(f); const k = b.width / b.height; b.close && b.close(); return k > 1.9 && k < 2.1; } catch (e) { return false; }
+}
+/** Загрузка частями по 5 МБ — тот же путь, что «3D, панорамы, планировки» на странице объекта */
+async function uploadFile(f, kind, u, extra = {}) {
+  const CH = 5 * 1024 * 1024, total = Math.max(1, Math.ceil(f.size / CH)), id = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
+  let res = null;
+  for (let i = 0; i < total; i++) {
+    const fd = new FormData();
+    fd.append('_token', CSRF); fd.append('upload', id); fd.append('index', i); fd.append('total', total); fd.append('name', f.name); fd.append('chunk', f.slice(i * CH, (i + 1) * CH), 'part');
+    fd.append('kind', kind); fd.append('title', '');
+    if (u.t) fd.append('layout', u.t); else fd.append('rooms', u.r || 0);
+    if (kind === 'pano' && extra.room) fd.append('room', extra.room);
+    if (extra.src) fd.append('src', extra.src);
+    let r, tries = 0;
+    do { r = await fetch(UP_URL, { method: 'POST', body: fd, headers: { Accept: 'application/json' } }).catch(() => null); } while ((!r || r.status >= 500) && ++tries < 3);
+    if (!r || !r.ok) { let m = T.upFail; try { const j = await r.json(); m = j.error || j.message || m; } catch (e) { /* без текста */ } throw new Error(m); }
+    prog((i + 1) / total, `${T.upBusy} ${f.name}`);
+    if (i === total - 1) res = await r.json().catch(() => null);
+  }
+  return res && res.id;
+}
+async function upInner(files) {
+  const u = L.selected(); if (!u) return alert(T.pickFirst);
+  const isImg = (f) => /\.(jpe?g|png|webp)$/i.test(f.name), isPdf = (f) => /\.pdf$/i.test(f.name);
+  const models = files.filter((f) => !isImg(f) && !isPdf(f)), items = [];
+  $('#uUp').disabled = true;
+  try {
+    if (models.length) {
+      if (models.length === 1 && /\.glb$/i.test(models[0].name)) items.push([models[0], 'interior', {}]);
+      else {
+        prog(0, CVT.p_read);
+        const mod = await import(MC_URL);
+        const res = await mod.convert(models, { kind: 'interior', units: 'auto', up: 'auto', tex: 2048, merge: false, T: CVT }, (t) => prog(null, t));
+        items.push([res.file, 'interior', { src: res.info.source }]);
+      }
+    }
+    for (const f of files.filter(isImg)) items.push([f, (await isPano(f)) ? 'pano' : 'photo', { room: f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() }]);
+    for (const f of files.filter(isPdf)) items.push([f, 'plan', {}]);
+    for (const [f, kind, extra] of items) {
+      prog(0, `${T.upBusy} ${f.name}`);
+      const id = await uploadFile(f, kind, u, extra);
+      if (id) INNER.push({ id, k: kind, l: u.t || undefined, r: u.r, n: f.name, room: kind === 'pano' ? extra.room : undefined, ext: (f.name.split('.').pop() || '').toLowerCase() });
+    }
+    prog(1, T.upDone);
+    setTimeout(() => prog(false), 2500);
+  } catch (e) {
+    prog(false); alert(e && e.message ? e.message : T.upFail);
+  } finally { $('#uUp').disabled = false; innerList(u); }
 }
 function legend() {
   return `<div class="lc-leg">${[['free', '#22c55e'], ['booked', '#f59e0b'], ['sold', '#ef4444']].map(([k, c]) => `<span><i style="background:${c}"></i>${T.st[k]}</span>`).join('')}</div>`;

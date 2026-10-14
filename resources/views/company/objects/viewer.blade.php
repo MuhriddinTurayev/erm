@@ -52,7 +52,7 @@
 <div class="v-shell">
   <aside class="v-side">
     <div class="v-h">
-      @unless ($public)<a href="/company/objects/{{ $pid }}?tab=media">{!! ic('arrow-left', '', 14) !!}{{ __('К объекту') }}</a>@endunless
+      @unless ($public || ($embed ?? false))<a href="/company/objects/{{ $pid }}?tab=media">{!! ic('arrow-left', '', 14) !!}{{ __('К объекту') }}</a>@endunless
       <b>{{ $p['name'] ?? '' }}</b>@if (! empty($p['address']))<small class="muted">{{ $p['address'] }}</small>@endif
     </div>
     <div class="v-list">

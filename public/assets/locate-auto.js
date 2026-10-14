@@ -305,7 +305,76 @@ function windowRows(P, g, t, N) {
   if (low > 0.6 * p) { floors++; gf = low; }   // внизу этаж без ряда окон (вестибюль, магазины) — он выше остальных
   else { gf = rows[kL].c + p / 2; if (Math.abs(gf - p) < 0.18 * p) gf = 0; }
   const top = Math.min(H, rows[kH].c + p / 2);
-  return { p, strength: R[k], floors, bands, gf, top };
+  return { p, strength: R[k], floors, bands, gf, top, rows: rows.filter((_, i) => valid[i]).map((r) => r.c) };
+}
+
+/** Порог Оцу: делит значения на «стена» и «окно» */
+function otsu(v) {
+  let lo = Infinity, hi = -Infinity;
+  for (const x of v) { lo = Math.min(lo, x); hi = Math.max(hi, x); }
+  if (!(hi > lo)) return hi;
+  const B = 64, hist = new Float64Array(B);
+  for (const x of v) hist[Math.min(B - 1, Math.floor(((x - lo) / (hi - lo)) * B))]++;
+  let sum = 0, total = 0;
+  for (let i = 0; i < B; i++) { sum += i * hist[i]; total += hist[i]; }
+  let sB = 0, wB = 0, best = 0, cut = 0;
+  for (let i = 0; i < B; i++) {
+    wB += hist[i]; if (!wB) continue;
+    const wF = total - wB; if (!wF) break;
+    sB += i * hist[i];
+    const mB = sB / wB, mF = (sum - sB) / wF, between = wB * wF * (mB - mF) * (mB - mF);
+    if (between > best) { best = between; cut = i; }
+  }
+  return lo + ((cut + 1) / B) * (hi - lo);
+}
+
+/**
+ * Окна по горизонтали: в строках через ряды окон окно отличается по цвету от стены (медиана строки).
+ * Середины окон — в долях длины рамки (0 — левый край картинки, 1 — правый). «3 окна — двухкомнатная» считает locate3d.js.
+ */
+function windowCols(P, g, t, L, wrow) {
+  const H = g - t;
+  if (H < 24) return [];
+  const xl = [], xr = [];
+  for (let y = Math.round(g - 0.7 * H); y <= Math.round(g - 0.2 * H); y++) if (P.right[y] > P.left[y]) { xl.push(P.left[y]); xr.push(P.right[y]); }
+  if (!xl.length) return [];
+  const xa = median(xl), xb = median(xr), w = P.w, span = xb - xa + 1;
+  if (span < 16) return [];
+  const p = wrow ? wrow.p : H / 6, half = Math.max(1, Math.round(p / 7));
+  const centers = wrow && wrow.rows && wrow.rows.length ? wrow.rows : [0.3, 0.45, 0.6, 0.75].map((k) => k * H);
+  const D = new Float32Array(span);
+  let rowsUsed = 0;
+  for (const c of centers) for (let dy = -half; dy <= half; dy++) {
+    const y = Math.round(g - c + dy);
+    if (y < 0 || y >= P.h) continue;
+    const vals = [];
+    for (let x = xa; x <= xb; x += 2) if (P.on[y * w + x]) vals.push(P.lum[y * w + x]);
+    if (vals.length < 8) continue;
+    const wall = median(vals);
+    for (let x = xa; x <= xb; x++) { const i = y * w + x; if (P.on[i]) D[x - xa] += Math.abs(wall - P.lum[i]); }
+    rowsUsed++;
+  }
+  if (!rowsUsed) return [];
+  const sm = D.map((_, i) => (D[Math.max(0, i - 1)] + D[i] + D[Math.min(span - 1, i + 1)]) / 3);
+  const thr = otsu(sm);
+  let runs = [];
+  for (let i = 0; i < span; i++) {
+    if (sm[i] < thr) continue;
+    const last = runs[runs.length - 1];
+    if (last && i - last[1] <= 2) last[1] = i; else runs.push([i, i]);
+  }
+  const mw = median(runs.map(([a, b]) => b - a + 1));
+  runs = runs.filter(([a, b]) => b - a + 1 >= Math.max(3, mw * 0.35));
+  // окно с переплётом посередине распадается на две половинки — соседей намного ближе обычного шага склеиваем
+  if (runs.length > 2) {
+    const mid = ([a, b]) => (a + b) / 2, gaps = runs.slice(1).map((r, i) => mid(r) - mid(runs[i])).sort((p, q) => p - q);
+    const step = gaps[Math.floor(gaps.length * 0.75)], out = [runs[0]];
+    for (const r of runs.slice(1)) { const last = out[out.length - 1]; if (mid(r) - mid(last) < step * 0.35) last[1] = r[1]; else out.push(r); }
+    runs = out;
+  }
+  if (runs.length < 2 || runs.length > 120) return [];
+  // середина окна: доля длины рамки (картинка шире рамки на 10%, по 5% с краёв)
+  return runs.map(([a, b]) => { const xi = (xa + (a + b) / 2 + 0.5) / w, lx = xi * P.W - P.W / 2; return +clamp((lx + L / 2) / L, 0, 1).toFixed(4); });
 }
 
 /** Картинка для ИИ: фасады A и B рядом, буквы над ними */
@@ -358,7 +427,8 @@ export async function fitBlock(o) {
   // этажи по рядам окон — на лицевом и заднем фасаде, берём более чёткий
   const P = front === 'A' ? A : B, Q = front === 'A' ? B : A;
   const g = yToRow(P, yG), t = yToRow(P, yT);
-  const wr = [windowRows(P, g, t, N), windowRows(Q, g, t, N)].filter(Boolean).sort((p, q) => q.strength - p.strength)[0] || null;
+  const wrP = windowRows(P, g, t, N), wrQ = windowRows(Q, g, t, N);
+  const wr = [wrP, wrQ].filter(Boolean).sort((p, q) => q.strength - p.strength)[0] || null;
   let floors = N, gf = 0, top = yT;
   // не дом (ИИ так сказал) или «этажей» втрое больше, чем в объекте (узор земли, плитки) — это не ряды окон
   const notHouse = !!(a && a.is_building === false);
@@ -401,6 +471,9 @@ export async function fitBlock(o) {
     floors, gf: +gf.toFixed(2), rows: 2, back: 'rev', flipX: false, flipZ: false,
   };
   if (ex) cal.ex = ex;
+  // окна на лицевой (+Z рамки: фасад P) и задней (−Z: Q, на картинке зеркально) сторонах — по ним квартиры встанут на свои окна
+  const tP = yToRow(P, top), wf = windowCols(P, g, tP, F.L, wrP), wb = windowCols(Q, g, tP, F.L, wrQ).map((x) => +(1 - x).toFixed(4)).sort((p, q) => p - q);
+  if (wf.length || wb.length) cal.win = { f: wf, b: wb };
   // для проверки (тесты, консоль): снимки фасадов и промежуточные числа
   const dbg = o.debug ? { F, wl, wr, a, yG, yT, top, rows: { A: Array.from(A.rowW), S: Array.from(S.rowW) }, img: { A: A.canvas.toDataURL(), B: B.canvas.toDataURL(), S: S.canvas.toDataURL() } } : undefined;
   return { cal, report, F, dbg };

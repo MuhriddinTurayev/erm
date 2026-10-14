@@ -33,9 +33,28 @@ function groundOf(C, F) {
   return F > 1 && C.gf > 0 && H > C.gf ? C.gf / H : 1 / F;
 }
 
+/** Где квартира стоит на фасаде, если её поставили на окна (ИИ или человек): [сторона ±1, x0, x1] в долях длины рамки */
+export const slotOf = (u, C) => (C.ux && C.ux[u.id]) || (C.slots && C.slots[`${u.e}|${Math.max(1, u.n)}|${u.i}`]) || null;
+/** Этаж модели для этажа объекта (в модели этажей может быть меньше) и доли высоты его низа и верха */
+export function floorOf(u, B, C) {
+  const F = Math.max(1, C.floors || B.floors), g = groundOf(C, F);
+  const yAt = (k) => (k <= 0 ? 0 : F === 1 ? 1 : g + ((k - 1) * (1 - g)) / (F - 1));
+  // в модели этажей меньше, чем в объекте (чужая или упрощённая модель): этаж объекта — на этаже модели той же доли высоты
+  const N = Math.max(1, B.floors || F), uf = Math.max(1, u.f);
+  const f = N > F ? Math.min(F, Math.ceil((uf * F) / N)) : Math.min(F, uf);
+  return { f, F, y0: yAt(f - 1), y1: yAt(f), yAt };
+}
+
 /** Ячейка помещения в рамке корпуса, координаты рамки от −0.5 до 0.5 */
 export function cellOf(u, B, C) {
-  const E = Math.max(1, B.entr.length), F = Math.max(1, C.floors || B.floors), n = Math.max(1, u.n), e = Math.min(E - 1, Math.max(0, u.e));
+  const E = Math.max(1, B.entr.length), n = Math.max(1, u.n), e = Math.min(E - 1, Math.max(0, u.e));
+  const { y0, y1 } = floorOf(u, B, C);
+  // квартиру поставили на её окна — сторона и место как есть (развороты рамки на неё не действуют)
+  const m = slotOf(u, C);
+  if (m) {
+    const facing = m[0] < 0 ? -1 : 1, zc = facing > 0 ? [0.5, 1] : [0, 0.5];
+    return { min: new THREE.Vector3(m[1] - 0.5, y0 - 0.5, zc[0] - 0.5), max: new THREE.Vector3(m[2] - 0.5, y1 - 0.5, zc[1] - 0.5), facing, floorY: [y0 - 0.5, y1 - 0.5], placed: true };
+  }
   const rows = C.rows === 1 || n < 2 ? 1 : 2, front = Math.ceil(n / rows);
   let side = 'all', col = u.i, cols = n;
   if (rows === 2) {
@@ -44,12 +63,6 @@ export function cellOf(u, B, C) {
   const sp = splitsOf(B, C), w = sp[e + 1] - sp[e];
   let x0 = sp[e] + (w * col) / cols, x1 = sp[e] + (w * (col + 1)) / cols;
   if (C.flipX) [x0, x1] = [1 - x1, 1 - x0];
-  // первый этаж часто выше (магазины): gf — его высота в метрах, остальные этажи делят высоту поровну
-  const g = groundOf(C, F);
-  const yAt = (k) => (k <= 0 ? 0 : F === 1 ? 1 : g + ((k - 1) * (1 - g)) / (F - 1));
-  // в модели этажей меньше, чем в объекте (чужая или упрощённая модель): этаж объекта — на этаже модели той же доли высоты
-  const N = Math.max(1, B.floors || F), uf = Math.max(1, u.f);
-  const f = N > F ? Math.min(F, Math.ceil((uf * F) / N)) : Math.min(F, uf), y0 = yAt(f - 1), y1 = yAt(f);
   let z0 = 0, z1 = 1;
   if (side !== 'all') {
     const isFront = (side === 'front') !== !!C.flipZ;
@@ -57,6 +70,72 @@ export function cellOf(u, B, C) {
   }
   const facing = side === 'all' ? (C.flipZ ? -1 : 1) : ((side === 'front') !== !!C.flipZ ? 1 : -1);
   return { min: new THREE.Vector3(x0 - 0.5, y0 - 0.5, z0 - 0.5), max: new THREE.Vector3(x1 - 0.5, y1 - 0.5, z1 - 0.5), facing, floorY: [y0 - 0.5, y1 - 0.5] };
+}
+
+/** Отрезок [a0, a1] — квартирам по их весам; окна W (середины) есть — граница посередине между окнами соседей */
+function split(a0, a1, W, weights) {
+  const n = weights.length, total = weights.reduce((s, w) => s + w, 0) || 1, out = [];
+  if (W.length >= n) {
+    // окон каждой квартире — по весу (наибольшие остатки), но не меньше одного
+    const exact = weights.map((w) => (W.length * w) / total), cnt = exact.map((x) => Math.max(1, Math.floor(x)));
+    let left = W.length - cnt.reduce((s, c) => s + c, 0);
+    const order = exact.map((x, i) => [x - Math.floor(x), i]).sort((p, q) => q[0] - p[0]);
+    for (let k = 0; left > 0; k++, left--) cnt[order[k % n][1]]++;
+    while (left < 0) { const i = cnt.indexOf(Math.max(...cnt)); cnt[i]--; left++; }
+    let k = 0, x = a0;
+    for (let j = 0; j < n; j++) {
+      const last = k + cnt[j] - 1, nx = j === n - 1 ? a1 : (W[last] + W[last + 1]) / 2;
+      out.push([x, nx]); x = nx; k = last + 1;
+    }
+    return out;
+  }
+  let x = a0;
+  weights.forEach((w, j) => { const nx = j === n - 1 ? a1 : x + ((a1 - a0) * w) / total; out.push([x, nx]); x = nx; });
+  return out;
+}
+
+/**
+ * Квартиры — на окна фасада: двухкомнатной обычно 3 окна (комнаты и кухня), то есть окон — по числу комнат + 1;
+ * окон не нашли — по тому же весу. Раскладка одна на все этажи с тем же числом квартир (ключ «подъезд|квартир на этаже|номер»).
+ * Группы, где человек сам поставил хоть одну квартиру (m=1), не трогаем.
+ */
+export function allocate(B, C, list, keepManual = true) {
+  const old = keepManual ? C.slots || {} : {}, slots = {}, groups = {};
+  for (const u of list) { const k = u.e + '|' + Math.max(1, u.n); ((groups[k] ??= {})[u.f] ??= []).push(u); }
+  const sp = splitsOf(B, C), win = { f: (C.win && C.win.f) || [], b: (C.win && C.win.b) || [] };
+  for (const [k, floors] of Object.entries(groups)) {
+    const mine = Object.keys(old).filter((s) => s.startsWith(k + '|'));
+    if (mine.some((s) => old[s][3])) { mine.forEach((s) => { slots[s] = old[s]; }); continue; }
+    // этаж-образец: самый частый набор квартир (комнаты по порядку)
+    const seqs = {};
+    for (const us of Object.values(floors)) { us.sort((a, b) => a.i - b.i); (seqs[us.map((u) => (u.r || 0) + (u.k || '')).join(',')] ??= []).push(us); }
+    const rep = Object.values(seqs).sort((a, b) => b.length - a.length)[0][0], n = rep.length, e = Math.min(sp.length - 2, Math.max(0, rep[0].e));
+    if (n === 1 && !rep[0].r) continue;   // коммерция на весь этаж — как была, без окон
+    const rows = C.rows === 1 || n < 2 ? 1 : 2, front = Math.ceil(n / rows);
+    // слева направо по рамке (до разворота): лицевая — по порядку, задняя — «по кругу» в обратном порядке
+    const sides = rows === 1 ? [[rep, 'f']] : [[rep.slice(0, front), 'f'], [C.back !== 'fwd' ? rep.slice(front).reverse() : rep.slice(front), 'b']];
+    for (const [us, side] of sides) {
+      if (!us.length) continue;
+      const facing = (side === 'f') !== !!C.flipZ ? 1 : -1, raw = facing > 0 ? win.f : win.b;
+      const W = raw.map((x) => (C.flipX ? 1 - x : x)).filter((x) => x > sp[e] && x < sp[e + 1]).sort((p, q) => p - q);
+      const ranges = split(sp[e], sp[e + 1], W, us.map((u) => (u.r > 0 ? u.r + 1 : Math.max(2, Math.round((u.a || 40) / 25)))));
+      us.forEach((u, j) => {
+        let [x0, x1] = ranges[j];
+        if (C.flipX) [x0, x1] = [1 - x1, 1 - x0];
+        slots[`${u.e}|${n}|${u.i}`] = [facing, +x0.toFixed(4), +x1.toFixed(4)];
+      });
+    }
+  }
+  return slots;
+}
+/** Границы окон для разметки: середины соседних окон; края — полшага от крайних окон */
+export function winEdges(cs) {
+  if (!cs || cs.length < 1) return [0, 1];
+  if (cs.length === 1) return [0, 1];
+  const e = [Math.max(0, cs[0] - (cs[1] - cs[0]) / 2)];
+  for (let i = 0; i < cs.length - 1; i++) e.push((cs[i] + cs[i + 1]) / 2);
+  e.push(Math.min(1, cs[cs.length - 1] + (cs[cs.length - 1] - cs[cs.length - 2]) / 2));
+  return e;
 }
 
 export async function start(el, cfg) {
@@ -280,6 +359,7 @@ export async function start(el, cfg) {
   let tc = null;
   const colors = [accent, accent2];
   function drawGrid(bid) {
+    if (mark.on) return drawMark(bid);
     clear(); pulse.length = 0;
     const B = blocks[bid], c = C(bid), F = floorsOf(bid);
     const grow = growOf() * 0.3;
@@ -301,6 +381,154 @@ export async function start(el, cfg) {
     if (F > 1) { const y = groundOf(c, F) - 0.5; thick(onWall([[-0.5, y], [0.5, y]], facing), amber, 2.5); }
     buildHandles();
   }
+
+  // ---------- разметка квартир вручную: щелчок по фасаду — выбрать квартиру, протянуть по окнам — поставить её на эти окна ----------
+  const mark = { on: false, sel: null, all: true, paint: null };
+  const MARKC = ['#6c4cf1', '#0ea5e9', '#f59e0b', '#10b981', '#ef4444', '#ec4899', '#14b8a6', '#8b5cf6'];
+  const unitsOf = (bid) => units.filter((u) => u.b === bid);
+  const uniform = (n) => Array.from({ length: Math.max(1, n) }, (_, k) => +((k + 0.5) / Math.max(1, n)).toFixed(4));
+  /** Окна стороны рамки (±1): найденные на фасаде, иначе — поровну, столько, сколько обычно у квартир этой стороны */
+  function winOf(c, facing) {
+    const cs = c.win && c.win[facing > 0 ? 'f' : 'b'];
+    return cs && cs.length > 1 ? cs : uniform(guessWins(c, facing));
+  }
+  // по самому частому этажу каждого подъезда: у квартиры окон — комнат + 1 (двухкомнатная — 3 окна)
+  function guessWins(c, facing) {
+    const byE = {};
+    unitsOf(curBlock).forEach((u) => { ((byE[u.e] ??= {})[u.f] ??= []).push(u); });
+    let total = 0;
+    for (const floors of Object.values(byE)) {
+      const fl = Object.values(floors).sort((a, b) => b.length - a.length)[0].sort((a, b) => a.i - b.i);
+      const n = fl.length, rows = c.rows === 1 || n < 2 ? 1 : 2, front = Math.ceil(n / rows);
+      const side = rows === 1 ? fl : (facing > 0) !== !!c.flipZ ? fl.slice(0, front) : fl.slice(front);
+      total += side.reduce((s, u) => s + (u.r > 0 ? u.r + 1 : 2), 0);
+    }
+    return Math.max(2, total);
+  }
+  const gridMat = new THREE.LineBasicMaterial({ color: 0x1f1d36, transparent: true, opacity: 0.45 });
+  const prevMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
+  const preview = new THREE.Mesh(unitBox, prevMat); preview.visible = false; preview.renderOrder = 25; frame.add(preview);
+  function drawMark(bid) {
+    clear(); pulse.length = 0;
+    const B = blocks[bid], c = C(bid), list = unitsOf(bid), { F, yAt } = floorOf(list[0] || { f: 1 }, B, c);
+    const off = 0.004;
+    // сетка окон и этажей на обеих сторонах — чуть впереди стены, дом её закрывает с обратной стороны
+    for (const facing of [1, -1]) {
+      const z = (0.5 + off) * facing, pts = [], ex = winEdges(winOf(c, facing));
+      ex.forEach((x) => pts.push(x - 0.5, -0.5, z, x - 0.5, 0.5, z));
+      for (let k = 0; k <= F; k++) { const y = yAt(k) - 0.5; pts.push(-0.5, y, z, 0.5, y, z); }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+      const ls = new THREE.LineSegments(g, gridMat); ls.renderOrder = 22; layer.add(ls);
+    }
+    const sel = mark.sel && byId[mark.sel];
+    const seen = new Set();
+    list.forEach((u) => {
+      const cell = cellOf(u, B, c), min = cell.min.clone(), max = cell.max.clone(), on = sel && u.id === sel.id;
+      if (cell.facing > 0) { min.z = 0.5 + off; max.z = 0.5 + off * 2; } else { max.z = -0.5 - off; min.z = -0.5 - off * 2; }
+      const pad = (max.x - min.x) * 0.04;
+      min.x += pad; max.x -= pad;
+      const col = on ? accent : MARKC[u.i % MARKC.length];
+      const m = new THREE.Mesh(unitBox, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: on ? 0.62 : cell.placed ? 0.3 : 0.16, depthWrite: false, side: THREE.DoubleSide }));
+      m.scale.copy(max.clone().sub(min)); m.position.copy(min.clone().add(max).multiplyScalar(0.5)); m.renderOrder = on ? 24 : 23;
+      layer.add(m);
+      if (on) { pulse.push(m.material); thick(wallRect(cell.min.x, cell.min.y, cell.max.x, cell.max.y, cell.facing), accent, 5); }
+      // в модели этажей меньше: на одном месте несколько квартир — подписываем одну, выбранную или нижнюю
+      const key = cell.facing + '|' + cell.min.x.toFixed(3) + '|' + cell.min.y.toFixed(3);
+      if (seen.has(key) && !on) return;
+      seen.add(key);
+      const lab = document.createElement('div'); lab.className = 'lc-num' + (on ? ' on' : ''); lab.textContent = u.num;
+      const o = new CSS2DObject(lab); o.position.set((min.x + max.x) / 2, (min.y + max.y) / 2, cell.facing > 0 ? max.z : min.z); o.userData.facing = cell.facing; layer.add(o);
+    });
+    const facing = c.flipZ ? -1 : 1;
+    for (let e = 0; e < B.entr.length; e++) entrLabel(B, c, e, facing, overlay);
+  }
+  /** Точка на лицевой или задней стене рамки под курсором (та, что смотрит на камеру): сторона, доли длины и высоты */
+  function facadeHit(e) {
+    setRay(e);
+    let best = null;
+    for (const facing of [1, -1]) {
+      const n = new THREE.Vector3(0, 0, facing).applyQuaternion(frame.quaternion), p = frame.localToWorld(new THREE.Vector3(0, 0, 0.5 * facing));
+      if (n.dot(camera.position.clone().sub(p)) <= 0) continue;
+      const hit = ray.ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(n, p), new THREE.Vector3());
+      if (!hit) continue;
+      const l = frame.worldToLocal(hit.clone());
+      if (Math.abs(l.x) > 0.5 || Math.abs(l.y) > 0.5) continue;
+      const d = hit.distanceTo(camera.position);
+      if (!best || d < best.d) best = { facing, x: l.x + 0.5, y: l.y + 0.5, d };
+    }
+    return best;
+  }
+  /** Квартира в этой точке фасада (нижняя из совпавших; выбранная — первой) */
+  function unitAt(h) {
+    const B = blocks[curBlock], c = C(curBlock);
+    const hits = unitsOf(curBlock).filter((u) => {
+      const cell = cellOf(u, B, c);
+      return cell.facing === h.facing && h.x >= cell.min.x + 0.5 && h.x <= cell.max.x + 0.5 && h.y >= cell.floorY[0] + 0.5 && h.y <= cell.floorY[1] + 0.5;
+    });
+    return hits.find((u) => u.id === mark.sel) || hits.sort((a, b) => a.f - b.f)[0] || null;
+  }
+  /** Отрезок окон, которые протянули мышью: от левого края первого окна до правого края последнего */
+  function cellsRange(facing, xa, xb) {
+    const ex = winEdges(winOf(C(curBlock), facing));
+    const at = (x) => { for (let i = 0; i < ex.length - 2; i++) if (x <= ex[i + 1]) return i; return ex.length - 2; };
+    const a = at(Math.min(xa, xb)), b = at(Math.max(xa, xb));
+    return [ex[a], ex[b + 1]];
+  }
+  function showPreview(facing, x0, x1) {
+    const u = byId[mark.sel];
+    const fy = u ? floorOf(u, blocks[curBlock], C(curBlock)) : { y0: 0, y1: 1 };
+    const z = facing > 0 ? 0.5 + 0.008 : -0.5 - 0.008;
+    preview.scale.set(x1 - x0, fy.y1 - fy.y0, 0.004); preview.position.set((x0 + x1) / 2 - 0.5, (fy.y0 + fy.y1) / 2 - 0.5, z);
+    preview.visible = true;
+  }
+  function relayout(bid) { const c = C(bid); if (c.slots || c.win) c.slots = allocate(blocks[bid], c, unitsOf(bid), true); }
+  function assign(id, facing, x0, x1) {
+    const u = byId[id]; if (!u) return;
+    const before = snap(), c = C(curBlock);
+    if (mark.all) {
+      if (!c.slots) c.slots = allocate(blocks[curBlock], c, unitsOf(curBlock), true);
+      c.slots[`${u.e}|${Math.max(1, u.n)}|${u.i}`] = [facing, +x0.toFixed(4), +x1.toFixed(4), 1];
+      if (c.ux) delete c.ux[u.id];
+    } else (c.ux ??= {})[u.id] = [facing, +x0.toFixed(4), +x1.toFixed(4)];
+    changed(); remember(before);
+    cfg.onAssign && cfg.onAssign(u);
+  }
+  canvas.addEventListener('pointerdown', (e) => {
+    if (!mark.on || e.button !== 0) return;
+    const h = facadeHit(e);
+    if (!h) return;   // мимо дома — крутим камеру как обычно
+    e.stopImmediatePropagation(); e.preventDefault();
+    mark.paint = { h, cur: h, at: [e.clientX, e.clientY], moved: false, id: e.pointerId };
+    controls.enabled = false;
+    canvas.setPointerCapture(e.pointerId);
+  }, { capture: true });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!mark.on) return;
+    const P = mark.paint;
+    if (!P) { canvas.style.cursor = facadeHit(e) ? 'crosshair' : ''; return; }
+    const h = facadeHit(e);
+    if (Math.hypot(e.clientX - P.at[0], e.clientY - P.at[1]) > 6) P.moved = true;
+    if (!h || h.facing !== P.h.facing || !P.moved || !mark.sel) return;
+    P.cur = h;
+    const [x0, x1] = cellsRange(h.facing, P.h.x, h.x);
+    showPreview(h.facing, x0, x1);
+  });
+  const endPaint = () => {
+    const P = mark.paint;
+    if (!P) return;
+    mark.paint = null; preview.visible = false; controls.enabled = true;
+    try { canvas.releasePointerCapture(P.id); } catch (e) { /* уже отпущен */ }
+    if (!P.moved || !mark.sel) {
+      // щелчок — выбрать квартиру в этом месте
+      const u = unitAt(P.h);
+      if (u) { mark.sel = u.id; drawMark(curBlock); cfg.onSelect && cfg.onSelect(u); }
+      return;
+    }
+    const [x0, x1] = cellsRange(P.h.facing, P.h.x, P.cur.x);
+    assign(mark.sel, P.h.facing, x0, x1);
+  };
+  canvas.addEventListener('pointerup', endPaint);
+  canvas.addEventListener('pointercancel', endPaint);
 
   // ---------- точки на рамке: тянуть сторону, границу подъезда, верх 1-го этажа ----------
   const handles = new THREE.Group(); handles.visible = false; scene.add(handles);
@@ -408,9 +636,10 @@ export async function start(el, cfg) {
   const endDrag = () => {
     if (!drag) return;
     try { canvas.releasePointerCapture(drag.id); } catch (e) { /* уже отпущен */ }
-    const before = drag.before; drag = null; dirty = false;
+    const before = drag.before, kind = drag.u.kind; drag = null; dirty = false;
     controls.enabled = true; if (tc) tc.enabled = true;
     canvas.style.cursor = hoverH ? 'grab' : '';
+    if (kind === 'entr') relayout(curBlock);   // подъезд стал шире — его квартиры заново по окнам
     changed(); remember(before);
   };
   canvas.addEventListener('pointerup', endDrag);
@@ -556,9 +785,75 @@ export async function start(el, cfg) {
     calibrate(bid) { cfg.calibrate = true; frameLines.visible = true; curBlock = bid; applyFrame(bid); setCalibrate(true); drawGrid(bid); overview(); return C(bid); },
     mode,
     get: () => C(curBlock),
-    set(patch) { const before = snap(); Object.assign(C(curBlock), patch); changed(); remember(before); return C(curBlock); },
+    set(patch) {
+      const before = snap();
+      Object.assign(C(curBlock), patch);
+      // развороты, стороны и подъезды меняют раскладку — квартиры, поставленные ИИ, встают заново; поставленные человеком — на месте
+      if (['flipX', 'flipZ', 'rows', 'back', 'ex'].some((k) => k in patch)) relayout(curBlock);
+      changed(); remember(before); return C(curBlock);
+    },
     /** Подъезды снова поровну */
-    even() { const before = snap(); delete C(curBlock).ex; changed(); remember(before); return C(curBlock); },
+    even() { const before = snap(); delete C(curBlock).ex; relayout(curBlock); changed(); remember(before); return C(curBlock); },
+    // ---------- разметка квартир ----------
+    /** Режим «Квартиры»: рамку не двигаем, щёлкаем и тянем по окнам */
+    mark(on) {
+      mark.on = !!on; mark.paint = null; preview.visible = false;
+      const helper = tc && (tc.getHelper ? tc.getHelper() : tc);
+      if (helper) helper.visible = !mark.on;
+      if (tc) tc.enabled = !mark.on;
+      handles.visible = !mark.on && !!cfg.calibrate;
+      if (curBlock != null) drawGrid(curBlock);
+    },
+    /** Выбрать квартиру (в разметке) */
+    select(id) {
+      const u = byId[id]; if (!u) return null;
+      if (u.b !== curBlock) { curBlock = u.b; applyFrame(u.b); }
+      mark.sel = id; drawGrid(curBlock);
+      return u;
+    },
+    selected: () => (mark.sel ? byId[mark.sel] : null),
+    /** На все этажи с таким же набором квартир (true) или только эта квартира */
+    markAll(on) { mark.all = !!on; },
+    /** Где сейчас квартира: сторона, x0, x1 и кем поставлена */
+    placeOf(id) { const u = byId[id]; if (!u) return null; const c = C(u.b); return { slot: slotOf(u, c), own: !!(c.ux && c.ux[u.id]) }; },
+    /** Окон на стороне ('f' лицевая, 'b' задняя): найденные ИИ или заданные числом */
+    winCount: (side) => { const cs = C(curBlock).win && C(curBlock).win[side]; return cs && cs.length > 1 ? cs.length : winOf(C(curBlock), side === 'f' ? 1 : -1).length; },
+    setWin(side, n) {
+      const before = snap(), c = C(curBlock);
+      c.win = Object.assign({}, c.win || {}, { [side]: uniform(Math.max(1, Math.min(120, n))) });
+      relayout(curBlock); changed(); remember(before); return c;
+    },
+    /** Найти окна на фасадах там, где стоит рамка (привязка сделана раньше, без окон) */
+    async findWindows() {
+      const mod = await loadAuto(), c = C(curBlock), cs = Math.cos(c.r), sn = Math.sin(c.r);
+      const keep = (x, z) => { const dx = x - c.c[0], dz = z - c.c[2]; return Math.abs(dx * cs - dz * sn) <= c.s[0] * 0.6 && Math.abs(dx * sn + dz * cs) <= c.s[2] * 0.6; };
+      const restore = hideAll();
+      let r = null;
+      try { r = await mod.fitBlock({ THREE, renderer, scene, meshes: mod.meshesOf(model), keep, nearR: c.r, block: { floors: floorsOf(curBlock), entr: blocks[curBlock].entr }, ai: null }); } finally { restore(); }
+      if (!r || !r.cal.win) return null;
+      // доли длины найденного дома → доли рамки, которая стоит сейчас
+      const F = r.F, off = (F.cx - c.c[0]) * cs - (F.cz - c.c[2]) * sn, map = (x) => +((off + (x - 0.5) * F.L) / c.s[0] + 0.5).toFixed(4);
+      const win = {};
+      for (const k of ['f', 'b']) { const v = (r.cal.win[k] || []).map(map).filter((x) => x > 0 && x < 1); if (v.length > 1) win[k] = v; }
+      if (!win.f && !win.b) return null;
+      const before = snap();
+      c.win = win; relayout(curBlock); changed(); remember(before);
+      return win;
+    },
+    /** Заново по окнам — все квартиры, и поставленные вручную тоже */
+    realloc() {
+      const before = snap(), c = C(curBlock);
+      c.slots = allocate(blocks[curBlock], c, unitsOf(curBlock), false); delete c.ux;
+      changed(); remember(before); return c;
+    },
+    /** Квартиру изменили (комнат, площадь) — подписи и раскладка по окнам */
+    updateUnit(id, patch) {
+      const u = byId[id]; if (!u) return null;
+      Object.assign(u, patch);
+      relayout(u.b);
+      if (u.b === curBlock) changed();
+      return u;
+    },
     undo() {
       const u = undoStack.pop();
       if (u) { cal[u.bid] = JSON.parse(u.s); if (u.bid === curBlock) changed(); }
@@ -585,6 +880,8 @@ export async function start(el, cfg) {
           if (i >= zones.length) r.report.warn.push('blocks');
           const before = cal[bid] ? JSON.stringify(cal[bid]) : null;
           cal[bid] = Object.assign(r.cal, { auto: r.report });
+          // квартиры — на свои окна: по числу комнат (двухкомнатной ~3 окна)
+          cal[bid].slots = allocate(blocks[bid], cal[bid], unitsOf(bid), false);
           if (before) remember(before, bid);
           out[bid] = r.report;
         }
@@ -602,6 +899,7 @@ export async function start(el, cfg) {
       if (!r) return null;
       const before = snap();
       Object.assign(c, { c: r.cal.c, s: r.cal.s, r: r.cal.r });
+      if (r.cal.win) { c.win = r.cal.win; relayout(curBlock); }
       changed(); remember(before);
       return c;
     },

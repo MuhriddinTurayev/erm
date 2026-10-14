@@ -59,6 +59,10 @@ class AppController extends Controller
         foreach (\App\Models\ObjectMedia::of($wsId)->whereIn('kind', ['exterior', 'interior', 'pano'])->selectRaw('project_id, kind, count(*) as n')->groupBy('project_id', 'kind')->get() as $r) {
             $out[(string) $r->project_id][$r->kind] = (int) $r->n;
         }
+        // для чьих квартир есть загруженный интерьер: [планировка, комнат] — программа покажет его вместо нарисованного
+        foreach (\App\Models\ObjectMedia::of($wsId)->whereIn('kind', ['interior', 'pano'])->select('project_id', 'layout', 'rooms')->distinct()->get() as $r) {
+            $out[(string) $r->project_id]['in'][] = [$r->layout, $r->rooms];
+        }
 
         return $out;
     }

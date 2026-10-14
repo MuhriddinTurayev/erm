@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Company;
 
 use App\Models\ObjectMedia;
+use App\Services\Inventory;
 use App\Services\Locate;
 use App\Services\StateWriter;
 use Illuminate\Http\Request;
@@ -28,6 +29,11 @@ class LocateController extends ErpController
             'saveUrl' => $model ? url('/company/media/'.$model->id.'/locate') : null,
             'aiUrl' => $model && $canEdit ? url('/company/media/'.$model->id.'/locate/ai') : null,
             'back' => $canEdit ? '/company/objects/'.$pid.'?tab=media' : '/company/sales?o='.$pid,
+            // «Внутри квартиры»: интерьеры (3D, панорамы, рендеры, планы); в настройке их можно загрузить прямо к выбранной квартире
+            'inner' => Locate::media($ws->id, $pid), 'viewUrl' => url('/company/objects/'.$pid.'/3d?embed=1&u={u}'), 'fileUrl' => url('/company/media/{id}/file'),
+            'canUnits' => $request->user()->canEdit() && $request->user()->managesObjects(), 'hasInv' => Inventory::has($p),
+            'upUrl' => url('/company/objects/'.$pid.'/media'), 'unitUrl' => url('/company/objects/'.$pid.'/units/{id}'),
+            'cvt' => ObjectController::convertTexts(), 'mcUrl' => asset('assets/model-convert.js').'?v='.@filemtime(public_path('assets/model-convert.js')),
         ]);
     }
 
@@ -42,6 +48,8 @@ class LocateController extends ErpController
             's' => ['required', 'array', 'size:3'], 's.*' => ['numeric'], 'r' => ['required', 'numeric'], 'floors' => ['required', 'integer', 'min:1', 'max:200'], 'gf' => ['nullable', 'numeric', 'min:0', 'max:30'],
             'rows' => ['required', 'integer', 'in:1,2'], 'back' => ['required', 'in:rev,fwd'], 'flipX' => ['boolean'], 'flipZ' => ['boolean'],
             'ex' => ['nullable', 'array', 'max:60'], 'ex.*' => ['numeric', 'gt:0', 'lt:1'],
+            'win' => ['nullable', 'array'], 'win.f' => ['nullable', 'array', 'max:200'], 'win.b' => ['nullable', 'array', 'max:200'],
+            'slots' => ['nullable', 'array', 'max:3000'], 'ux' => ['nullable', 'array', 'max:6000'],
             'auto' => ['nullable', 'array'], 'auto.by' => ['nullable', 'in:ai,geo'], 'auto.mf' => ['nullable', 'integer', 'min:0', 'max:300'],
             'auto.doors' => ['nullable', 'integer', 'min:0', 'max:100'], 'auto.warn' => ['nullable', 'array', 'max:8'], 'auto.warn.*' => ['string', 'in:'.implode(',', Locate::WARN)]]);
         $bid = (string) ($d['block'] ?? '');
