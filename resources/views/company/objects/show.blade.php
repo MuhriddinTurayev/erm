@@ -11,6 +11,7 @@
 @section('actions')
 <a class="btn btn-s" href="/company/objects">{!! ic('arrow-left') !!}{{ __('Все объекты') }}</a>
 @if ($u->managesObjects())<button class="btn btn-s" data-open="dlg-info">{!! ic('pencil') !!}{{ __('Название и адрес') }}</button>@endif
+@if ($u->isAdmin())<button class="btn btn-s btn-d" data-open="dlg-del" title="{{ __('Удалить объект') }}">{!! ic('trash-2') !!}{{ __('Удалить') }}</button>@endif
 @if ($u->canModule('sales'))<a class="btn btn-s" href="/company/sales?o={{ $pid }}">{!! ic('key-round') !!}{{ __('Продажи') }}</a>@endif
 @if ($media->whereIn('kind', ['exterior', 'interior', 'pano'])->count())<a class="btn btn-p btn-s" href="/company/objects/{{ $pid }}/3d" target="_blank">{!! ic('box') !!}{{ __('Открыть 3D') }}</a>@endif
 @endsection
@@ -30,8 +31,41 @@
     <label class="field"><span>{{ __('Название объекта') }}</span><input name="name" required maxlength="120" value="{{ $p['name'] ?? '' }}"></label>
     <label class="field"><span>{{ __('Адрес') }}</span><input name="address" maxlength="200" value="{{ $p['address'] ?? '' }}"></label>
     <div class="flex"><button class="btn btn-p">{!! ic('check') !!}{{ __('Сохранить') }}</button><button type="button" class="btn" data-close>{{ __('Отмена') }}</button></div>
+    @if ($u->isAdmin())
+    <div class="obj-del"><span>{{ __('Объект завели по ошибке?') }}</span><button type="button" class="btn btn-s btn-d" data-open="dlg-del">{!! ic('trash-2') !!}{{ __('Удалить объект') }}</button></div>
+    @endif
   </form>
 </dialog>
+@endif
+@if ($u->isAdmin())
+<dialog class="modal" id="dlg-del">
+  <div class="modal-h"><h3>{!! ic('trash-2') !!}{{ __('Удалить объект') }}</h3><button type="button" class="icon-btn" data-close>{!! ic('x') !!}</button></div>
+  <form class="modal-b form" style="grid-template-columns:1fr" id="objDel">
+    <p style="margin:0;font-size:14px">{{ __('Удалятся квартиры, 3D-модели, интерьеры, фото и ссылки покупателей этого объекта. Отменить нельзя.') }}</p>
+    <p class="muted" style="margin:0;font-size:13px">{{ __('Если по объекту уже есть брони, продажи или деньги в кассе — удалить не получится: история компании должна сохраниться.') }}</p>
+    <label class="field"><span>{{ __('Чтобы подтвердить, впишите название объекта:') }} <b>{{ $p['name'] ?? '' }}</b></span><input name="confirm" required maxlength="200" autocomplete="off"></label>
+    <div class="obj-del-err" hidden></div>
+    <div class="flex"><button class="btn btn-p btn-danger" disabled>{!! ic('trash-2') !!}{{ __('Удалить навсегда') }}</button><button type="button" class="btn" data-close>{{ __('Отмена') }}</button></div>
+  </form>
+</dialog>
+@push('scripts')<script>
+(() => {
+  // из окна «Название и адрес» — сначала закрыть его, чтобы окна не легли друг на друга
+  document.querySelector('#dlg-info [data-open=dlg-del]')?.addEventListener('click', () => document.getElementById('dlg-info').close());
+  const f = document.getElementById('objDel'), name =@json(mb_strtolower(trim((string) ($p['name'] ?? '')))), btn = f.querySelector('button.btn-danger'), err = f.querySelector('.obj-del-err');
+  f.elements.confirm.addEventListener('input', () => { btn.disabled = f.elements.confirm.value.trim().toLowerCase() !== name; err.hidden = true; });
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    btn.disabled = true;
+    const r = await fetch(@json(url('/company/objects/'.$pid)), { method: 'DELETE', headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content },
+      body: JSON.stringify({ confirm: f.elements.confirm.value }) }).catch(() => null);
+    const j = r ? await r.json().catch(() => ({})) : {};
+    if (r && r.ok && j.ok) { location.href = j.to || '/company/objects'; return; }
+    err.textContent = j.error || j.message || @json(__('Не удалось удалить — проверьте интернет и попробуйте ещё раз.'));
+    err.hidden = false; btn.disabled = false;
+  });
+})();
+</script>@endpush
 @endif
 
 @if ($tab === 'units' && $u->managesObjects())
@@ -148,7 +182,8 @@ const RH = @json($roleHelp); document.getElementById('acc-role')?.addEventListen
       @php $items = $media->where('kind', $kind); @endphp
       @continue(! $items->count())
       <div class="card" style="margin-bottom:16px">
-        <div class="card-h"><h3>{!! ic($ki) !!}{{ __($kn) }}</h3><span class="badge">{{ $items->count() }}</span></div>
+        <div class="card-h"><h3>{!! ic($ki) !!}{{ __($kn) }}</h3><span class="badge">{{ $items->count() }}</span>
+          @if ($kind !== 'exterior')<a class="btn btn-s" style="margin-left:auto" href="/company/objects/{{ $pid }}/interiors">{!! ic('layout-grid', '', 14) !!}{{ __('По планировкам') }}</a>@endif</div>
         <div class="media-grid">
           @foreach ($items as $m)
             <div class="media-card">
@@ -165,6 +200,7 @@ const RH = @json($roleHelp); document.getElementById('acc-role')?.addEventListen
                 <a class="btn btn-s {{ empty($m->meta['locate']) || $byAi ? 'btn-soft' : '' }}" href="/company/objects/{{ $pid }}/locate?calibrate=1&m={{ $m->id }}" target="_blank" style="width:100%">{!! ic($byAi ? 'sparkles' : 'target', '', 15) !!}{{ empty($m->meta['locate']) ? __('Привязать квартиры к модели') : ($byAi ? __('Квартиры расставил ИИ — проверить') : __('Квартиры привязаны ✓')) }}</a></div>
               @endif
               @if ($canMedia)
+              <div class="mc-tools">
               <details class="mc-edit"><summary>{!! ic('pencil', '', 14) !!}{{ __('Настроить') }}</summary>
                 <form method="post" action="/company/media/{{ $m->id }}" class="form" style="grid-template-columns:1fr 1fr;gap:8px">@csrf
                   <label class="field full"><span>{{ __('Название') }}</span><input name="title" value="{{ $m->title }}" required maxlength="160"></label>
@@ -188,8 +224,9 @@ const RH = @json($roleHelp); document.getElementById('acc-role')?.addEventListen
                   @endif
                   <div class="full flex"><button class="btn btn-p btn-s">{!! ic('check') !!}{{ __('Сохранить') }}</button></div>
                 </form>
-                <form method="post" action="/company/media/{{ $m->id }}" data-confirm="{{ __('Удалить файл?') }}">@csrf @method('delete')<button class="btn btn-s btn-ghost">{!! ic('trash-2') !!}{{ __('Удалить') }}</button></form>
               </details>
+              <form method="post" action="/company/media/{{ $m->id }}" data-confirm="{{ $kind === 'exterior' ? __('Удалить эту 3D-модель здания? Её привязка к квартирам пропадёт, покупатели её больше не увидят. Интерьеры квартир останутся.') : __('Удалить «:f»? Файл пропадёт и у покупателей.', ['f' => $m->title]) }}">@csrf @method('delete')<button class="btn btn-s btn-ghost btn-d" title="{{ __('Удалить') }}">{!! ic('trash-2') !!}{{ __('Удалить') }}</button></form>
+              </div>
               @endif
             </div>
           @endforeach

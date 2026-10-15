@@ -131,6 +131,7 @@ Route::middleware(['auth', 'role:company'])->group(function () {
                 // объекты и перечень помещений ведут руководитель и администратор объектов (проверка — в контроллере)
                 Route::post('/objects', [Company\InventoryController::class, 'create']);
                 Route::post('/objects/{pid}/info', [Company\InventoryController::class, 'info']);
+                Route::delete('/objects/{pid}', [Company\InventoryController::class, 'destroy']);   // только руководитель, подтверждение — название
                 Route::post('/objects/{pid}/inventory', [Company\InventoryController::class, 'save']);
                 Route::post('/objects/{pid}/inventory/convert', [Company\InventoryController::class, 'convert']);
                 Route::post('/objects/{pid}/inventory/undo', [Company\InventoryController::class, 'undo']);
@@ -138,6 +139,7 @@ Route::middleware(['auth', 'role:company'])->group(function () {
                 Route::post('/objects/{pid}/units/{uid}', [Company\InventoryController::class, 'unit']);   // комнаты и площадь квартиры — из привязки к 3D
                 Route::get('/objects/{pid}', [Company\ObjectController::class, 'show']);
                 Route::get('/objects/{pid}/3d', [Company\ObjectController::class, 'viewer']);
+                Route::get('/objects/{pid}/interiors', [Company\ObjectController::class, 'interiors']);   // интерьеры по планировкам: загрузить, поправить, удалить
                 // квартира на 3D-модели дома; привязка корпусов к модели
                 Route::get('/objects/{pid}/locate', [Company\LocateController::class, 'show']);
                 Route::post('/media/{media}/locate', [Company\LocateController::class, 'save']);
@@ -147,6 +149,7 @@ Route::middleware(['auth', 'role:company'])->group(function () {
                 Route::post('/objects/{pid}/media', [Company\ObjectController::class, 'mediaUpload']);
                 Route::post('/media/{media}', [Company\ObjectController::class, 'mediaUpdate']);
                 Route::delete('/media/{media}', [Company\ObjectController::class, 'mediaDelete']);
+                Route::post('/media/{media}/patch', [Company\ObjectController::class, 'mediaPatch']);   // название, комната, планировка — из 3D и «Дизайна»
                 Route::get('/media/{media}/file', [Company\ObjectController::class, 'mediaFile']);
             });
             Route::middleware('module:sales')->group(function () {

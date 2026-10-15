@@ -29,6 +29,8 @@ class LocateController extends ErpController
             'saveUrl' => $model ? url('/company/media/'.$model->id.'/locate') : null,
             'aiUrl' => $model && $canEdit ? url('/company/media/'.$model->id.'/locate/ai') : null,
             'back' => $canEdit ? '/company/objects/'.$pid.'?tab=media' : '/company/sales?o='.$pid,
+            // настройка: все модели здания объекта — переключиться на другую, заменить или удалить ошибочную
+            'models' => $canEdit && $model ? ObjectMedia::of($ws->id)->where('project_id', $pid)->where('kind', 'exterior')->orderByDesc('is_main')->orderBy('sort')->orderBy('id')->get(['id', 'title', 'ext', 'is_main']) : collect(),
             // «Внутри квартиры»: интерьеры (3D, панорамы, рендеры, планы); в настройке их можно загрузить прямо к выбранной квартире
             'inner' => Locate::media($ws->id, $pid), 'viewUrl' => url('/company/objects/'.$pid.'/3d?embed=1&u={u}'), 'fileUrl' => url('/company/media/{id}/file'),
             'canUnits' => $request->user()->canEdit() && $request->user()->managesObjects(), 'hasInv' => Inventory::has($p),

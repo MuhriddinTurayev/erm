@@ -44,6 +44,10 @@
     'noLayouts' => __('В объекте пока нет квартир.'), 'noInnerLay' => __('Для этой планировки ещё ничего нет — загрузите 3D, панорамы 360°, фото или план кнопками выше.'),
     'notPano' => __('«:f» — не панорама 360° (у неё ширина должна быть ровно вдвое больше высоты). Загрузить как обычное фото?'),
     'winsN' => __('окон: :n'), 'freeWin' => __('свободное окно'), 'noFlats' => __('на этом этаже нет квартир'),
+    'edit' => __('Изменить'), 'del' => __('Удалить'), 'editFile' => __('Файл интерьера'), 'fileName' => __('Название'), 'roomName' => __('Комната на панораме'),
+    'forLayout' => __('Для какой планировки'), 'forAll' => __('Для всех планировок'), 'cancel' => __('Отмена'), 'save' => __('Сохранить'), 'delFileQ' => __('Удалить «:f»? Файл пропадёт и у покупателей.'),
+    'noInnerView' => __('Для этой планировки интерьера пока нет.'),
+    'delModelQ' => __('Удалить эту 3D-модель здания? Её привязка к квартирам пропадёт, покупатели её больше не увидят. Интерьеры квартир останутся.'),
     'pickFirst' => __('Сначала выберите квартиру: щёлкните её на фасаде или в списке.'), 'findWin' => __('Ищу окна на фасаде…'),
   ];
   $innerT = ['view' => $viewUrl ?? null, 'file' => $fileUrl ?? null];
@@ -104,6 +108,8 @@
   .lc-side .row2.one{grid-template-columns:1fr}
   .lc-sec{display:grid;gap:8px;padding-top:12px;border-top:1px solid var(--border)}
   .lc-lab{font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.04em}
+  .lc-model select{height:36px;border:1px solid var(--border-2);border-radius:10px;background:var(--surface);color:var(--text);padding:0 8px;font:500 13px var(--font);min-width:0}
+  .lc-model-n{font:600 13.5px var(--font);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .lc-ai{display:grid;gap:8px;padding:12px;border-radius:12px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 12%,var(--surface)),var(--surface));border:1px solid color-mix(in srgb,var(--accent) 22%,var(--border))}
   .lc-ai-h{display:flex;gap:8px;align-items:center;font:700 14px var(--font-head);color:var(--accent-text)}
   .lc-ai p{color:var(--text-2)}
@@ -280,7 +286,6 @@
         <datalist id="iRooms">@foreach ([__('Гостиная'), __('Кухня'), __('Спальня'), __('Детская'), __('Ванная'), __('Прихожая'), __('Балкон'), __('Кабинет')] as $rn)<option value="{{ $rn }}">@endforeach</datalist></label>
       <div id="iList" class="lc-ilayouts"></div>
       <div class="lc-prog" id="uProg" hidden><i></i></div><small class="lc-ptext" id="uProgT" hidden></small>
-      <input type="file" id="uFile" hidden multiple>
     </div>
     <div id="tabFrame" class="lc-tab">
     <div class="lc-ai">
@@ -327,6 +332,19 @@
         <label class="field" style="margin-top:8px"><span>{{ __('Поворот, °') }}</span><input type="number" step="1" id="cR"></label>
       </details>
     </div>
+    {{-- загрузили не ту модель — заменить или удалить прямо отсюда --}}
+    <div class="lc-sec lc-model">
+      <span class="lc-lab">{{ __('3D-модель здания') }}</span>
+      @if (($models ?? collect())->count() > 1)
+      <select id="cModel" aria-label="{{ __('3D-модель здания') }}">@foreach ($models as $mm)<option value="{{ $mm->id }}"@selected($mm->id === $model->id)>{{ $mm->title ?: __('Модель').' #'.$mm->id }}@if ($mm->is_main) · {{ __('главная') }}@endif</option>@endforeach</select>
+      @else
+      <b class="lc-model-n">{{ $model->title ?: __('Модель').' #'.$model->id }}</b>
+      @endif
+      <div class="row2">
+        <a class="btn btn-s" href="/company/objects/{{ $pid }}?tab=media&kind=exterior#upload-card" target="_top">{!! ic('upload', '', 15) !!}{{ __('Загрузить другую') }}</a>
+        <button type="button" class="btn btn-s btn-d" id="cModelDel">{!! ic('trash-2', '', 15) !!}{{ __('Удалить модель') }}</button>
+      </div>
+    </div>
     </div>
     <div class="lc-foot">
       <button type="button" class="btn btn-p" id="cSave">{!! ic('check') !!}{{ __('Сохранить привязку') }}</button>
@@ -353,13 +371,15 @@
 @if ($model)
 <script type="module">
 import { start } from '{{ asset('assets/locate3d.js') }}?v={{ @filemtime(public_path('assets/locate3d.js')) }}';
+import { innerManager, layKey } from '{{ asset('assets/inner-media.js') }}?v={{ @filemtime(public_path('assets/inner-media.js')) }}';
 const T = @json($T), DATA = @json($data), CAL = @json((object) $cal), UNIT = @json($unit), CALIB = @json((bool) $calibrate);
 const CAN = @json((bool) $canEdit), AUTO = @json((bool) $auto), AI_URL = @json($aiUrl), SAVE_URL = @json($saveUrl);
 const SETUP = @json($canEdit ? '/company/objects/'.$pid.'/locate?calibrate=1&m='.$model->id : null);
 // интерьеры квартир («Внутри»): файлы, адрес страницы 3D и файла; в настройке — загрузка к выбранной квартире и её комнаты
 const INNER = @json($inner), URLS = @json($innerT), CAN_UNITS = @json((bool) $canUnits), HAS_INV = @json((bool) ($hasInv ?? true));
+const PATCH_URL = @json(url('/company/media/{id}/patch')), DEL_URL = @json(url('/company/media/{id}'));
 const UP_URL = @json($upUrl ?? null), UNIT_URL = @json($unitUrl ?? null), CVT = @json($cvt ?? []), MC_URL = @json($mcUrl ?? null);
-const ICON = {!! json_encode(['interior' => ic('box', '', 22), 'pano' => ic('compass', '', 22), 'photo' => ic('image', '', 22), 'plan' => ic('ruler', '', 22), 'pin' => ic('map-pin', '', 15), 'eye' => ic('eye', '', 15), 'up' => ic('upload', '', 15), 'box' => ic('box', '', 16), 'compass' => ic('compass', '', 16), 'image' => ic('image', '', 16), 'ruler' => ic('ruler', '', 16)], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
+const ICON = {!! json_encode(['interior' => ic('box', '', 22), 'pano' => ic('compass', '', 22), 'photo' => ic('image', '', 22), 'plan' => ic('ruler', '', 22), 'pin' => ic('map-pin', '', 15), 'eye' => ic('eye', '', 15), 'up' => ic('upload', '', 15), 'box' => ic('box', '', 16), 'compass' => ic('compass', '', 16), 'image' => ic('image', '', 16), 'ruler' => ic('ruler', '', 16), 'edit' => ic('pencil', '', 13), 'del' => ic('trash-2', '', 13)], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const CSRF = document.querySelector('meta[name=csrf-token]').content;
@@ -489,6 +509,10 @@ function report(bid) {
   w.hidden = !items.length;
 }
 
+// цвета квартир — те же, что на 3D-модели (по номеру квартиры на этаже); состояние плоского фасада и интерьеров — до шагов настройки
+const COLORS = ['#6c4cf1', '#0ea5e9', '#f59e0b', '#10b981', '#ef4444', '#ec4899', '#14b8a6', '#8b5cf6'];
+const FAC = { face: 1, shot: null, floor: null, paint: null };
+let IM = null;
 const unbound = L.blocks.filter((b) => !L.isCalibrated(b));
 if (CALIB) {
   const sel = $('#cBlock');
@@ -534,6 +558,16 @@ if (CALIB) {
       $('#cAiWarn').hidden = true;
     } catch (e) { alert(T.err); } finally { btn.disabled = false; }
   });
+  // модель здания: переключиться на другую загруженную; удалить ошибочную (вместе с её привязкой)
+  $('#cModel')?.addEventListener('change', (e) => { const to = new URL(location.href); to.searchParams.set('m', e.target.value); to.searchParams.delete('auto'); to.searchParams.delete('mk'); location.href = to; });
+  $('#cModelDel').addEventListener('click', async () => {
+    if (!confirm(T.delModelQ)) return;
+    const btn = $('#cModelDel'); btn.disabled = true;
+    const r = await fetch(DEL_URL.replace('{id}', @json($model->id)), { method: 'DELETE', headers: { Accept: 'application/json', 'X-CSRF-TOKEN': CSRF } }).catch(() => null);
+    if (r && r.ok) { (window.top || window).location.href = @json(url('/company/objects/'.$pid.'?tab=media')); return; }
+    const j = r ? await r.json().catch(() => ({})) : {};
+    alert(j.error || j.message || T.err); btn.disabled = false;
+  });
 
   /* ---------- три шага: 1 — рамка, 2 — квартиры на окнах, 3 — интерьер планировок ---------- */
   const setTab = async (t) => {
@@ -544,7 +578,7 @@ if (CALIB) {
     $('#lcFac').hidden = true; $('#facBack').hidden = true;
     L.mark(t !== 'frame');   // на шагах 2 и 3 рамку не двигаем — стрелок нет
     if (t === 'frame') { fill(L.get()); return; }
-    if (t === 'inner') { renderLayouts(); return; }
+    if (t === 'inner') { IM.render(); return; }
     // привязку сделали раньше, окон в ней нет — находим их на фасаде, чтобы квартиры встали по окнам
     if (!L.get().win) { busy(true, T.findWin); try { await L.findWindows(); } catch (e) { console.error(e); } finally { busy(false); } }
     winFill();
@@ -603,20 +637,12 @@ if (CALIB) {
   $('#uInMini').addEventListener('click', (e) => {
     const a = e.target.closest('[data-a]'), u = L.selected(); if (!a || !u) return;
     if (a.dataset.a === 'view') openInner(u);
-    if (a.dataset.a === 'up') { layoutCur = layKey(u); setTab('inner'); }
+    if (a.dataset.a === 'up') { IM.setCur(layKey(u)); setTab('inner'); }
   });
-  $('#iList').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-up],[data-m],[data-view]'); if (!b) return;
-    const lay = layouts().find((x) => x.key === b.closest('[data-lay]').dataset.lay); if (!lay) return;
-    if (b.dataset.m) return openInner(lay.u, INNER.find((m) => String(m.id) === b.dataset.m));
-    if (b.dataset.view != null) return openInner(lay.u);
-    upFor = { lay, kind: b.dataset.up };
-    const f = $('#uFile');
-    f.accept = { interior: '.glb,.gltf,.bin,.fbx,.obj,.mtl,.dae,.3ds,.stl,.ply,.3mf,.ifc,.zip,.jpg,.jpeg,.png,.tga,.bmp', pano: '.jpg,.jpeg,.png,.webp', photo: '.jpg,.jpeg,.png,.webp', plan: '.pdf,.jpg,.jpeg,.png,.webp' }[upFor.kind];
-    f.multiple = upFor.kind !== 'plan';
-    f.click();
-  });
-  $('#uFile').addEventListener('change', () => { const files = [...$('#uFile').files]; $('#uFile').value = ''; if (files.length && upFor) upKind(files, upFor.kind, upFor.lay); });
+  IM = innerManager($('#iList'), { T, ICON, inner: INNER, units: DATA.units, csrf: CSRF, cvt: CVT, mcUrl: MC_URL, canEdit: !!UP_URL, roomInput: $('#iRoom'), prog,
+    urls: { up: UP_URL, file: URLS.file, patch: PATCH_URL, del: DEL_URL },
+    onView: (u, m) => openInner(u, m),
+    onChange: () => { const s = L.selected(); if (s && !$('#uCard').hidden) card(s); } });
   const params = new URLSearchParams(location.search);
   if (params.get('mk')) { if (first) { L.select(first); FAC.floor = L.units[first].f; } await setTab('units'); if (first) card(L.units[first]); }
 } else {
@@ -631,10 +657,6 @@ if (CALIB) {
   }
 }
 /* ---------- шаг 2: плоский фасад — квартиры на окнах ---------- */
-// цвета квартир — те же, что на 3D-модели (по номеру квартиры на этаже)
-const COLORS = ['#6c4cf1', '#0ea5e9', '#f59e0b', '#10b981', '#ef4444', '#ec4899', '#14b8a6', '#8b5cf6'];
-const FAC = { face: 1, shot: null, floor: null, paint: null };
-let layoutCur = null, upFor = null;
 function unitsList() {
   return DATA.units.filter((u) => u.b === L.block()).sort((a, b) => a.e - b.e || a.f - b.f || a.i - b.i);
 }
@@ -740,99 +762,13 @@ function card(u) {
     + `<span style="flex:1"></span>${list.length ? `<button type="button" class="btn btn-s btn-p" data-a="view">${ICON.eye}${esc(T.look)}</button>` : ''}${UP_URL ? `<button type="button" class="btn btn-s" data-a="up">${ICON.up}${esc(T.addInner)}</button>` : ''}`;
 }
 
-/* ---------- шаг 3: интерьер по планировкам — 3D, панорамы 360°, рендеры, план ---------- */
-const layKey = (u) => (u.t ? 't:' + u.t : 'r:' + (u.r || 0));
-/** Планировки корпуса: из перечня помещений; если их нет — группы по числу комнат */
-function layouts() {
-  const map = new Map();
-  DATA.units.filter((u) => u.k === 'flat' || u.r > 0).forEach((u) => {
-    const k = layKey(u);
-    if (!map.has(k)) map.set(k, { key: k, u, n: 0, name: u.t ? (u.tn || u.t) : `${u.r}${T.rooms}` });
-    map.get(k).n++;
-  });
-  return [...map.values()].sort((a, b) => (a.u.r || 0) - (b.u.r || 0) || (a.u.a || 0) - (b.u.a || 0));
-}
-function renderLayouts() {
-  const box = $('#iList');
-  if (!box) return;
-  const KINDS = [['interior', ICON.box, T.kindsShort.interior], ['pano', ICON.compass, T.kindsShort.pano], ['photo', ICON.image, T.kindsShort.photo], ['plan', ICON.ruler, T.kindsShort.plan]];
-  box.innerHTML = layouts().map((l) => {
-    const list = innerOf(l.u);
-    return `<div class="lc-lay${layoutCur === l.key ? ' cur' : ''}" data-lay="${esc(l.key)}">
-      <div class="lc-lay-h"><b>${esc(l.name)}</b><small>${l.n} ${esc(T.flats)}${l.u.a ? ' · ' + esc(l.u.a) + ' ' + esc(T.m2) : ''}</small></div>
-      <div class="lc-lay-up">${KINDS.map(([k, ic, n]) => { const c = list.filter((m) => m.k === k).length; return `<button type="button" data-up="${k}" class="${c ? 'has' : ''}" title="${esc(T.upTitle[k])}">${ic}<span>${esc(n)}${c ? ' · ' + c : ' +'}</span></button>`; }).join('')}</div>
-      ${list.length ? `<div class="lc-ilist">${list.map((m) => `<button type="button" data-m="${m.id}" title="${esc(m.n)}"${m.k === 'photo' || (m.k === 'plan' && m.ext !== 'pdf') ? ` style="background-image:url('${esc(fileUrl(m))}')"` : ''}>${m.k === 'photo' || (m.k === 'plan' && m.ext !== 'pdf') ? '' : ICON[m.k] || ''}<span>${esc(m.room || T.kinds[m.k] || m.k)}</span></button>`).join('')}</div>
-        <button type="button" class="btn btn-s btn-p" data-view>${ICON.eye}${esc(T.look)}</button>` : `<div class="lc-iempty">${esc(T.noInnerLay)}</div>`}
-    </div>`;
-  }).join('') || `<div class="lc-iempty">${esc(T.noLayouts)}</div>`;
-}
-const prog = (k, text) => {
+/* ---------- шаг 3: интерьер по планировкам — общий модуль assets/inner-media.js (загрузить, поправить, удалить) ---------- */
+function prog(k, text) {
   const p = $('#uProg'), t = $('#uProgT');
   if (!p) return;
   p.hidden = t.hidden = k === false;
   if (k !== null && k !== false) p.firstElementChild.style.width = Math.round(k * 100) + '%';
   if (text) t.textContent = text;
-};
-/** Панорама 360° — картинка в 2 раза шире высоты */
-async function ratioOf(f) {
-  try { const b = await createImageBitmap(f); const k = b.width / b.height; b.close && b.close(); return k; } catch (e) { return 0; }
-}
-/** Загрузка частями по 5 МБ — тот же путь, что «3D, панорамы, планировки» на странице объекта */
-async function uploadFile(f, kind, u, extra = {}) {
-  const CH = 5 * 1024 * 1024, total = Math.max(1, Math.ceil(f.size / CH)), id = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
-  let res = null;
-  for (let i = 0; i < total; i++) {
-    const fd = new FormData();
-    fd.append('_token', CSRF); fd.append('upload', id); fd.append('index', i); fd.append('total', total); fd.append('name', f.name); fd.append('chunk', f.slice(i * CH, (i + 1) * CH), 'part');
-    fd.append('kind', kind); fd.append('title', '');
-    if (u.t) fd.append('layout', u.t); else fd.append('rooms', u.r || 0);
-    if (kind === 'pano' && extra.room) fd.append('room', extra.room);
-    if (extra.src) fd.append('src', extra.src);
-    let r, tries = 0;
-    do { r = await fetch(UP_URL, { method: 'POST', body: fd, headers: { Accept: 'application/json' } }).catch(() => null); } while ((!r || r.status >= 500) && ++tries < 3);
-    if (!r || !r.ok) { let m = T.upFail; try { const j = await r.json(); m = j.error || j.message || m; } catch (e) { /* без текста */ } throw new Error(m); }
-    prog((i + 1) / total, `${T.upBusy} ${f.name}`);
-    if (i === total - 1) res = await r.json().catch(() => null);
-  }
-  return res && res.id;
-}
-/** Загрузить файлы одного вида для планировки: 3D (не GLB — сначала перевод в GLB в браузере), 360° (проверка 2:1), фото, план */
-async function upKind(files, kind, lay) {
-  const u = lay.u, items = [];
-  layoutCur = lay.key;
-  try {
-    if (kind === 'interior') {
-      if (files.length === 1 && /\.glb$/i.test(files[0].name)) items.push([files[0], 'interior', {}]);
-      else {
-        prog(0, CVT.p_read);
-        const mod = await import(MC_URL);
-        const res = await mod.convert(files, { kind: 'interior', units: 'auto', up: 'auto', tex: 2048, merge: false, T: CVT }, (t) => prog(null, t));
-        items.push([res.file, 'interior', { src: res.info.source }]);
-      }
-    } else for (const f of files) {
-      let k = kind;
-      if (k === 'pano') {
-        const r = await ratioOf(f);
-        if (r && (r < 1.9 || r > 2.1) && !confirm(T.notPano.replace(':f', f.name))) continue;
-        if (r && (r < 1.9 || r > 2.1)) k = 'photo';
-      }
-      const room = ($('#iRoom').value.trim() && files.length === 1 ? $('#iRoom').value.trim() : '') || f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
-      items.push([f, k, { room }]);
-    }
-    for (const [f, k, extra] of items) {
-      prog(0, `${T.upBusy} ${f.name}`);
-      const id = await uploadFile(f, k, u, extra);
-      if (id) INNER.push({ id, k, l: u.t || undefined, r: u.r, n: f.name, room: k === 'pano' ? extra.room : undefined, ext: (f.name.split('.').pop() || '').toLowerCase() });
-    }
-    prog(1, T.upDone);
-    setTimeout(() => prog(false), 2500);
-    $('#iRoom').value = '';
-  } catch (e) {
-    prog(false); alert(e && e.message ? e.message : T.upFail);
-  } finally {
-    renderLayouts();
-    const s = L.selected(); if (s && $('#uCard') && !$('#uCard').hidden) card(s);
-  }
 }
 function legend() {
   return `<div class="lc-leg">${[['free', '#22c55e'], ['booked', '#f59e0b'], ['sold', '#ef4444']].map(([k, c]) => `<span><i style="background:${c}"></i>${T.st[k]}</span>`).join('')}</div>`;

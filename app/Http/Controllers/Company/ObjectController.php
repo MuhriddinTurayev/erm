@@ -443,6 +443,29 @@ class ObjectController extends ErpController
         return $request->expectsJson() ? response()->json(['ok' => true]) : back()->with('ok', __('Сохранено'));
     }
 
+    /**
+     * «Интерьеры»: 3D, панорамы 360°, рендеры и план каждой планировки — посмотреть, загрузить, поправить, удалить.
+     * Открывается и в окне из «Дизайна квартиры» программы (embed); u — квартира, r — число комнат: её планировка выделена.
+     */
+    public function interiors(Request $request, string $pid)
+    {
+        $ws = $this->ws();
+        $p = $this->project($pid);
+        $data = \App\Services\Locate::data($p, false);
+        $focus = null;
+        if ($request->query('u') && ($a = collect($data['units'])->firstWhere('id', (string) $request->query('u')))) {
+            $focus = ! empty($a['t']) ? 't:'.$a['t'] : 'r:'.($a['r'] ?? 0);
+        } elseif ($request->has('r')) {
+            // по числу комнат: если у таких квартир своя планировка — выделяем её
+            $r = (int) $request->query('r');
+            $a = collect($data['units'])->first(fn ($x) => (int) ($x['r'] ?? 0) === $r && ($x['k'] ?? 'flat') === 'flat');
+            $focus = $a && ! empty($a['t']) ? 't:'.$a['t'] : 'r:'.$r;
+        }
+
+        return view('company.objects.interiors', ['p' => $p, 'pid' => $pid, 'units' => $data['units'], 'inner' => \App\Services\Locate::media($ws->id, $pid),
+            'canEdit' => auth()->user()->canMedia(), 'embed' => $request->boolean('embed'), 'focus' => $focus]);
+    }
+
     public function mediaDelete(ObjectMedia $media)
     {
         $this->mine($media);
@@ -451,7 +474,46 @@ class ObjectController extends ErpController
         Storage::disk('local')->delete(array_filter([$media->path, $media->poster, $media->meta['finished'] ?? null]));
         $media->delete();
 
-        return back()->with('ok', __('Файл удалён'));
+        return request()->expectsJson() ? response()->json(['ok' => true]) : back()->with('ok', __('Файл удалён'));
+    }
+
+    /**
+     * Поправить файл интерьера прямо из привязки к 3D или «Дизайна квартиры»: название, комната панорамы,
+     * к какой планировке (или числу комнат) он относится. Остальное (вид, превью, «в продаже») не трогаем.
+     */
+    public function mediaPatch(Request $request, ObjectMedia $media)
+    {
+        $this->mine($media);
+        $this->canMedia();
+        $this->checkProject($media->project_id);
+        abort_unless(in_array($media->kind, ['interior', 'pano', 'photo', 'plan'], true), 422);   // модель здания правится на странице объекта
+        $d = $request->validate(['title' => ['nullable', 'string', 'max:160'], 'room' => ['nullable', 'string', 'max:60'],
+            'layout' => ['nullable', 'string', 'max:40'], 'rooms' => ['nullable', 'integer', 'min:0', 'max:9']]);
+        $lays = self::layouts(StateWriter::project($this->ws(), (string) $media->project_id) ?? []);
+        if (filled($d['layout'] ?? null) && ! isset($lays[(string) $d['layout']])) {
+            return response()->json(['error' => __('Планировка не найдена — обновите страницу')], 422);
+        }
+        if (filled($d['title'] ?? null)) {
+            $media->title = trim($d['title']);
+        }
+        if ($request->has('room')) {
+            $meta = (array) $media->meta;
+            $room = trim((string) ($d['room'] ?? ''));
+            if ($room !== '') {
+                $meta['room'] = $room;
+            } else {
+                unset($meta['room']);
+            }
+            $media->meta = $meta ?: null;
+        }
+        if ($request->has('layout') || $request->has('rooms')) {
+            $t = $lays[(string) ($d['layout'] ?? '')] ?? null;
+            $media->layout = $t ? (string) $t['id'] : null;
+            $media->rooms = $t ? (int) ($t['rooms'] ?? 0) : ($request->has('rooms') ? ($d['rooms'] ?? null) : $media->rooms);
+        }
+        $media->save();
+
+        return response()->json(['ok' => true, 'm' => ['id' => $media->id, 'k' => $media->kind, 'l' => $media->layout, 'r' => $media->rooms, 'n' => $media->title, 'room' => $media->meta['room'] ?? null, 'ext' => $media->ext]]);
     }
 
     public function mediaFile(Request $request, ObjectMedia $media)
@@ -484,6 +546,9 @@ class ObjectController extends ErpController
         // u — квартира: только её интерьер и панорамы (по планировке, иначе по числу комнат) — «Внутри квартиры» из 3D-дома
         if (request('u') && ($a = Apartments::find($p, (string) request('u')))) {
             $media = ObjectMedia::forUnit($media->where('kind', '!=', 'exterior'), $a['type'] ?? null, (int) $a['rooms']);
+        } elseif (request()->has('t') || request()->has('r')) {
+            // t/r — планировка (из «Дизайна квартиры» программы, где квартира не выбрана): её интерьер, иначе по числу комнат
+            $media = ObjectMedia::forUnit($media->where('kind', '!=', 'exterior'), request('t') ?: null, (int) request('r'));
         }
         $cur = $media->firstWhere('id', (int) request('m')) ?? $media->first();
 

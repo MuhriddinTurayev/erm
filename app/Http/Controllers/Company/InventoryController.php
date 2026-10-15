@@ -9,6 +9,7 @@ use App\Services\Inventory;
 use App\Services\Locate;
 use App\Services\StateWriter;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -261,6 +262,65 @@ class InventoryController extends ErpController
         $this->audit($pid, 'project.add', __('Новый объект: :n', ['n' => $d['name']]));
 
         return redirect('/company/objects/'.$pid.'?tab=units')->with('ok', __('Объект создан. Заведите корпуса, подъезды и квартиры.'));
+    }
+
+    /**
+     * Удалить объект целиком (руководитель): подтверждение — название объекта.
+     * Нельзя, если по нему есть брони и продажи или деньги и склад (касса, расходы, заявки на оплату, договоры, снабжение, движение
+     * материалов) — история компании не должна ломаться; такие объекты остаются. Удаляются квартиры, 3D-модели, интерьеры, фото.
+     */
+    public function destroy(Request $request, string $pid)
+    {
+        abort_unless($request->user()->isAdmin(), 403, __('Удалить объект может только руководитель компании'));
+        $p = $this->guard($pid);
+        $d = $request->validate(['confirm' => ['required', 'string', 'max:200']]);
+        if (mb_strtolower(trim($d['confirm'])) !== mb_strtolower(trim((string) ($p['name'] ?? '')))) {
+            return response()->json(['error' => __('Название не совпадает — объект не удалён')], 422);
+        }
+        $ws = $this->ws();
+        if (count(array_filter((array) (json_decode((string) $ws->data, true)['projects'] ?? []), fn ($x) => (string) ($x['id'] ?? '') !== $pid)) < 1) {
+            return response()->json(['error' => __('Это единственный объект компании — его нельзя удалить. Создайте новый объект, потом удалите этот.')], 422);
+        }
+        $why = [];
+        if ($n = count(self::deals(Apartments::list($p)))) {
+            $why[] = __('брони и продажи: :n', ['n' => $n]);
+        }
+        // касса объекта в программе (приходы и расходы) и записи панели
+        $tables = ['cash_ops' => [__('операции кассы'), count((array) ($p['tx'] ?? []))], 'expenses' => [__('расходы'), 0], 'payment_requests' => [__('заявки на оплату'), 0],
+            'contracts' => [__('договоры'), 0], 'supply_requests' => [__('заявки снабжения'), 0], 'stock_moves' => [__('движение материалов'), 0]];
+        foreach ($tables as $t => [$name, $n]) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn($t, 'project_id')) {
+                $n = max($n, DB::table($t)->where('workspace_id', $ws->id)->where('project_id', $pid)->count());
+            }
+            if ($n) {
+                $why[] = $name.': '.$n;
+            }
+        }
+        if ($why) {
+            return response()->json(['error' => __('Объект нельзя удалить — по нему уже есть история: :w. Её нельзя терять: отчёты и деньги компании разойдутся.', ['w' => implode(', ', $why)])], 422);
+        }
+        StateWriter::mutate($ws->id, function (array &$data) use ($pid) {
+            $data['projects'] = array_values(array_filter($data['projects'], fn ($x) => (string) ($x['id'] ?? '') !== $pid));
+            if ((string) ($data['currentId'] ?? '') === $pid) {
+                $data['currentId'] = (string) ($data['projects'][0]['id'] ?? '');
+            }
+        });
+        foreach (\App\Models\ObjectMedia::of($ws->id)->where('project_id', $pid)->get() as $m) {
+            \Illuminate\Support\Facades\Storage::disk('local')->delete(array_filter([$m->path, $m->poster, $m->meta['finished'] ?? null]));
+            $m->delete();
+        }
+        \App\Models\BuyerLink::where('workspace_id', $ws->id)->where('project_id', $pid)->delete();
+        // сотрудники с доступом к отдельным объектам — убираем удалённый из их списка
+        foreach ($ws->users()->whereNotNull('object_ids')->get() as $u) {
+            $ids = $u->allowedObjects();
+            if ($ids !== null && in_array($pid, $ids, true)) {
+                $u->forceFill(['object_ids' => array_values(array_diff($ids, [$pid]))])->save();
+            }
+        }
+        // объекта в списке уже нет — название пишем сами
+        AuditLog::create(['workspace_id' => $ws->id, 'user_id' => auth()->id(), 'project' => $p['name'] ?? $pid, 'action' => 'project.delete', 'summary' => __('Объект удалён: :n', ['n' => $p['name'] ?? $pid])]);
+
+        return response()->json(['ok' => true, 'to' => '/company/objects']);
     }
 
     /** Название и адрес объекта */

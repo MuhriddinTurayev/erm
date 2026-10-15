@@ -28,7 +28,22 @@ function canAddObject() {
   return true;
 }
 if (ACT.projCopy) { const pc = ACT.projCopy; ACT.projCopy = d => { if (canAddObject()) pc(d); }; }
-if (ACT.projDel) { const pd = ACT.projDel; ACT.projDel = d => { if (SAAS && SAAS.restricted) return toast('Объекты удаляет руководитель компании'); pd(d); }; }
+if (ACT.projDel) {
+  const pd = ACT.projDel;
+  // на сервере: удаляет и 3D-модели, интерьеры, ссылки покупателей; не даст удалить объект с бронями, продажами и деньгами
+  ACT.projDel = async d => {
+    if (!SAAS) return pd(d);
+    if (SAAS.restricted || !SAAS.isAdmin) return toast('Объекты удаляет руководитель компании');
+    if (DB.projects.length < 2) return toast('Нельзя удалить единственный проект');
+    const x = DB.projects.find(z => z.id === d.id); if (!x) return;
+    const name = await ui.prompt(T('Удалить объект') + ' «' + x.name + '»', { label: T('Чтобы подтвердить, впишите название объекта:') + ' ' + x.name, ok: T('Удалить навсегда'), required: true });
+    if (name == null) return;
+    const r = await fetch('/company/objects/' + encodeURIComponent(d.id), { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: name }) }).catch(() => null);
+    const j = r ? await r.json().catch(() => ({})) : {};
+    if (!r || !r.ok || !j.ok) return ui.alert ? ui.alert(j.error || j.message || T('Не удалось удалить — проверьте интернет и попробуйте ещё раз.')) : alert(j.error || j.message);
+    toast('Объект удалён'); setTimeout(() => location.reload(), 700);   // данные компании изменились на сервере — берём их заново
+  };
+}
 
 /* ---------- Расчёты по деньгам ---------- */
 function moneyOn(p, date) { let out = 0, inc = 0; p.tx.forEach(t => { if (t.date === date) { if (t.type === 'in') inc += t.amount; else out += t.amount; } }); return { out, inc }; }
@@ -227,4 +242,45 @@ if (PAGES.apt) {
     if (m) m.call(this, p, a);
   };
 }
-if (PAGES.design) { const r = PAGES.design.render; PAGES.design.render = function (p, a) { return real3dBar(p, 'interior') + r.call(this, p, a); }; }
+/* ---------- «Дизайн квартиры 3D»: настоящий интерьер выбранной квартиры (или планировки по числу комнат) ----------
+   Есть загруженный 3D-интерьер или панорамы 360° — показываем их сверху; ниже остаётся примерный дизайн программы.
+   «Загрузить / изменить» открывает страницу «Интерьеры» (/company/objects/{id}/interiors) в окне: там по планировкам
+   загружают 3D, 360°, рендеры и план, а ошибочный файл переименовывают, переносят к другой планировке или удаляют. */
+const innerPairs = p => (SAAS && SAAS.media && SAAS.media[p.id] && SAAS.media[p.id].in) || [];
+const aptHasInner = (p, apt) => {
+  const pairs = innerPairs(p);
+  return apt.type && pairs.some(([l]) => l === apt.type) ? true : pairs.some(([l, rr]) => !l && (rr == null || +rr === +apt.rooms));
+};
+function designInner(p, a) {
+  if (!SAAS) return '';
+  const A = genApts(p).filter(x => x.rooms > 0), apt = a.apt ? A.find(x => x.id === a.apt) : null, rooms = apt ? apt.rooms : p.design.rooms;
+  // квартира не выбрана: любая квартира с таким числом комнат, у которой интерьер уже загружен
+  const show = apt ? (aptHasInner(p, apt) ? apt : null) : A.find(x => +x.rooms === +rooms && aptHasInner(p, x)), id = encodeURIComponent(p.id);
+  const what = apt ? `№${apt.num} · ${apt.rooms}-комн.${apt.typeName ? ' · ' + esc(apt.typeName) : ''}` : `${rooms}-комн.`;
+  return `<div class="card real3d"><div class="real3d-t"><b>📦 Настоящий интерьер квартиры</b><span class="real3d-for">${what}</span>
+    <span class="small muted">${show ? 'Загружен интерьер этой планировки — смотрите ниже. Его видят покупатели в кабинете и на сайте. Под ним — примерный дизайн программы.'
+      : 'Здесь — примерная квартира, нарисованная программой. Загрузите интерьер от дизайнера (GLB, FBX, OBJ, SketchUp, 3ds Max…) и панорамы 360° каждой комнаты.'}</span></div>
+    <div class="flex">${SAAS.canMedia ? `<button class="btn${show ? '' : ' btn-p'}" data-act="innerManage">⬆ Загрузить / изменить интерьер</button>` : ''}</div></div>
+    ${show ? `<div class="real3d-frame big"><iframe src="/company/objects/${id}/3d?embed=1&u=${encodeURIComponent(show.id)}" title="3D" allow="fullscreen; xr-spatial-tracking"></iframe></div>` : ''}`;
+}
+if (PAGES.design) { const r = PAGES.design.render; PAGES.design.render = function (p, a) { return designInner(p, a) + r.call(this, p, a); }; }
+// окно «Интерьеры»: загрузка, переименование, удаление файлов интерьера по планировкам
+let innerDirty = false;
+ACT.innerManage = () => {
+  const p = P(), a = pageArgs || {}, q = a.apt ? 'u=' + encodeURIComponent(a.apt) : 'r=' + (+p.design.rooms || 0);
+  innerDirty = false;
+  const ov = document.createElement('div'); ov.className = 'inner-ov';
+  ov.innerHTML = `<div class="inner-ov-in"><button type="button" class="inner-ov-x" aria-label="Закрыть">✕</button><iframe src="/company/objects/${encodeURIComponent(p.id)}/interiors?embed=1&${q}" title="Интерьеры"></iframe></div>`;
+  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); if (innerDirty && curPage === 'design') rerender(); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  ov.querySelector('.inner-ov-x').onclick = close;
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  document.addEventListener('keydown', onKey);
+  document.body.append(ov);
+};
+window.addEventListener('message', e => {
+  if (e.origin !== location.origin || !e.data || e.data.type !== 'oftob-inner-changed' || !SAAS) return;
+  const m = (SAAS.media = SAAS.media || {})[e.data.pid] = SAAS.media[e.data.pid] || {}, n = e.data.n || {};
+  m.in = e.data.in || []; m.interior = n.interior || 0; m.pano = n.pano || 0;
+  innerDirty = true;
+});
