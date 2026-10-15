@@ -46,22 +46,90 @@
   .v-sub{font-size:11.5px;color:var(--muted);padding:6px 8px 2px;font-weight:600}
   @media (max-width:820px){.v-rooms{top:auto;bottom:84px;flex-direction:row;max-width:calc(100% - 36px);overflow-x:auto}}
   @media (max-width:820px){.v-shell{grid-template-columns:1fr;grid-template-rows:auto 1fr}.v-side{max-height:34vh;border-right:0;border-bottom:1px solid var(--border)}.v-list{display:flex;gap:6px;overflow-x:auto}.v-sec{display:none}.v-item{flex:none}.v-title{max-width:calc(100% - 36px)}}
+  /* квартира изнутри: комнаты (360° и рендеры), чертёж, лента комнаты */
+  .v-unit{display:block;margin-top:4px;font:600 13px var(--font);color:var(--accent-text)}
+  .v-item .th{position:relative}
+  .v-360{position:absolute;right:2px;bottom:2px;font:700 9px var(--font);font-style:normal;background:rgba(17,17,39,.75);color:#fff;border-radius:4px;padding:1px 3px}
+  .v-edit{display:flex;gap:8px;align-items:center;margin:12px 6px 4px;padding:10px;border:1px dashed var(--border-2);border-radius:10px;color:var(--accent-text);text-decoration:none;font-size:13px;font-weight:600}
+  .v-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;border:0;background:var(--bg);display:block}
+  .v-photo.plan{background:#fff;padding:24px 24px 90px;box-sizing:border-box}
+  .v-strip{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:5;display:flex;gap:6px;max-width:calc(100% - 32px);overflow-x:auto;padding:6px;background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:14px;box-shadow:var(--sh-lg)}
+  .v-strip a{position:relative;flex:none;width:92px;height:62px;border-radius:9px;overflow:hidden;border:2px solid transparent}
+  .v-strip a.on{border-color:var(--accent)}
+  .v-strip img{width:100%;height:100%;object-fit:cover;display:block}
+  .v-strip i{position:absolute;left:3px;bottom:3px;font:700 10px var(--font);font-style:normal;background:rgba(17,17,39,.75);color:#fff;border-radius:4px;padding:1px 4px}
+  .v-bar.v-bar-s{left:auto;right:18px;top:16px;bottom:auto;transform:none;padding:4px}
+  .v-room{display:flex;gap:4px;align-items:center}
+  .v-room-m{width:36px;height:36px;flex:none;display:grid;place-items:center;border-radius:10px;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 90%,transparent);backdrop-filter:blur(10px);color:var(--accent-text)}
+  .v-room-m:hover{border-color:var(--accent)}
 </style>
 </head>
-<body>
+<body class="{{ ($embed ?? false) ? 'embed' : '' }}">
+@php
+  $unit = $unit ?? null;
+  $unitMode = $unit !== null;   // квартира: 3D-интерьер, комнаты (360° и рендеры каждой), чертёж
+  $types = \App\Http\Controllers\Company\ObjectController::layouts($p);
+  // в шахматке, кабинете и окне программы ссылки остаются в той же квартире
+  $keep = array_filter(request()->only(['o', 't', 'u', 'r', 'embed']), fn ($v) => $v !== null && $v !== '');
+  $q = fn ($m) => '?'.http_build_query($keep + ['m' => $m->id]);
+  $qr = fn ($name) => '?'.http_build_query($keep + ['room' => $name]);
+  // комнаты: панорамы и рендеры с одним названием комнаты — вместе; порядок как в квартире
+  $order = array_map('mb_strtolower', [__('Гостиная'), __('Комната'), __('Спальня'), __('Детская'), __('Кабинет'), __('Кухня'), __('Ванная'), __('Санузел'), __('Прихожая'), __('Балкон')]);
+  $rank = function ($n) use ($order) { $k = array_search(mb_strtolower(trim(preg_replace('/\s*\d+$/u', '', $n))), $order, true); return $n === '' ? 999 : ($k === false ? 500 : $k * 10 + (int) preg_replace('/\D/', '', $n)); };
+  $roomsMap = [];
+  if ($unitMode) {
+    foreach ($media->whereIn('kind', ['pano', 'photo']) as $m) { $roomsMap[$m->roomName()][] = $m; }
+    uksort($roomsMap, fn ($a, $b) => [$rank($a), $a] <=> [$rank($b), $b]);
+  }
+  $roomLabel = fn ($n) => $n === '' ? __('Другие фото') : $n;
+  $curRoom = null;
+  if ($unitMode && request()->has('room') && isset($roomsMap[(string) request('room')])) {
+    $curRoom = (string) request('room');
+    if (! ($cur && in_array($cur->kind, ['pano', 'photo'], true) && $cur->roomName() === $curRoom)) {
+      $cur = collect($roomsMap[$curRoom])->firstWhere('kind', 'pano') ?? $roomsMap[$curRoom][0];
+    }
+  } elseif ($unitMode && $cur && in_array($cur->kind, ['pano', 'photo'], true)) {
+    $curRoom = $cur->roomName();
+  }
+  $views = $cur && $cur->kind === 'interior' ? array_values((array) ($cur->meta['views'] ?? [])) : [];
+  $roomOf = function ($name) use ($roomsMap) { foreach ($roomsMap as $rn => $list) { if ($rn !== '' && mb_strtolower(trim($rn)) === mb_strtolower(trim($name))) { return $rn; } } return null; };
+@endphp
 <div class="v-shell">
   <aside class="v-side">
     <div class="v-h">
       @unless ($public || ($embed ?? false))<a href="/company/objects/{{ $pid }}?tab=media">{!! ic('arrow-left', '', 14) !!}{{ __('К объекту') }}</a>@endunless
-      <b>{{ $p['name'] ?? '' }}</b>@if (! empty($p['address']))<small class="muted">{{ $p['address'] }}</small>@endif
+      <b>{{ $p['name'] ?? '' }}</b>@if ($unitMode && $unit !== '')<span class="v-unit">{{ $unit }}</span>@elseif (! empty($p['address']))<small class="muted">{{ $p['address'] }}</small>@endif
     </div>
     <div class="v-list">
-      @php
-        $groups = ['exterior' => __('Здание и фасад'), 'interior' => __('Интерьеры квартир'), 'pano' => __('Панорамы 360°')];
-        $types = \App\Http\Controllers\Company\ObjectController::layouts($p);
-        $keep = array_filter(request()->only(['o', 't']));   // в открытой шахматке — тот же объект и планировка
-        $q = fn ($m) => '?'.http_build_query($keep + ['m' => $m->id]);
-      @endphp
+    @if ($unitMode)
+      @php $ext = $media->where('kind', 'exterior'); $int = $media->where('kind', 'interior'); $plans = $media->where('kind', 'plan'); @endphp
+      @if ($ext->count())
+        <div class="v-sec">{{ __('Здание и фасад') }}</div>
+        @foreach ($ext as $m)<a class="v-item {{ $cur && $cur->id === $m->id ? 'on' : '' }}" href="{{ $q($m) }}"><span class="th">@if ($m->poster)<img src="{{ $src($m, true) }}" alt="">@else{!! ic('building-2', '', 20) !!}@endif</span><span><b>{{ $m->title }}</b><small>{{ __('весь дом') }}</small></span></a>@endforeach
+      @endif
+      @if ($int->count())
+        <div class="v-sec">{{ __('3D-интерьер') }}</div>
+        @foreach ($int as $m)<a class="v-item {{ $cur && $cur->id === $m->id ? 'on' : '' }}" href="{{ $q($m) }}"><span class="th">@if ($m->poster)<img src="{{ $src($m, true) }}" alt="">@else{!! ic('sofa', '', 20) !!}@endif</span><span><b>{{ $m->title }}</b><small>{{ __('3D-модель квартиры') }}@if (! empty($m->meta['views'])) · {{ __('комнат') }}: {{ count($m->meta['views']) }}@endif</small></span></a>@endforeach
+      @endif
+      @if ($roomsMap)
+        <div class="v-sec">{{ __('Комнаты') }}</div>
+        @foreach ($roomsMap as $rn => $list)
+          @php $col = collect($list); $np = $col->where('kind', 'pano')->count(); $nf = $col->where('kind', 'photo')->count(); $th = $col->firstWhere('kind', 'pano') ?? $col->first(); @endphp
+          <a class="v-item {{ $curRoom === $rn ? 'on' : '' }}" href="{{ $qr($rn) }}">
+            <span class="th"><img src="{{ $src($th) }}" alt="" loading="lazy">@if ($np)<i class="v-360">360°</i>@endif</span>
+            <span><b>{{ $roomLabel($rn) }}</b><small>{{ collect([$np ? __('360°').($np > 1 ? ' × '.$np : '') : null, $nf ? __('фото').': '.$nf : null])->filter()->implode(' · ') }}</small></span>
+          </a>
+        @endforeach
+      @endif
+      @if ($plans->count())
+        <div class="v-sec">{{ __('Планировка') }}</div>
+        @foreach ($plans as $m)<a class="v-item {{ $cur && $cur->id === $m->id ? 'on' : '' }}" href="{{ $q($m) }}"><span class="th">@if ($m->isImage())<img src="{{ $src($m) }}" alt="" loading="lazy">@else{!! ic('ruler', '', 20) !!}@endif</span><span><b>{{ $m->title }}</b><small>{{ strtoupper($m->ext) }}</small></span></a>@endforeach
+      @endif
+      @if (! $public && ($canEdit ?? false))
+        <a class="v-edit" href="/company/objects/{{ $pid }}/interiors?{{ http_build_query(array_intersect_key($keep, array_flip(['u', 'r', 't']))) }}" target="_blank">{!! ic('pencil', '', 14) !!}{{ __('Загрузить и изменить по комнатам') }}</a>
+      @endif
+    @else
+      @php $groups = ['exterior' => __('Здание и фасад'), 'interior' => __('Интерьеры квартир'), 'pano' => __('Панорамы 360°')]; @endphp
       @foreach ($groups as $k => $gn)
         @php $items = $media->where('kind', $k)->sortBy(fn ($m) => ($m->layout ? array_search($m->layout, array_keys($types)) : -1).'|'.$m->sort.'|'.$m->id); $lastL = false; @endphp
         @if ($items->count())<div class="v-sec">{{ $gn }}</div>@endif
@@ -74,13 +142,18 @@
           </a>
         @endforeach
       @endforeach
+    @endif
     </div>
   </aside>
   <main class="v-stage">
     @if (! $cur)
-      <div class="v-empty"><div>{!! ic('box', '', 44) !!}<h2 style="color:var(--text)">{{ __('3D-моделей пока нет') }}</h2><p>{{ __('Загрузите модель здания в формате GLB в карточке объекта.') }}</p></div></div>
+      <div class="v-empty"><div>{!! ic('box', '', 44) !!}<h2 style="color:var(--text)">{{ $unitMode ? __('Интерьер этой квартиры ещё не загружен') : __('3D-моделей пока нет') }}</h2><p>{{ $unitMode ? __('Скоро здесь появятся 3D-интерьер, панорамы 360° и фото комнат.') : __('Загрузите модель здания в формате GLB в карточке объекта.') }}</p></div></div>
     @else
-      <div class="v-title"><b>{{ $cur->title }}</b><small>{{ __(\App\Models\ObjectMedia::KINDS[$cur->kind][0]) }}{{ $cur->rooms ? ' · '.$cur->rooms.__('-комн.') : '' }}</small></div>
+      @if ($curRoom !== null)
+        <div class="v-title"><b>{{ $roomLabel($curRoom) }}</b><small>{{ $unit }}@if ($cur->kind === 'pano') · {{ __('Панорама 360°') }} — {{ __('тяните, чтобы осмотреться') }}@endif</small></div>
+      @else
+        <div class="v-title"><b>{{ $cur->title }}</b><small>{{ $unitMode && $unit !== '' ? $unit.' · ' : '' }}{{ __(\App\Models\ObjectMedia::KINDS[$cur->kind][0]) }}{{ ! $unitMode && $cur->rooms ? ' · '.$cur->rooms.__('-комн.') : '' }}</small></div>
+      @endif
       <div class="v-toast" id="toast"></div>
       @if ($cur->is3d())
         @php $sky = $cur->kind === 'exterior' && ($cur->meta['sky'] ?? false); @endphp
@@ -92,9 +165,13 @@
           <button slot="ar-button" class="btn btn-p ar-btn">{!! ic('smartphone') !!}{{ __('Посмотреть в AR') }}</button>
           <div class="v-load" slot="progress-bar" id="prog"></div>
         </model-viewer>
-        @if ($cur->kind === 'interior' && (! empty($cur->meta['views']) || $canEdit))
+        @if ($cur->kind === 'interior' && ($views || $canEdit))
+        {{-- комнаты 3D-интерьера: камера переходит в комнату; есть её 360° или фото — рядом кнопка к ним --}}
         <div class="v-rooms" id="v-rooms">
-          @foreach ((array) ($cur->meta['views'] ?? []) as $i => $v)<button type="button" data-view="{{ $i }}">{!! ic('door-open', '', 15) !!}{{ $v['name'] }}@if ($canEdit)<span class="x" data-delview="{{ $i }}" title="{{ __('Удалить') }}">✕</span>@endif</button>@endforeach
+          @foreach ($views as $i => $v)
+            @php $rr = $unitMode ? $roomOf($v['name']) : null; @endphp
+            <span class="v-room"><button type="button" data-view="{{ $i }}">{!! ic('door-open', '', 15) !!}{{ $v['name'] }}@if ($canEdit)<span class="x" data-delview="{{ $i }}" title="{{ __('Удалить') }}">✕</span>@endif</button>@if ($rr !== null)<a class="v-room-m" href="{{ $qr($rr) }}" title="{{ __('360° и фото этой комнаты') }}">{!! ic(collect($roomsMap[$rr])->contains('kind', 'pano') ? 'compass' : 'image', '', 15) !!}</a>@endif</span>
+          @endforeach
           @if ($canEdit)<button type="button" class="add" id="v-addroom" title="{{ __('Наведите камеру на комнату (колесо мыши — ближе) и сохраните её как кнопку') }}">+ {{ __('Комната (текущий вид)') }}</button>@endif
         </div>
         @endif
@@ -108,10 +185,25 @@
           <button id="b-full" title="{{ __('На весь экран') }}">{!! ic('monitor', '', 16) !!}</button>
           @if ($canEdit)<button id="b-save" title="{{ __('Сохранить этот вид как главный и сделать превью') }}">{!! ic('save', '', 16) !!}{{ __('Сохранить вид') }}</button>@endif
         </div>
-      @else
+      @elseif ($cur->kind === 'pano')
         <div id="pano"></div>
-        <div class="v-bar"><button id="b-full">{!! ic('monitor', '', 16) !!}{{ __('На весь экран') }}</button></div>
+      @elseif ($cur->kind === 'plan')
+        @if ($cur->isImage())<img class="v-photo plan" src="{{ $src($cur) }}" alt="{{ $cur->title }}">@else<iframe class="v-photo" src="{{ $src($cur) }}" title="PDF"></iframe>@endif
+      @else
+        <img class="v-photo" src="{{ $src($cur) }}" alt="{{ $cur->title }}">
       @endif
+      @if ($curRoom !== null)
+        {{-- комната: её 360° и все рендеры — лентой внизу --}}
+        @php $strip = collect($roomsMap[$curRoom]); @endphp
+        @if ($strip->count() > 1)
+        <div class="v-strip">
+          @foreach ($strip->sortBy(fn ($m) => ($m->kind === 'pano' ? 0 : 1).'|'.$m->sort.'|'.$m->id) as $m)
+            <a class="{{ $cur->id === $m->id ? 'on' : '' }}" href="{{ $q($m) }}" title="{{ $m->title }}"><img src="{{ $src($m) }}" alt="" loading="lazy">@if ($m->kind === 'pano')<i>360°</i>@endif</a>
+          @endforeach
+        </div>
+        @endif
+      @endif
+      @if (! $cur->is3d())<div class="v-bar v-bar-s"><button id="b-full">{!! ic('monitor', '', 16) !!}{{ __('На весь экран') }}</button></div>@endif
     @endif
   </main>
 </div>
@@ -197,7 +289,7 @@ mv.addEventListener('load', () => setTimeout(async () => {
 }, 1200), { once: true });
 @endif
 @endif
-@else
+@elseif ($cur->kind === 'pano')
 pannellum.viewer('pano', { type: 'equirectangular', panorama: @json($src($cur)), autoLoad: true, autoRotate: -2, showControls: true, compass: false, hfov: 105 });
 @endif
 </script>

@@ -542,17 +542,22 @@ class ObjectController extends ErpController
     {
         $ws = $this->ws();
         $p = $this->project($pid);
-        $media = ObjectMedia::of($ws->id)->where('project_id', $pid)->whereIn('kind', ['exterior', 'interior', 'pano'])->orderByDesc('is_main')->orderBy('kind')->orderBy('sort')->get();
-        // u — квартира: только её интерьер и панорамы (по планировке, иначе по числу комнат) — «Внутри квартиры» из 3D-дома
+        $media = ObjectMedia::of($ws->id)->where('project_id', $pid)->whereIn('kind', ['exterior', 'interior', 'pano', 'photo', 'plan'])->orderByDesc('is_main')->orderBy('kind')->orderBy('sort')->orderBy('id')->get();
+        // u — квартира, t/r — планировка: всё о квартире изнутри — 3D-интерьер, комнаты (360° и рендеры каждой), чертёж
+        $unit = null;
         if (request('u') && ($a = Apartments::find($p, (string) request('u')))) {
-            $media = ObjectMedia::forUnit($media->where('kind', '!=', 'exterior'), $a['type'] ?? null, (int) $a['rooms']);
+            $media = ObjectMedia::forUnitAll($media, $a['type'] ?? null, (int) $a['rooms']);
+            $unit = trim(($a['rooms'] ? __('Кв.').' '.$a['num'].' · '.$a['rooms'].__('-комн.') : (string) $a['num']).(! empty($a['area']) ? ' · '.$a['area'].' '.__('м²') : ''));
         } elseif (request()->has('t') || request()->has('r')) {
-            // t/r — планировка (из «Дизайна квартиры» программы, где квартира не выбрана): её интерьер, иначе по числу комнат
-            $media = ObjectMedia::forUnit($media->where('kind', '!=', 'exterior'), request('t') ?: null, (int) request('r'));
+            $t = self::layouts($p)[(string) request('t')] ?? null;
+            $media = ObjectMedia::forUnitAll($media, $t ? (string) $t['id'] : null, $t ? (int) ($t['rooms'] ?? 0) : (int) request('r'));
+            $unit = $t ? (string) ($t['name'] ?? '') : (int) request('r').__('-комн.');
+        } else {
+            $media = $media->whereIn('kind', ['exterior', 'interior', 'pano'])->values();   // весь объект: модели и панорамы, как раньше
         }
         $cur = $media->firstWhere('id', (int) request('m')) ?? $media->first();
 
-        return view('company.objects.viewer', ['ws' => $ws, 'p' => $p, 'pid' => $pid, 'media' => $media, 'cur' => $cur,
+        return view('company.objects.viewer', ['ws' => $ws, 'p' => $p, 'pid' => $pid, 'media' => $media, 'cur' => $cur, 'unit' => $unit,
             'src' => fn (ObjectMedia $m, bool $poster = false) => url('/company/media/'.$m->id.'/file'.($poster ? '?poster=1' : '')), 'public' => false,
             'canEdit' => auth()->user()->canMedia(), 'embed' => request()->boolean('embed')]);
     }

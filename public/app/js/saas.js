@@ -232,18 +232,21 @@ const innerUpBtn = (apt, primary, label) => SAAS && SAAS.canMedia ? `<button cla
 const innerBar = (title, text, btns) => `<div class="card real3d"><div class="real3d-t"><b>${title}</b><span class="small muted">${text}</span></div><div class="flex">${btns}</div></div>`;
 let innerPhotos = [];
 /** Рендеры и фото квартиры, загруженные дизайнером; панорамы 360° — кнопками */
+const roomName = m => String(m.room || (m.k === 'pano' ? m.n : '') || '').trim();
 function realGallery(p, apt, f) {
-  innerPhotos = f.photos;
-  const main = f.photos[0];
+  // по комнатам: сначала с названием комнаты (по алфавиту не сортируем — порядок загрузки), без комнаты — в конце
+  const rooms = [...new Set(f.photos.map(roomName))].sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1));
+  innerPhotos = rooms.flatMap(r => f.photos.filter(m => roomName(m) === r));
+  const main = innerPhotos[0];
   return `<div class="card ph-card"><h3>📸 Рендеры и фото квартиры <span class="tools">${f.panos.length ? `<button class="btn-p btn-s" data-act="innerView" data-apt="${apt.id}" data-m="${f.panos[0].id}">🌐 Панорамы 360° <span class="notr">(${f.panos.length})</span></button>` : ''}${innerUpBtn(apt, false, 'Загрузить / изменить')}</span></h3>
-    ${main ? `<div class="ph-wrap"><button class="ph-main" data-act="innerPhoto" data-i="0"><img src="${mediaUrl(main)}" alt="" loading="lazy"><span class="ph-tag notr">${esc(main.n || '')}</span><span class="ph-zoom">🔍</span></button>
-      <div class="ph-thumbs">${f.photos.map((m, i) => `<button class="ph-th${i ? '' : ' on'}" data-act="innerPhoto" data-i="${i}"><img src="${mediaUrl(m)}" alt="" loading="lazy"><span class="notr"><b>${esc(m.n || '')}</b></span></button>`).join('')}</div></div>`
+    ${main ? `<div class="ph-wrap"><button class="ph-main" data-act="innerPhoto" data-i="0"><img src="${mediaUrl(main)}" alt="" loading="lazy"><span class="ph-tag notr">${esc(roomName(main) || main.n || '')}</span><span class="ph-zoom">🔍</span></button>
+      <div class="ph-thumbs">${innerPhotos.map((m, i) => `<button class="ph-th${i ? '' : ' on'}" data-act="innerPhoto" data-i="${i}"><img src="${mediaUrl(m)}" alt="" loading="lazy"><span class="notr"><b>${esc(roomName(m) || m.n || '')}</b></span></button>`).join('')}</div></div>`
       : `<div class="pano-list">${f.panos.map(m => `<button class="btn" data-act="innerView" data-apt="${apt.id}" data-m="${m.id}">🌐 <span class="notr">${esc(m.room || m.n || '')}</span></button>`).join('')}</div>`}
   </div>`;
 }
 ACT.innerPhoto = d => {
   const i = +d.i, n = innerPhotos.length, m = innerPhotos[i]; if (!m) return;
-  openModal(`<div class="ph-big"><img src="${mediaUrl(m)}" alt=""><div class="flex mt"><b class="notr">${esc(m.n || '')}</b><span class="right"></span>
+  openModal(`<div class="ph-big"><img src="${mediaUrl(m)}" alt=""><div class="flex mt"><b class="notr">${esc(roomName(m) ? roomName(m) + ' · ' + (m.n || '') : m.n || '')}</b><span class="right"></span>
     ${n > 1 ? `<button data-act="innerPhoto" data-i="${(i - 1 + n) % n}">←</button><button data-act="innerPhoto" data-i="${(i + 1) % n}">→</button>` : ''}
     <a class="btn btn-p" href="${mediaUrl(m)}" target="_blank" rel="noopener">⬇ Открыть в полном размере</a></div></div>`);
   $('.modal-box').classList.add('wide');

@@ -40,8 +40,8 @@ class PublicController extends Controller
         $cur = collect($projects)->firstWhere('id', $request->query('o')) ?? ($projects[0] ?? null);
         abort_unless($cur, 404);
         $apts = array_map(fn ($a) => array_intersect_key($a, array_flip(['id', 'num', 'section', 'floor', 'rooms', 'area', 'price', 'status', 'kind', 'type', 'typeName', 'block', 'entr'])), Apartments::list($cur));
-        // чертёж и 3D каждой планировки — покупатель видит их, выбрав квартиру
-        $media = \App\Models\ObjectMedia::of($ws->id)->where('project_id', (string) $cur['id'])->where('is_public', true)->whereIn('kind', ['plan', 'interior', 'pano'])->orderBy('sort')->orderBy('id')->get();
+        // чертёж, 3D, 360° и фото комнат каждой планировки — покупатель видит их, выбрав квартиру
+        $media = \App\Models\ObjectMedia::of($ws->id)->where('project_id', (string) $cur['id'])->where('is_public', true)->whereIn('kind', ['plan', 'interior', 'pano', 'photo'])->orderBy('sort')->orderBy('id')->get();
         $plans = [];
         $tours = [];
         foreach ($media->whereNotNull('layout') as $m) {
@@ -103,13 +103,14 @@ class PublicController extends Controller
     /** Открытые файлы объекта: здание целиком и — для квартиры — файлы её планировки (у старых файлов — по числу комнат) */
     private function publicMedia(int $wsId, string $pid, ?int $rooms = null, ?string $layout = null)
     {
-        $all = \App\Models\ObjectMedia::of($wsId)->where('project_id', $pid)->where('is_public', true)->whereIn('kind', ['exterior', 'interior', 'pano'])
+        $all = \App\Models\ObjectMedia::of($wsId)->where('project_id', $pid)->where('is_public', true)->whereIn('kind', ['exterior', 'interior', 'pano', 'photo', 'plan'])
             ->orderByDesc('is_main')->orderBy('kind')->orderBy('sort')->orderBy('id')->get();
         if ($rooms === null && $layout === null) {
-            return $all;
+            return $all->whereIn('kind', ['exterior', 'interior', 'pano'])->values();
         }
 
-        return $all->where('kind', 'exterior')->concat(\App\Models\ObjectMedia::forUnit($all->where('kind', '!=', 'exterior'), $layout, (int) $rooms))->values();
+        // квартира: дом целиком и всё о ней изнутри — 3D, комнаты (360° и рендеры), чертёж
+        return $all->where('kind', 'exterior')->concat(\App\Models\ObjectMedia::forUnitAll($all, $layout, (int) $rooms))->values();
     }
 
     public function chess3d(Request $request, string $key)
@@ -121,7 +122,9 @@ class PublicController extends Controller
         $layout = $request->query('t') && isset(\App\Http\Controllers\Company\ObjectController::layouts($p)[$request->query('t')]) ? (string) $request->query('t') : null;
         $media = $this->publicMedia($ws->id, $pid, $request->has('r') ? (int) $request->query('r') : ($layout ? (int) (\App\Http\Controllers\Company\ObjectController::layouts($p)[$layout]['rooms'] ?? 0) : null), $layout);
 
-        return view('company.objects.viewer', ['ws' => $ws, 'p' => $p, 'pid' => $pid, 'media' => $media, 'cur' => $media->firstWhere('id', (int) $request->query('m')) ?? $media->first(),
+        $unit = $layout ? (string) (\App\Http\Controllers\Company\ObjectController::layouts($p)[$layout]['name'] ?? '') : ($request->has('r') ? (int) $request->query('r').__('-комн.') : null);
+
+        return view('company.objects.viewer', ['ws' => $ws, 'p' => $p, 'pid' => $pid, 'media' => $media, 'cur' => $media->firstWhere('id', (int) $request->query('m')) ?? $media->first(), 'unit' => $unit,
             'src' => fn ($m, bool $poster = false) => url("/s/{$key}/m/{$m->id}".($poster ? '?poster=1' : '')), 'public' => true, 'canEdit' => false, 'embed' => $request->boolean('embed')]);
     }
 
@@ -138,7 +141,9 @@ class PublicController extends Controller
         [$bl, $ws, $p, $a] = $this->buyer($token);
         $media = $this->publicMedia($ws->id, $bl->project_id, (int) $a['rooms'], $a['type'] ?? null);
 
-        return view('company.objects.viewer', ['ws' => $ws, 'p' => $p, 'pid' => $bl->project_id, 'media' => $media, 'cur' => $media->firstWhere('id', (int) $request->query('m')) ?? $media->first(),
+        $unit = trim(__('Кв.').' '.$a['num'].($a['rooms'] ? ' · '.$a['rooms'].__('-комн.') : '').(! empty($a['area']) ? ' · '.$a['area'].' '.__('м²') : ''));
+
+        return view('company.objects.viewer', ['ws' => $ws, 'p' => $p, 'pid' => $bl->project_id, 'media' => $media, 'cur' => $media->firstWhere('id', (int) $request->query('m')) ?? $media->first(), 'unit' => $unit,
             'src' => fn ($m, bool $poster = false) => url("/b/{$token}/m/{$m->id}".($poster ? '?poster=1' : '')), 'public' => true, 'canEdit' => false, 'embed' => $request->boolean('embed')]);
     }
 

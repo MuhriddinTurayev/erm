@@ -4361,5 +4361,18 @@
     "Объект нельзя удалить — по нему уже есть история: :w. Её нельзя терять: отчёты и деньги компании разойдутся.": "Obyektni o‘chirib bo‘lmaydi — u bo‘yicha tarix bor: :w. Uni yo‘qotib bo‘lmaydi: kompaniya hisobotlari va pullari mos kelmay qoladi.",
     "Объект удалён: :n": "Obyekt o‘chirildi: :n",
     "Для всех планировок": "Barcha rejalar uchun",
-    "Вы выбрали картинки, а не 3D-модель. Загрузить их как рендеры и фото интерьера (снимки 2:1 — как панорамы 360°)?": "Siz 3D-model emas, rasmlar tanladingiz. Ularni interyer renderlari va rasmlari sifatida yuklaymizmi (2:1 rasmlar — 360° panorama sifatida)?"
+    "Вы выбрали картинки, а не 3D-модель. Загрузить их как рендеры и фото интерьера (снимки 2:1 — как панорамы 360°)?": "Siz 3D-model emas, rasmlar tanladingiz. Ularni interyer renderlari va rasmlari sifatida yuklaymizmi (2:1 rasmlar — 360° panorama sifatida)?",
+    "У каждой планировки — 3D-интерьер и чертёж на всю квартиру, а у каждой комнаты — свои панорамы 360° и фото. Загруженное увидят у всех квартир этой планировки: в программе, в кабинете покупателя и на сайте. Ошиблись файлом — наведите на него: карандаш поправит, корзина удалит.": "Har bir rejada — butun xonadon uchun 3D-interyer va chizma, har bir xonada esa — o‘zining 360° panoramalari va rasmlari. Yuklanganlar shu rejadagi barcha xonadonlarda ko‘rinadi: dasturda, xaridor kabinetida va saytda. Faylni xato yuklagan bo‘lsangiz — ustiga olib boring: qalam tahrirlaydi, savat o‘chiradi.",
+    "Другие фото": "Boshqa rasmlar",
+    "3D-модель квартиры": "Xonadonning 3D-modeli",
+    "фото": "rasm",
+    "Загрузить и изменить по комнатам": "Xonalar bo‘yicha yuklash va tahrirlash",
+    "Интерьер этой квартиры ещё не загружен": "Bu xonadonning interyeri hali yuklanmagan",
+    "Скоро здесь появятся 3D-интерьер, панорамы 360° и фото комнат.": "Tez orada bu yerda 3D-interyer, 360° panoramalar va xonalar rasmlari paydo bo‘ladi.",
+    "тяните, чтобы осмотреться": "atrofni ko‘rish uchun torting",
+    "360° и фото этой комнаты": "Shu xonaning 360° va rasmlari",
+    "у каждой комнаты — свои 360° и фото": "har bir xonaning o‘z 360° va rasmlari",
+    "Без комнаты": "Xonasi ko‘rsatilmagan",
+    "Переименовать комнату": "Xona nomini o‘zgartirish",
+    "Новое название комнаты": "Xonaning yangi nomi"
 }

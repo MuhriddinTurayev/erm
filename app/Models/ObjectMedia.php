@@ -33,6 +33,26 @@ class ObjectMedia extends Model
             : $list->filter(fn ($m) => $m->layout === null && ($m->rooms === null || (int) $m->rooms === $rooms))->values();
     }
 
+    /**
+     * Всё о квартире изнутри: 3D и 360° (вместе — как раньше), рендеры комнат и чертёж — каждое по тому же правилу:
+     * своё у планировки, иначе общее для такого числа комнат.
+     */
+    public static function forUnitAll($list, ?string $layout, int $rooms)
+    {
+        $out = collect();
+        foreach ([['interior', 'pano'], ['photo'], ['plan']] as $kinds) {
+            $out = $out->concat(self::forUnit($list->whereIn('kind', $kinds), $layout, $rooms));
+        }
+
+        return $out->values();
+    }
+
+    /** Комната файла (панорама, рендер): то, что вписали; у старых панорам без комнаты — название */
+    public function roomName(): string
+    {
+        return trim((string) ($this->meta['room'] ?? '')) ?: ($this->kind === 'pano' ? (string) $this->title : '');
+    }
+
     protected function casts(): array
     {
         return ['is_public' => 'boolean', 'is_main' => 'boolean', 'meta' => 'array', 'rooms' => 'integer'];

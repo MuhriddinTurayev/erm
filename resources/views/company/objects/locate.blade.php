@@ -7,7 +7,7 @@
   $cal = (array) ($model?->meta['locate']['blocks'] ?? []);
   $blocks = $data['blocks'];
   $multi = count($blocks) > 1;
-  $T = [
+  $T = \App\Services\Locate::innerTexts() + [
     'kv' => __('Кв.'), 'fl' => __('этаж'), 'en' => __('подъезд'), 'rooms' => __('-комн.'), 'm2' => __('м²'), 'k' => __('Коммерция'),
     'approx' => __('Примерное место: корпус ещё не привязан к 3D-модели.'), 'setup' => __('Привязать'), 'saved' => __('Сохранено'),
     'err' => __('Не удалось сохранить'), 'load' => __('Загружаю 3D-модель…'), 'fail' => __('Не удалось открыть 3D-модель'), 'none' => __('Выберите квартиру'), 'pickHint' => __('Наведите на квартиру на фасаде — нажмите, чтобы выбрать.'),
@@ -282,8 +282,6 @@
     </div>
     <div id="tabInner" class="lc-tab" hidden>
       <p class="lc-hint">{{ __('Интерьер загружается для планировки: его увидят у всех квартир этого типа — в продажах, на сайте и в кабинете покупателя (кнопка «Внутри»).') }}</p>
-      <label class="field"><span>{{ __('Комната на панораме 360°') }}</span><input id="iRoom" list="iRooms" maxlength="60" placeholder="{{ __('название берётся из имени файла') }}">
-        <datalist id="iRooms">@foreach ([__('Гостиная'), __('Кухня'), __('Спальня'), __('Детская'), __('Ванная'), __('Прихожая'), __('Балкон'), __('Кабинет')] as $rn)<option value="{{ $rn }}">@endforeach</datalist></label>
       <div id="iList" class="lc-ilayouts"></div>
       <div class="lc-prog" id="uProg" hidden><i></i></div><small class="lc-ptext" id="uProgT" hidden></small>
     </div>
@@ -430,15 +428,16 @@ document.querySelectorAll('#lcBar [data-act]').forEach((b) => b.addEventListener
   if (a === 'full') { e.preventDefault(); const u = new URL(location.href); u.searchParams.delete('embed'); window.open(u, '_blank'); }
 }));
 /* ---------- «Внутри квартиры»: 3D-интерьер и панорамы — страница 3D только этой квартиры; рендер и план — картинкой ---------- */
-function openInner(u, m) {
+// квартира изнутри: просмотр открывает 3D-интерьер, комнату (её 360° и фото) или чертёж — с переходами между ними
+function openInner(u, m, room) {
   const list = innerOf(u);
-  m = m || list.find((x) => x.k === 'interior' || x.k === 'pano') || list[0];
-  if (!m) return;
+  if (!m && room == null) m = list.find((x) => x.k === 'interior' || x.k === 'pano') || list[0];
+  if (!m && room == null) return;
   const box = $('#lcOvB');
-  if ((m.k === 'interior' || m.k === 'pano') && URLS.view) {
-    const url = URLS.view.replace('{u}', encodeURIComponent(u.id)).replace('{t}', encodeURIComponent(u.t || '')).replace('{r}', u.r || 0) + '&m=' + m.id;
+  if (URLS.view) {
+    const url = URLS.view.replace('{u}', encodeURIComponent(u.id)).replace('{t}', encodeURIComponent(u.t || '')).replace('{r}', u.r || 0) + (m ? '&m=' + m.id : '&room=' + encodeURIComponent(room));
     box.innerHTML = `<iframe src="${esc(url)}" allow="fullscreen; xr-spatial-tracking" title="3D"></iframe>`;
-  } else box.innerHTML = m.ext === 'pdf' ? `<iframe src="${esc(fileUrl(m))}" title="PDF"></iframe>` : `<img src="${esc(fileUrl(m))}" alt="${esc(m.n)}">`;
+  } else if (m) box.innerHTML = m.ext === 'pdf' ? `<iframe src="${esc(fileUrl(m))}" title="PDF"></iframe>` : `<img src="${esc(fileUrl(m))}" alt="${esc(m.n)}">`;
   $('#lcOv').hidden = false;
   L.pause(true);
 }
@@ -639,9 +638,9 @@ if (CALIB) {
     if (a.dataset.a === 'view') openInner(u);
     if (a.dataset.a === 'up') { IM.setCur(layKey(u)); setTab('inner'); }
   });
-  IM = innerManager($('#iList'), { T, ICON, inner: INNER, units: DATA.units, csrf: CSRF, cvt: CVT, mcUrl: MC_URL, canEdit: !!UP_URL, roomInput: $('#iRoom'), prog,
+  IM = innerManager($('#iList'), { T, ICON, inner: INNER, units: DATA.units, csrf: CSRF, cvt: CVT, mcUrl: MC_URL, canEdit: !!UP_URL, prog,
     urls: { up: UP_URL, file: URLS.file, patch: PATCH_URL, del: DEL_URL },
-    onView: (u, m) => openInner(u, m),
+    onView: (u, m, room) => openInner(u, m, room),
     onChange: () => { const s = L.selected(); if (s && !$('#uCard').hidden) card(s); } });
   const params = new URLSearchParams(location.search);
   if (params.get('mk')) { if (first) { L.select(first); FAC.floor = L.units[first].f; } await setTab('units'); if (first) card(L.units[first]); }
