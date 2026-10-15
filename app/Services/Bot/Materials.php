@@ -183,8 +183,71 @@ class Materials
         if ($this->canUse()) {
             $b[] = [['text' => '📤 '.__('Расход материала'), 'data' => 'u:h'], ['text' => '📦 '.__('Мои заявки'), 'data' => 'm:o']];
         }
+        if ($this->canAdd()) {
+            $b[] = [['text' => '➕ '.__('Новый материал'), 'data' => 'm:new:other']];
+        }
         $this->flow(['k' => 'search']);   // любое слово — поиск товара
         $this->out(implode("\n", $L), $b, $mid);
+    }
+
+    /* ---------------- новый материал в справочнике ---------------- */
+
+    /** Добавлять материалы в справочник могут те, кто ведёт склад (как на сайте: «Склад → + Товар») */
+    public function canAdd(): bool
+    {
+        return $this->u->canEdit() && $this->u->canModule('warehouse');
+    }
+
+    private const NEW_UNITS = ['л', 'кг', 'т', 'шт', 'мешок', 'м', 'м²', 'м³', 'пачка'];
+    /** Группа склада для раздела бота (по ней материал и попадёт в свой раздел, если название не подскажет) */
+    private const CAT_GROUP = ['fuel' => 'Топливо', 'cement' => 'Цемент и смеси', 'metal' => 'Металл', 'brick' => 'Стеновые', 'sand' => 'Сыпучие',
+        'wood' => 'Древесина', 'electric' => 'Электрика', 'plumbing' => 'Сантехника', 'other' => null];
+
+    /** «➕ Новый материал»: спросить название; если название уже есть (из поиска) — сразу единицу измерения */
+    public function newItem(string $cat, ?string $name, ?int $mid): void
+    {
+        if (! $this->canAdd()) {
+            $this->out(__('Новые материалы добавляет тот, кто ведёт склад: руководитель, бухгалтер или прораб.'), [], null);
+
+            return;
+        }
+        $cat = isset(Catalog::CATS[$cat]) ? $cat : 'other';
+        $name = trim((string) $name);
+        if ($name === '') {
+            $this->flow(['k' => 'newitem', 'cat' => $cat]);
+            $this->out('➕ <b>'.__('Новый материал').'</b>'.($cat !== 'other' ? ' · '.Catalog::CATS[$cat][1].' '.__(Catalog::CATS[$cat][0]) : '')."\n"
+                .__('Напишите название — например «Дизельное топливо» или «Цемент М500».'), [[['text' => '✖ '.__('Отмена'), 'data' => 'm:h']]], $mid);
+
+            return;
+        }
+        $name = Str::limit($name, 160, '');
+        if ($same = Item::of($this->ws->id)->whereRaw('lower(name) = ?', [mb_strtolower($name)])->first()) {   // уже есть — открываем его
+            $this->flow(null);
+            $this->item($same->id, $mid);
+
+            return;
+        }
+        $this->flow(['k' => 'newunit', 'cat' => $cat, 'name' => $name]);
+        $rows = array_chunk(array_map(fn ($u, $i) => ['text' => Supply::unit($u), 'data' => 'm:nu:'.$i], self::NEW_UNITS, array_keys(self::NEW_UNITS)), 3);
+        $rows[] = [['text' => '✖ '.__('Отмена'), 'data' => 'm:h']];
+        $this->out('➕ <b>'.e($name).'</b>'."\n".__('В чём считаем?'), $rows, $mid);
+    }
+
+    /** Единица выбрана — материал в справочнике; сразу его карточка: сколько заказать */
+    public function newItemUnit(int $i, ?int $mid): void
+    {
+        $f = (array) (((array) ($this->u->tg_state ?? []))['flow'] ?? []);
+        if (($f['k'] ?? '') !== 'newunit' || ! $this->canAdd() || ! isset(self::NEW_UNITS[$i])) {
+            $this->home($mid);
+
+            return;
+        }
+        $name = (string) $f['name'];
+        $item = Item::of($this->ws->id)->whereRaw('lower(name) = ?', [mb_strtolower($name)])->first()
+            ?? Item::create(['workspace_id' => $this->ws->id, 'name' => $name, 'unit' => self::NEW_UNITS[$i], 'group' => self::CAT_GROUP[$f['cat'] ?? 'other'] ?? null, 'min_qty' => 0, 'price' => 0]);
+        \App\Models\AuditLog::create(['workspace_id' => $this->ws->id, 'user_id' => $this->u->id, 'action' => 'stock.add', 'summary' => 'Новый материал (Telegram): '.$item->name.', '.$item->unit]);
+        $this->flow(null);
+        $this->item($item->id, $mid, __('Материал добавлен в справочник').': '.e($item->name));
     }
 
     public function category(string $cat, int $page, ?int $mid): void
@@ -197,11 +260,12 @@ class Materials
         }
         $rows = array_values(array_filter(Catalog::stock($this->ws, $pid, Catalog::warehouseOrMain($this->ws, $pid)), fn ($r) => $r['cat'] === $cat));
         usort($rows, fn ($a, $b) => [$b['low'], $a['item']->name] <=> [$a['low'], $b['item']->name]);
-        $this->list($rows, Catalog::CATS[$cat][1].' <b>'.__(Catalog::CATS[$cat][0]).'</b>', 'm:c:'.$cat, $page, $mid);
+        $this->list($rows, Catalog::CATS[$cat][1].' <b>'.__(Catalog::CATS[$cat][0]).'</b>', 'm:c:'.$cat, $page, $mid, 'm:i:',
+            $this->canAdd() ? ['text' => '➕ '.__('Новый материал'), 'data' => 'm:new:'.$cat] : null);
     }
 
     /** Список товаров кнопками, по 12 на страницу */
-    private function list(array $rows, string $title, string $base, int $page, ?int $mid, string $open = 'm:i:'): void
+    private function list(array $rows, string $title, string $base, int $page, ?int $mid, string $open = 'm:i:', ?array $add = null): void
     {
         $per = 12;
         $pages = max(1, (int) ceil(count($rows) / $per));
@@ -222,6 +286,9 @@ class Materials
         }
         if ($nav) {
             $b[] = $nav;
+        }
+        if ($add) {
+            $b[] = [$add];
         }
         $b[] = [['text' => '🏠 '.__('Разделы'), 'data' => 'm:h'], ['text' => '🛒 '.__('Корзина').' ('.$this->cartCount().')', 'data' => 'm:k']];
         $this->out(implode("\n", $L), $b, $mid);
@@ -244,7 +311,12 @@ class Materials
 
             return;
         }
-        $this->list($rows, '🔍 <b>'.e($q).'</b>', 'm:sr', 0, $mid);
+        $add = null;
+        if ($this->canAdd() && mb_strlen(trim($q)) >= 2) {
+            $this->flow(['k' => 'search', 'q' => Str::limit(trim($q), 60, '')]);   // «➕ Добавить …» возьмёт это название
+            $add = ['text' => '➕ '.__('Добавить «:q» в справочник', ['q' => Str::limit(trim($q), 24)]), 'data' => 'm:nq'];
+        }
+        $this->list($rows, '🔍 <b>'.e($q).'</b>', 'm:sr', 0, $mid, 'm:i:', $add);
     }
 
     public function item(int $id, ?int $mid = null, string $done = ''): void

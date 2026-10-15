@@ -27,7 +27,7 @@ class Catalog
     ];
 
     /** Старые названия групп склада → разделы бота */
-    private const GROUPS = ['металл' => 'metal', 'стенов' => 'brick', 'электр' => 'electric', 'сантех' => 'plumbing', 'топлив' => 'fuel', 'древес' => 'wood', 'сыпуч' => 'sand'];
+    private const GROUPS = ['металл' => 'metal', 'стенов' => 'brick', 'электр' => 'electric', 'сантех' => 'plumbing', 'топлив' => 'fuel', 'древес' => 'wood', 'сыпуч' => 'sand', 'цемент' => 'cement'];
 
     /** Синонимы: прораб пишет «цемент», а в справочнике «M400 sement» */
     private const SYN = [

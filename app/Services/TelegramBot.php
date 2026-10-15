@@ -903,6 +903,13 @@ class TelegramBot
                     return true;
                 }
                 break;
+            case 'newitem':
+                if ($text !== '' && ! $photo && ! str_starts_with($text, '/')) {
+                    $M->newItem((string) ($f['cat'] ?? 'other'), $text, null);
+
+                    return true;
+                }
+                break;
             case 'search':
                 // слово без цифр — ищем материал; «Бетон 25 млн …» и прочее идёт дальше (расход, журнал)
                 if ($text !== '' && ! $photo && ! preg_match('/\d/', $text) && mb_strlen($text) <= 40) {
@@ -997,6 +1004,9 @@ class TelegramBot
             $cmd === 'm' && $a[0] === 'oo' => $M->order((int) ($a[1] ?? 0), $mid),
             $cmd === 'm' && $a[0] === 'a' => $M->proposeAccept($mid),
             $cmd === 'm' && $a[0] === 'l' => $M->lowOrder((int) ($a[1] ?? 0), $mid),
+            $cmd === 'm' && $a[0] === 'new' => $M->newItem((string) ($a[1] ?? 'other'), null, $mid),
+            $cmd === 'm' && $a[0] === 'nq' => $M->newItem('other', (string) ((((array) $user->tg_state)['flow'] ?? [])['q'] ?? ''), $mid),
+            $cmd === 'm' && $a[0] === 'nu' => $M->newItemUnit((int) ($a[1] ?? -1), $mid),
             $cmd === 'm' && $a[0] === 'sq' => $user->forceFill(['tg_state' => ['flow' => ['k' => 'search']]])->save() && $this->say($chat, '🔍 '.__('Напишите название материала — например «цемент» или «арматура 12».')),
             $cmd === 'm' => $M->home($mid),
             $cmd === 'u' && $a[0] === 'h' => $M->useHome($mid),

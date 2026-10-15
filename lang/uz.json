@@ -4433,5 +4433,11 @@
     "Нет кассы, из которой вы можете платить.": "Siz to'lay oladigan kassa yo'q.",
     "Из какой кассы платим?": "Qaysi kassadan to'laymiz?",
     "Оплатить заявку №:n?": "№:n so'rov to'lansinmi?",
-    "Да, оплатить": "Ha, to'lash"
+    "Да, оплатить": "Ha, to'lash",
+    "Новый материал": "Yangi material",
+    "Новые материалы добавляет тот, кто ведёт склад: руководитель, бухгалтер или прораб.": "Yangi materiallarni omborni yurituvchi qo'shadi: rahbar, buxgalter yoki prorab.",
+    "Напишите название — например «Дизельное топливо» или «Цемент М500».": "Nomini yozing — masalan «Dizel yoqilg'isi» yoki «Sement M500».",
+    "В чём считаем?": "Nimada hisoblaymiz?",
+    "Материал добавлен в справочник": "Material ro'yxatga qo'shildi",
+    "Добавить «:q» в справочник": "«:q» ni ro'yxatga qo'shish"
 }
