@@ -573,6 +573,33 @@ dialog.modal::backdrop{background:rgba(2,6,23,.5);backdrop-filter:blur(2px)}
 .wz-pos .icon-btn{width:28px;height:28px}
 .wz-quick{display:grid;gap:6px;margin-top:10px;padding:10px 12px;border-radius:10px;background:var(--info-soft)}
 .wz-quick .field{max-width:120px}
+/* мастер: этажи, квартиры этажа карточками, шахматка-превью */
+.inv-wiz .wz-main{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.wz-sec{display:grid;gap:8px;margin-top:16px}
+.wz-sec-h{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.wz-sec-h>b{font:700 14.5px var(--font-head)}
+.wz-step{display:inline-flex;align-items:center;gap:4px;background:var(--sunken);border-radius:11px;padding:3px}
+.wz-step button{width:34px;height:34px;border:0;border-radius:8px;background:var(--surface);box-shadow:var(--sh-sm);font:700 18px var(--font);color:var(--text);cursor:pointer}
+.wz-step button:hover{color:var(--accent-text)}
+.wz-step b{min-width:34px;text-align:center;font:700 16px var(--font-head)}
+.wz-pos-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px}
+.wz-card{display:grid;gap:6px;padding:10px;border-radius:12px;border:1px solid var(--border-2);background:var(--surface);position:relative}
+.wz-card>b{position:absolute;right:8px;top:6px;font:700 12px var(--font);color:var(--muted)}
+.wz-card select,.wz-card input{height:34px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font:inherit;font-size:14px;padding:0 8px;width:100%;min-width:0}
+.wz-card select{width:calc(100% - 22px);font-weight:600}
+.wz-card label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+.wz-exist{margin-top:14px}
+.wz-more{margin-top:14px}.wz-more summary{cursor:pointer;font-weight:600;color:var(--muted);font-size:13.5px}.wz-more[open] summary{margin-bottom:10px}
+.wz-prev{margin-top:16px;padding:12px;border-radius:12px;background:var(--sunken)}
+.wz-prev-h{display:flex;gap:10px;align-items:baseline;margin-bottom:8px;font-size:13.5px}
+.wz-chess{display:grid;gap:4px;max-height:300px;overflow:auto}
+.wz-row{display:flex;gap:4px;align-items:center}
+.wz-row i{width:26px;flex:none;text-align:right;font:600 12px var(--font);color:var(--muted);font-style:normal}
+.wz-row span{min-width:44px;height:34px;border-radius:7px;background:var(--ok-soft,#dcfce7);color:var(--ok-text,#166534);display:inline-grid;place-items:center;font:700 12.5px var(--font);line-height:1.05;padding:2px 6px}
+.wz-row span small{font:600 10px var(--font);opacity:.75}
+.wz-row span.k-commercial{background:var(--info-soft);color:var(--info-text,var(--accent-text))}
+.wz-row em{font-size:12px;color:var(--faint);font-style:normal}
+.wz-gap{padding-left:30px;color:var(--muted)}
 @media (max-width:1100px){.inv-grid{grid-template-columns:1fr}.inv-side{position:static;max-height:none}}
 @media (max-width:640px){.inv-form,.inv-bulk{grid-template-columns:1fr}.inv-u{width:66px}.inv-head-r{width:100%}.inv-head-r .btn-p{margin-left:auto}}
 

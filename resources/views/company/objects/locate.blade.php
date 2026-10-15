@@ -33,7 +33,7 @@
     'convert' => __('Квартиры объекта сейчас рассчитаны по параметрам здания. Чтобы поменять одну квартиру, они будут переведены в перечень помещений (номера и сделки сохранятся). Продолжить?'),
     'placedHand' => __('Стоит на окнах, которые отметили вручную.'), 'placedAuto' => __('Стоит на окнах по числу комнат (ИИ).'), 'placedNone' => __('Стоит на равной доле этажа — протяните мышью по её окнам.'),
     'steps' => ['frame' => __('Шаг 1. Рамка обнимает дом от земли до крыши — по ней считаются этажи и подъезды. ИИ ставит её сам; проверьте и поправьте.'),
-      'units' => __('Шаг 2. Каждая квартира — на своих окнах. Выберите этаж и квартиру, затем щёлкайте по её окнам — спереди, сзади или на торце.'),
+      'units' => __('Шаг 2. Слева — фасад дома. Выберите квартиру над ним и щёлкайте по её окнам — они окрасятся в её цвет; ещё щелчок — окно убрать. Окна сзади и на торцах — вкладки над фасадом.'),
       'inner' => __('Шаг 3. Что внутри: 3D-интерьер, панорамы 360° комнат, рендеры и план — для каждой планировки.')],
     'hintSelect' => __('Щёлкните квартиру на фасаде или выберите в списке.'),
     'hintPaint' => __('Щёлкайте по окнам выбранной квартиры: щелчок — окно добавить, ещё щелчок — убрать. Можно протянуть мышью. Окна сзади — кнопка «Сзади».'),
@@ -43,6 +43,7 @@
     'upTitle' => ['interior' => __('3D-интерьер: GLB, FBX, OBJ, DAE, 3DS, ZIP…'), 'pano' => __('Панорамы 360° комнат: картинка вдвое шире высоты (2:1), можно несколько'), 'photo' => __('Рендеры и фото комнат, можно несколько'), 'plan' => __('План квартиры: PDF или картинка')],
     'noLayouts' => __('В объекте пока нет квартир.'), 'noInnerLay' => __('Для этой планировки ещё ничего нет — загрузите 3D, панорамы 360°, фото или план кнопками выше.'),
     'notPano' => __('«:f» — не панорама 360° (у неё ширина должна быть ровно вдвое больше высоты). Загрузить как обычное фото?'),
+    'winsN' => __('окон: :n'), 'freeWin' => __('свободное окно'), 'noFlats' => __('на этом этаже нет квартир'),
     'pickFirst' => __('Сначала выберите квартиру: щёлкните её на фасаде или в списке.'), 'findWin' => __('Ищу окна на фасаде…'),
   ];
   $innerT = ['view' => $viewUrl ?? null, 'file' => $fileUrl ?? null];
@@ -129,7 +130,9 @@
   .lc-stepnote{margin:-4px 0 0!important;font-size:12.5px!important;color:var(--text-2)!important;background:var(--accent-soft);border-radius:10px;padding:8px 10px}
   .lc-mode button{display:inline-flex;gap:6px;align-items:center;justify-content:center;height:36px!important}
   .lc-mode button.on{background:var(--accent)!important;color:#fff!important}
-  .lc-step.sm button{width:26px;height:34px;font-size:14px}.lc-step.sm input{height:34px;padding:0 2px}
+  .lc-step input{padding:0 4px!important;text-align:center}
+  .lc-step.sm button{width:32px;height:32px;font-size:15px}.lc-step.sm input{height:32px;width:52px;flex:none;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font:600 14px var(--font)}
+  .lc-wrows{display:grid;gap:6px}.lc-wrow{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:var(--text-2)}
   .ic.up{transform:rotate(180deg)}
   .lc-inmini{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12.5px;color:var(--text-2);padding-top:8px;border-top:1px dashed var(--border-2)}
   .lc-inmini b{color:var(--text)}.lc-inmini .btn{min-height:30px;padding:4px 10px}
@@ -142,11 +145,42 @@
   .lc-lay-up button:hover{border-color:var(--accent);color:var(--accent-text)}
   .lc-lay-up button .ic{width:16px;height:16px}
   .lc-lay-up button.has{border-style:solid;background:var(--accent-soft);color:var(--accent-text)}
+  /* шаг 2: плоский фасад */
+  .lc-fac{position:absolute;left:16px;top:16px;bottom:16px;right:362px;z-index:6;background:var(--surface);border:1px solid var(--border-2);border-radius:16px;box-shadow:var(--sh-lg);display:flex;flex-direction:column;overflow:hidden}
+  .lc-fac[hidden]{display:none}
+  .lc-fac-bar{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .lc-fac-bar .seg{display:flex;gap:3px;background:var(--sunken);border-radius:11px;padding:3px;flex-wrap:wrap}
+  .lc-fac-bar .seg button{height:34px;border:0;background:none;border-radius:8px;font:600 13px var(--font);color:var(--muted);cursor:pointer;padding:0 12px}
+  .lc-fac-bar .seg button.on{background:var(--surface);color:var(--accent-text);box-shadow:var(--sh-sm),0 0 0 1px var(--border)}
+  .lc-fac-fl{display:flex;align-items:center;gap:6px}.lc-fac-fl b{font:700 15px var(--font-head);min-width:90px;text-align:center}
+  .lc-fac-fl button{width:36px;height:36px;border:1px solid var(--border-2);background:var(--surface);border-radius:10px;cursor:pointer;display:grid;place-items:center;color:var(--text)}
+  .lc-fac-fl button:hover{border-color:var(--accent);color:var(--accent-text)}
+  .lc-fac-apts{display:flex;gap:8px;padding:10px 12px;overflow-x:auto;border-bottom:1px solid var(--border);min-height:62px}
+  .lc-apt{flex:none;display:flex;gap:8px;align-items:center;border:2px solid transparent;background:var(--sunken);border-radius:12px;padding:5px 12px 5px 5px;cursor:pointer;font:600 13px var(--font);color:var(--text);text-align:left}
+  .lc-apt i{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;color:#fff;font:700 14px var(--font-head);font-style:normal}
+  .lc-apt small{display:block;color:var(--muted);font-weight:500;font-size:11.5px}
+  .lc-apt:hover{border-color:var(--border-2)}.lc-apt.on{border-color:var(--accent);background:var(--accent-soft)}
+  .lc-fac-stage{flex:1;min-height:0;position:relative;display:grid;place-items:center;padding:14px;background:var(--sunken)}
+  .lc-fac-pic{position:relative;box-shadow:var(--sh);border-radius:6px;overflow:hidden;user-select:none;touch-action:none}
+  .lc-fac-pic img{display:block;width:100%;height:100%;pointer-events:none}
+  .lc-fac-grid{position:absolute;inset:0}
+  .fc{position:absolute;border:1px solid rgba(255,255,255,.9);box-shadow:inset 0 0 0 1px rgba(31,29,54,.25);cursor:pointer;display:grid;place-items:center;font:700 14px var(--font-head);color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+  .fc:hover{box-shadow:inset 0 0 0 3px #fff}
+  .fc.free{background:rgba(255,255,255,.06)}.fc.free:hover{background:rgba(255,255,255,.35)}
+  .fc.on{box-shadow:inset 0 0 0 3px #fff,0 0 0 2px var(--accent)}
+  .fv{position:absolute;left:0;right:0;background:rgba(17,17,39,.42);cursor:pointer}
+  .fv:hover{background:rgba(17,17,39,.28)}
+  .fa{position:absolute;box-shadow:0 0 0 3px var(--accent);border-radius:2px;pointer-events:none}
+  .lc-fac-load{position:absolute;inset:0;display:grid;place-items:center;background:color-mix(in srgb,var(--sunken) 70%,transparent)}
+  .lc-fac-load i{width:30px;height:30px;border-radius:50%;border:3px solid var(--accent-soft);border-top-color:var(--accent);animation:spin .8s linear infinite}
+  .lc-fac-back{position:absolute;left:50%;top:16px;transform:translateX(-50%);z-index:8;height:auto;min-height:40px}
+  .lc-fac-back[hidden]{display:none}
+  @media (max-width:760px){.lc-fac{left:8px;right:8px;top:8px;bottom:calc(50vh + 80px)}}
   .lc-pick{display:flex;gap:6px;min-width:0}.lc-pick select{flex:1;min-width:0;width:100%;height:38px}
   .lc-pick button{width:38px;flex:none;height:38px;border:1px solid var(--border-2);background:var(--surface);border-radius:10px;cursor:pointer;color:var(--text);display:grid;place-items:center}
   .lc-pick button:hover{border-color:var(--accent);color:var(--accent-text)}
   .lc-ucard{display:grid;gap:10px;padding:12px;border-radius:12px;border:1px solid var(--border-2);background:var(--sunken)}
-  .lc-uhead b{display:block;font:700 16px var(--font-head)}.lc-uhead small{color:var(--muted);font-size:12.5px}
+  .lc-uhead b{display:flex;gap:8px;align-items:center;font:700 16px var(--font-head)}.lc-dot{width:14px;height:14px;border-radius:4px;flex:none}.lc-uhead small{color:var(--muted);font-size:12.5px}
   .lc-place{font-size:12.5px;color:var(--text-2);display:flex;gap:6px;align-items:flex-start}.lc-place .ic{flex:none;color:var(--accent);margin-top:1px}
   .lc-chk{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--text-2);cursor:pointer}.lc-chk input{margin-top:2px;accent-color:var(--accent)}
   .lc-inner{display:grid;gap:8px}
@@ -215,22 +249,6 @@
     </div>
     <p class="lc-stepnote" id="cStepNote">{{ __('Шаг 1. Рамка обнимает дом от земли до крыши — по ней считаются этажи и подъезды. ИИ ставит её сам; проверьте и поправьте.') }}</p>
     <div id="tabUnits" class="lc-tab" hidden>
-      <div class="seg lc-mode" id="uMode">
-        <button type="button" data-m="select" class="on">{!! ic('target', '', 15) !!}{{ __('Выбрать') }}</button>
-        <button type="button" data-m="paint">{!! ic('layout-grid', '', 15) !!}{{ __('Окна') }}</button>
-      </div>
-      <p class="lc-hint" id="uHint">{{ __('Щёлкните квартиру на фасаде или выберите в списке.') }}</p>
-      <div class="lc-pick">
-        <button type="button" id="uFPrev" title="{{ __('Этаж ниже') }}">{!! ic('chevron-down', '', 16) !!}</button>
-        <select id="uFloor" aria-label="{{ __('Этаж') }}"></select>
-        <button type="button" id="uFNext" title="{{ __('Этаж выше') }}">{!! ic('chevron-down', 'up', 16) !!}</button>
-      </div>
-      <div class="lc-pick">
-        <button type="button" id="uPrev" title="{{ __('Предыдущая') }}">{!! ic('chevron-left', '', 16) !!}</button>
-        <select id="uSel" aria-label="{{ __('Квартира') }}"></select>
-        <button type="button" id="uNext" title="{{ __('Следующая') }}">{!! ic('chevron-right', '', 16) !!}</button>
-      </div>
-      <div class="seg" id="uView"><button type="button" data-v="front">{{ __('Спереди') }}</button><button type="button" data-v="back">{{ __('Сзади') }}</button><button type="button" data-v="side">{{ __('Торец') }}</button><button type="button" data-v="3d">3D</button></div>
       <div class="lc-ucard" id="uCard" hidden>
         <div class="lc-uhead" id="uHead"></div>
         <div class="lc-place" id="uPlace"></div>
@@ -246,13 +264,15 @@
       </div>
       <div class="lc-sec">
         <span class="lc-lab">{{ __('Окна на фасаде') }}</span>
-        <div class="row">
-          <label class="field"><span>{{ __('Спереди') }}</span><div class="lc-step sm" data-w="f"><button type="button" data-d="-1">−</button><input type="number" min="1" max="120" id="wF"><button type="button" data-d="1">+</button></div></label>
-          <label class="field"><span>{{ __('Сзади') }}</span><div class="lc-step sm" data-w="b"><button type="button" data-d="-1">−</button><input type="number" min="1" max="120" id="wB"><button type="button" data-d="1">+</button></div></label>
-          <label class="field"><span>{{ __('Торцы') }}</span><div class="lc-step sm" data-w="s"><button type="button" data-d="-1">−</button><input type="number" min="1" max="120" id="wS"><button type="button" data-d="1">+</button></div></label>
+        <div class="lc-wrows">
+          <div class="lc-wrow"><span>{{ __('Лицевая сторона') }}</span><div class="lc-step sm" data-w="f"><button type="button" data-d="-1">−</button><input type="number" min="1" max="120" id="wF"><button type="button" data-d="1">+</button></div></div>
+          <div class="lc-wrow"><span>{{ __('Задняя сторона') }}</span><div class="lc-step sm" data-w="b"><button type="button" data-d="-1">−</button><input type="number" min="1" max="120" id="wB"><button type="button" data-d="1">+</button></div></div>
+          <div class="lc-wrow"><span>{{ __('Торцы') }}</span><div class="lc-step sm" data-w="s"><button type="button" data-d="-1">−</button><input type="number" min="1" max="120" id="wS"><button type="button" data-d="1">+</button></div></div>
         </div>
+        <small class="lc-ptext">{{ __('Окон на фасаде не столько? Поправьте число — сетка окон встанет поровну.') }}</small>
         <button type="button" class="btn btn-s btn-ghost" id="uRealloc">{!! ic('refresh-cw', '', 15) !!}{{ __('Заново по окнам: окон — по числу комнат + 1') }}</button>
       </div>
+      <button type="button" class="btn btn-s" id="fac3d">{!! ic('box', '', 15) !!}{{ __('Проверить в 3D') }}</button>
     </div>
     <div id="tabInner" class="lc-tab" hidden>
       <p class="lc-hint">{{ __('Интерьер загружается для планировки: его увидят у всех квартир этого типа — в продажах, на сайте и в кабинете покупателя (кнопка «Внутри»).') }}</p>
@@ -314,6 +334,19 @@
     </div>
   </aside>
   @endif
+  {{-- шаг 2: плоский фасад — квартиры на окнах щелчками, без 3D-рамок и стрелок --}}
+  <div class="lc-fac" id="lcFac" hidden>
+    <div class="lc-fac-bar">
+      <div class="seg" id="facSide"><button type="button" data-f="1" class="on">{{ __('Лицевая сторона') }}</button><button type="button" data-f="-1">{{ __('Задняя сторона') }}</button><button type="button" data-f="-2">{{ __('Левый торец') }}</button><button type="button" data-f="2">{{ __('Правый торец') }}</button></div>
+      <div class="lc-fac-fl"><button type="button" id="facFDown" title="{{ __('Этаж ниже') }}">{!! ic('chevron-down', '', 16) !!}</button><b id="facFloor"></b><button type="button" id="facFUp" title="{{ __('Этаж выше') }}">{!! ic('chevron-down', 'up', 16) !!}</button></div>
+    </div>
+    <div class="lc-fac-apts" id="facApts"></div>
+    <div class="lc-fac-stage" id="facStage">
+      <div class="lc-fac-pic" id="facPic"><img id="facImg" alt=""><div class="lc-fac-grid" id="facGrid"></div></div>
+      <div class="lc-fac-load" id="facLoad" hidden><i></i></div>
+    </div>
+  </div>
+  <button type="button" class="btn btn-p lc-fac-back" id="facBack" hidden>{!! ic('arrow-left', '', 15) !!}{{ __('Вернуться к фасаду') }}</button>
   <div class="lc-ov" id="lcOv" hidden><div class="lc-ov-in"><button type="button" class="lc-ov-x" id="lcOvX" aria-label="{{ __('Закрыть') }}">{!! ic('x', '', 18) !!}</button><div id="lcOvB" style="height:100%"></div></div></div>
 @endif
 
@@ -353,8 +386,8 @@ try {
       const ib = $('#lcBar [data-act=inner]'); if (ib) ib.hidden = CALIB || !URLS.view || !innerOf(u).length;
     },
     // разметка квартир: щёлкнули квартиру на фасаде — её карточка; отметили окна — сколько их на каждой стороне
-    onSelect: (u) => { floorSel(u.f); fillSel(); card(u); setMode('paint'); },
-    onAssign: (u) => { if (u) card(u); },
+    onSelect: (u) => { FAC.floor = u.f; card(u); facDraw(); },
+    onAssign: (u) => { if (u) { card(u); facDraw(); } },
     onChange: (c) => fill(c),
     onUndo: (n) => { const b = $('#cUndo'); if (b) b.disabled = !n; },
     // весь дом: наведение — номер и статус, клик — квартира (в программе откроется её карточка)
@@ -462,7 +495,7 @@ if (CALIB) {
   const startBlock = first ? L.units[first].b : (sel ? sel.value : L.blocks[0]);
   if (sel) sel.value = startBlock;
   fill(L.calibrate(startBlock)); report(startBlock);
-  sel && sel.addEventListener('change', () => { fill(L.calibrate(sel.value)); report(sel.value); if (tab === 'units') { L.mark(true); fillSel(); $('#uCard').hidden = $('#uInnerBox').hidden = true; } });
+  sel && sel.addEventListener('change', () => { fill(L.calibrate(sel.value)); report(sel.value); if (tab === 'units') { L.mark(true); FAC.floor = null; $('#uCard').hidden = true; facOpen(); } });
   const mark = (bid) => { const o = sel && [...sel.options].find((x) => x.value === bid); if (o && !o.textContent.endsWith('✓')) o.textContent += ' ✓'; };
   // сразу после загрузки модели (auto=1) или пока корпус не привязан — ИИ расставляет сам и сохраняет; человек потом проверяет
   const runAuto = async (ids) => {
@@ -508,36 +541,41 @@ if (CALIB) {
     document.querySelectorAll('#cTabs button').forEach((x) => x.classList.toggle('on', x.dataset.t === t));
     $('#tabFrame').hidden = t !== 'frame'; $('#tabUnits').hidden = t !== 'units'; $('#tabInner').hidden = t !== 'inner';
     $('#cStepNote').textContent = T.steps[t];
+    $('#lcFac').hidden = true; $('#facBack').hidden = true;
     L.mark(t !== 'frame');   // на шагах 2 и 3 рамку не двигаем — стрелок нет
     if (t === 'frame') { fill(L.get()); return; }
     if (t === 'inner') { renderLayouts(); return; }
     // привязку сделали раньше, окон в ней нет — находим их на фасаде, чтобы квартиры встали по окнам
     if (!L.get().win) { busy(true, T.findWin); try { await L.findWindows(); } catch (e) { console.error(e); } finally { busy(false); } }
-    if (L.floor() == null) { const u = L.selected() || unitsList().find((x) => x.r > 0) || unitsList()[0]; if (u) floorSel(u.f); }
-    fillFloors(); fillSel(); winFill(); const u = L.selected(); if (u) card(u);
-    L.view('front');
+    winFill();
+    await facOpen();
   };
   document.querySelectorAll('#cTabs button').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.t)));
-  // «Выбрать» — щелчок выбирает квартиру; «Окна» — щелчок по окну добавляет его выбранной квартире или убирает
-  document.querySelectorAll('#uMode button').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.m)));
-  document.querySelectorAll('#uView button').forEach((b) => b.addEventListener('click', () => L.view(b.dataset.v)));
-  $('#uFloor').addEventListener('change', () => { floorSel(+$('#uFloor').value); fillSel(); });
-  const fstep = (d) => { const fs = floorsList(), k = fs.indexOf(L.floor()), f = fs[Math.max(0, Math.min(fs.length - 1, k + d))]; if (f != null) { floorSel(f); fillSel(); } };
-  $('#uFPrev').addEventListener('click', () => fstep(-1));
-  $('#uFNext').addEventListener('click', () => fstep(1));
-  $('#uSel').addEventListener('change', () => selectUnit($('#uSel').value));
-  const step = (d) => { const list = unitsList(), u = L.selected(), k = u ? list.findIndex((x) => x.id === u.id) : -1, n = list[Math.max(0, Math.min(list.length - 1, k + d))]; if (n) { selectUnit(n.id); setMode('paint'); } };
-  $('#uPrev').addEventListener('click', () => step(-1));
-  $('#uNext').addEventListener('click', () => step(1));
+  // плоский фасад: стороны, этажи, квартиры этажа, щелчки по окнам
+  document.querySelectorAll('#facSide button').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('#facSide button').forEach((x) => x.classList.toggle('on', x === b));
+    FAC.face = +b.dataset.f; facShot();
+  }));
+  const fstep = (d) => { const fs = floorsList(), k = fs.indexOf(FAC.floor), f = fs[Math.max(0, Math.min(fs.length - 1, k + d))]; if (f != null) facFloor(f); };
+  $('#facFDown').addEventListener('click', () => fstep(-1));
+  $('#facFUp').addEventListener('click', () => fstep(1));
+  $('#facApts').addEventListener('click', (e) => { const b = e.target.closest('[data-u]'); if (b) pick(b.dataset.u); });
+  $('#facGrid').addEventListener('pointerdown', facDown);
+  window.addEventListener('pointermove', facMove);
+  window.addEventListener('pointerup', () => { if (FAC.paint) { FAC.paint = null; const s = L.selected(); if (s) card(s); facDraw(); } });
+  new ResizeObserver(() => facFit()).observe($('#facStage'));
+  // проверить в 3D: дом с отмеченными квартирами; вернуться — к плоскому фасаду
+  $('#fac3d').addEventListener('click', () => { $('#lcFac').hidden = true; $('#facBack').hidden = false; L.markMode('select'); L.markFloor(FAC.floor); L.view('3d'); });
+  $('#facBack').addEventListener('click', () => { $('#lcFac').hidden = false; $('#facBack').hidden = true; facDraw(); });
   $('#uAll').addEventListener('change', () => L.markAll($('#uAll').checked));
   // окна на фасаде: ИИ их нашёл; если ошибся — задайте число, окна встанут поровну, квартиры — заново по ним
-  const setWin = (side, n) => { L.setWin(side, n || 1); winFill(); const u = L.selected(); if (u) card(u); };
+  const setWin = (side, n) => { L.setWin(side, n || 1); winFill(); const u = L.selected(); if (u) card(u); facDraw(); };
   document.querySelectorAll('.lc-step[data-w]').forEach((s) => {
     const side = s.dataset.w, inp = s.querySelector('input');
     s.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => setWin(side, (parseInt(inp.value) || 1) + +b.dataset.d)));
     inp.addEventListener('change', () => setWin(side, parseInt(inp.value)));
   });
-  $('#uRealloc').addEventListener('click', () => { if (!confirm(T.realloc)) return; L.realloc(); const u = L.selected(); if (u) card(u); });
+  $('#uRealloc').addEventListener('click', () => { if (!confirm(T.realloc)) return; L.realloc(); const u = L.selected(); if (u) card(u); facDraw(); });
   // комнаты и площадь — прямо отсюда (у квартиры со сделкой не меняются)
   if (CAN_UNITS) {
     const dirtyU = () => { $('#uSave').hidden = false; };
@@ -556,7 +594,7 @@ if (CALIB) {
         if (!r.ok) { alert(j.error || j.message || T.err); return; }
         if (j.converted) { const to = new URL(location.href); to.searchParams.set('mk', '1'); to.searchParams.set('u', u.id); to.searchParams.delete('auto'); location.href = to; return; }
         if (j.unit) { L.updateUnit(u.id, { r: j.unit.r, a: j.unit.a, t: j.unit.t || undefined }); labelUnit(u); }
-        fillSel(); card(u);
+        card(u); facDraw();
         if (window.ui && ui.toast) ui.toast(T.unitSaved);
       } finally { btn.disabled = false; }
     });
@@ -580,7 +618,7 @@ if (CALIB) {
   });
   $('#uFile').addEventListener('change', () => { const files = [...$('#uFile').files]; $('#uFile').value = ''; if (files.length && upFor) upKind(files, upFor.kind, upFor.lay); });
   const params = new URLSearchParams(location.search);
-  if (params.get('mk')) { await setTab('units'); if (first) selectUnit(first); }
+  if (params.get('mk')) { if (first) { L.select(first); FAC.floor = L.units[first].f; } await setTab('units'); if (first) card(L.units[first]); }
 } else {
   if (first) L.show(first); else { L.statusView(); $('#lcU').innerHTML = T.pickHint + legend(); }
   // корпус не привязан: руководитель/администратор объектов — ИИ расставляет и сохраняет; остальным — по форме модели, без сохранения
@@ -592,40 +630,101 @@ if (CALIB) {
     if (shown) L.show(shown); else { L.statusView(); if (n) n.hidden = true; }
   }
 }
-/* ---------- шаг 2: квартиры по этажам, выбор, карточка ---------- */
+/* ---------- шаг 2: плоский фасад — квартиры на окнах ---------- */
+// цвета квартир — те же, что на 3D-модели (по номеру квартиры на этаже)
+const COLORS = ['#6c4cf1', '#0ea5e9', '#f59e0b', '#10b981', '#ef4444', '#ec4899', '#14b8a6', '#8b5cf6'];
+const FAC = { face: 1, shot: null, floor: null, paint: null };
 let layoutCur = null, upFor = null;
 function unitsList() {
   return DATA.units.filter((u) => u.b === L.block()).sort((a, b) => a.e - b.e || a.f - b.f || a.i - b.i);
 }
 const floorsList = () => [...new Set(unitsList().map((u) => u.f))].sort((a, b) => a - b);
-function floorSel(f) { L.markFloor(f); if ($('#uFloor')) $('#uFloor').value = f; }
-function fillFloors() {
-  $('#uFloor').innerHTML = floorsList().map((f) => `<option value="${f}">${f}-${esc(T.fl)} · ${unitsList().filter((u) => u.f === f).length} ${esc(T.pcs)}</option>`).join('');
-  if (L.floor() != null) $('#uFloor').value = L.floor();
+const colorOf = (u) => COLORS[u.i % COLORS.length];
+async function facOpen() {
+  $('#lcFac').hidden = false; $('#facBack').hidden = true;
+  const sel = L.selected();
+  if (FAC.floor == null) { const u = sel || unitsList().find((x) => x.r > 0) || unitsList()[0]; FAC.floor = u ? u.f : 1; }
+  if (!sel || sel.f !== FAC.floor) { const u = unitsList().find((x) => x.f === FAC.floor); if (u) L.select(u.id); }
+  L.markFloor(FAC.floor);
+  const s = L.selected(); if (s) card(s);
+  await facShot();
 }
-/** Список — квартиры выбранного этажа, слева направо по подъездам */
-function fillSel() {
-  const f = L.floor(), list = unitsList().filter((u) => f == null || u.f === f);
-  $('#uSel').innerHTML = `<option value="">— ${esc(T.none)} —</option>` + list.map((u) => `<option value="${esc(u.id)}">${esc(u.label)} · ${esc(u.sub)}</option>`).join('');
-  const u = L.selected(); $('#uSel').value = u && list.includes(u) ? u.id : '';
+/** Снимок стороны дома — заново при смене стороны (рамка на шаге 2 не двигается) */
+async function facShot() {
+  $('#facLoad').hidden = false;
+  await new Promise((r) => requestAnimationFrame(() => r()));
+  try { FAC.shot = L.facade(FAC.face); } catch (e) { console.error(e); }
+  if (FAC.shot) await new Promise((r) => { const img = $('#facImg'); img.onload = r; img.onerror = r; img.src = FAC.shot.url; });
+  $('#facLoad').hidden = true;
+  facFit(); facDraw();
 }
-function selectUnit(id) {
-  const u = id && L.select(id);
-  if (!u) return;
-  if ($('#uFloor').value != u.f) { $('#uFloor').value = u.f; fillSel(); }
-  $('#uSel').value = u.id; card(u);
+function facFit() {
+  const st = $('#facStage'), s = FAC.shot;
+  if (!s || !st || $('#lcFac').hidden) return;
+  const k = Math.min((st.clientWidth - 28) / s.w, (st.clientHeight - 28) / s.h);
+  $('#facPic').style.width = Math.max(50, Math.floor(s.w * k)) + 'px'; $('#facPic').style.height = Math.max(50, Math.floor(s.h * k)) + 'px';
 }
-function setMode(m) {
-  if (!$('#uMode')) return;
-  if (m === 'paint' && !L.selected()) m = 'select';
-  L.markMode(m);
-  document.querySelectorAll('#uMode button').forEach((x) => x.classList.toggle('on', x.dataset.m === m));
-  $('#uHint').textContent = m === 'paint' ? T.hintPaint : T.hintSelect;
+function facFloor(f) {
+  FAC.floor = f;
+  L.markFloor(f);
+  const s = L.selected();
+  if (!s || s.f !== f) { const u = unitsList().find((x) => x.f === f); if (u) { L.select(u.id); card(u); } }
+  facDraw();
+}
+function pick(id) { const u = L.select(id); if (!u) return; FAC.floor = u.f; card(u); facDraw(); }
+/** Сетка окон поверх снимка: активный этаж — окна цветом своих квартир с номером, остальные этажи затенены (щелчок — перейти на этаж) */
+function facDraw() {
+  const s = FAC.shot;
+  if (!s || $('#lcFac').hidden) return;
+  const G = L.facadeGrid(FAC.face), m = s.m, k = 1 + 2 * m, own = L.facadeOwners(FAC.face, FAC.floor), sel = L.selected();
+  const pct = (v) => (v * 100).toFixed(3) + '%';
+  const X = (a0, a1) => [(s.dir > 0 ? m + a0 : m + 1 - a1) / k, (a1 - a0) / k];
+  const row = G.rows.find((r) => r.floors.includes(FAC.floor)) || G.rows[0];
+  let html = '';
+  G.rows.forEach((r) => {
+    if (r === row) return;
+    html += `<div class="fv" data-fl="${r.floors[0] ?? ''}" style="top:${pct((m + 1 - r.y1) / k)};height:${pct((r.y1 - r.y0) / k)}" title="${r.floors.map((f) => f + '-' + T.fl).join(', ')}"></div>`;
+  });
+  const top = (m + 1 - row.y1) / k, h = (row.y1 - row.y0) / k;
+  html += `<div class="fa" style="top:${pct(top)};height:${pct(h)};left:${pct(m / k)};width:${pct(1 / k)}"></div>`;
+  for (let i = 0; i < G.edges.length - 1; i++) {
+    const [l, w] = X(G.edges[i], G.edges[i + 1]), u = own[i] && L.units[own[i]], on = !!(u && sel && u.id === sel.id);
+    html += `<div class="fc${u ? '' : ' free'}${on ? ' on' : ''}" data-k="${i}" style="left:${pct(l)};width:${pct(w)};top:${pct(top)};height:${pct(h)};${u ? `background:${colorOf(u)}${on ? 'e6' : '9c'}` : ''}" title="${u ? esc(u.label) : esc(T.freeWin)}">${u ? esc(u.num) : ''}</div>`;
+  }
+  $('#facGrid').innerHTML = html;
+  $('#facFloor').textContent = `${FAC.floor}-${T.fl}`;
+  // квартиры этажа — цветными кнопками: номер, комнат, сколько у неё окон
+  $('#facApts').innerHTML = unitsList().filter((u) => u.f === FAC.floor).map((u) => {
+    const pl = L.placeOf(u.id), n = Object.values((pl && pl.wins) || {}).reduce((a, b) => a + b, 0);
+    return `<button type="button" class="lc-apt${sel && sel.id === u.id ? ' on' : ''}" data-u="${esc(u.id)}"><i style="background:${colorOf(u)}">${esc(u.num)}</i><span>${u.r ? u.r + esc(T.rooms) : esc(T.k)}<small>${esc(T.winsN.replace(':n', n))}</small></span></button>`;
+  }).join('') || `<span class="lc-ptext">${esc(T.noFlats)}</span>`;
+}
+/** Щелчок по окну: у выбранной квартиры его нет — добавить, есть — убрать; протянуть — так же по соседним окнам */
+function facDown(e) {
+  const v = e.target.closest('.fv');
+  if (v) { if (v.dataset.fl !== '') facFloor(+v.dataset.fl); return; }
+  const c = e.target.closest('.fc');
+  if (!c) return;
+  e.preventDefault();
+  const k = +c.dataset.k, own = L.facadeOwners(FAC.face, FAC.floor), sel = L.selected();
+  if (!sel || sel.f !== FAC.floor) { if (own[k]) pick(own[k]); return; }
+  const add = own[k] !== sel.id;
+  FAC.paint = { add, done: new Set([k]) };
+  L.paint(sel.id, FAC.face, [k], add); facDraw();
+}
+function facMove(e) {
+  const P = FAC.paint;
+  if (!P || !(e.buttons & 1)) return;
+  const c = document.elementFromPoint(e.clientX, e.clientY)?.closest('.fc');
+  if (!c) return;
+  const k = +c.dataset.k, sel = L.selected();
+  if (P.done.has(k) || !sel) return;
+  P.done.add(k); L.paint(sel.id, FAC.face, [k], P.add); facDraw();
 }
 const winFill = () => { if (!$('#wF')) return; $('#wF').value = L.winCount('f'); $('#wB').value = L.winCount('b'); $('#wS').value = L.winCount('s'); };
 function card(u) {
   $('#uCard').hidden = false;
-  $('#uHead').innerHTML = `<b>${esc(u.label)}</b><small>${esc(u.sub)}${u.s && T.st[u.s] ? ' · ' + esc(T.st[u.s]) : ''}</small>`;
+  $('#uHead').innerHTML = `<b><i class="lc-dot" style="background:${colorOf(u)}"></i>${esc(u.label)}</b><small>${esc(u.sub)}${u.s && T.st[u.s] ? ' · ' + esc(T.st[u.s]) : ''}</small>`;
   const pl = L.placeOf(u.id), w = (pl && pl.wins) || {};
   const sides = [['f', T.sF], ['b', T.sB], ['r', T.sR], ['l', T.sL]].filter(([k]) => w[k]).map(([k, n]) => `${n}: <b>${w[k]}</b>`).join(' · ');
   $('#uPlace').innerHTML = ICON.pin + `<span>${sides ? T.winsOn + ' ' + sides + '. ' : ''}${pl && pl.slot ? (pl.own || pl.slot.m ? T.placedHand : T.placedAuto) : T.placedNone}</span>`;

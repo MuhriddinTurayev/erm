@@ -294,104 +294,150 @@
         : `<button class="btn btn-p btn-l" data-a="ready" data-on="1" ${blockers ? 'disabled' : ''}>${T.goSale}</button>${blockers ? `<span class="muted">${T.fixFirst}</span>` : ''}`}</div></div>`;
   }
 
-  /* ---------- мастер: заполнить корпус ---------- */
+  /* ---------- мастер: заполнить корпус ----------
+     Просто, как это говорят на стройке: сколько этажей, что на 1-м этаже, сколько квартир на этаже и какие они.
+     Ниже — шахматка подъезда, как она получится: видно номера до того, как нажать «Создать». */
+  const ROOM_AREA = [0, 42, 62, 84, 105, 125];
   function wizard(blockId) {
     const b = blockId ? blockOf(blockId) : null;
     const flatTypes = (inv ? inv.types : []).filter(t => (t.kind || 'flat') === 'flat');
+    // квартиры этажа слева направо: как на самом частом этаже корпуса, иначе по имеющимся планировкам, иначе 1-, 2-, 2-, 3-комнатные
+    let pos = flatTypes.length ? flatTypes.slice(0, 4).map(t => ({ r: t.rooms || 1, a: num(t.area, 50) })) : [1, 2, 2, 3].map(r => ({ r, a: ROOM_AREA[r] }));
+    if (b) {
+      const byF = {};
+      unitsOf(b.id).filter(isFlat).forEach(u => (byF[u.e + '|' + u.f] ??= []).push(u));
+      const best = Object.values(byF).sort((x, y) => y.length - x.length)[0];
+      if (best) pos = best.map(u => ({ r: u.rooms || 1, a: num(u.area, 50) }));
+    }
+    const has = b && unitsOf(b.id).length;
     const dlg = document.createElement('dialog'); dlg.className = 'modal wide inv-wiz';
-    const typeSel = v => `<select class="wz-t">${flatTypes.map(t => `<option value="${t.id}" ${t.id === v ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}<option value="+">+ ${T.newType}</option></select>`;
-    const startTypes = flatTypes.length ? flatTypes.slice(0, 4).map(t => t.id) : [];
     dlg.innerHTML = `<div class="modal-h"><h3>${b ? T.fillBlock + ' «' + esc(b.name || T.block1) + '»' : T.newBlock}</h3><button type="button" class="icon-btn" data-x>✕</button></div>
-    <div class="modal-b"><div class="form" style="grid-template-columns:1fr 1fr 1fr">
-      ${b ? '' : `<label class="field"><span>${T.blockName}</span><input id="wz-name" value="${inv ? String.fromCharCode(65 + inv.blocks.length) : 'A'}" maxlength="40"><small>${T.blockNameHint}</small></label>`}
-      <label class="field"><span>${T.entrN}</span><input id="wz-ent" type="number" min="1" max="40" value="${b ? b.entr.length : C.build.sections || 1}" ${b ? 'disabled' : ''}></label>
-      <label class="field"><span>${T.floorsFrom}</span><input id="wz-f0" type="number" min="1" max="150" value="${C.build.commercialFirst ? 2 : 1}"></label>
-      <label class="field"><span>${T.floorsTo}</span><input id="wz-f1" type="number" min="1" max="150" value="${b ? b.floors : C.build.floors || 9}"></label>
-      <div class="field full"><span>${T.perFloor}</span><div id="wz-types" class="wz-types"></div>
-        <div class="flex"><button type="button" class="btn btn-s" id="wz-addt">+ ${T.addPos}</button><small class="muted">${T.perFloorHint}</small></div>
-        <div id="wz-quick" class="wz-quick" ${flatTypes.length ? 'hidden' : ''}><b>${T.quickTypes}</b><small class="muted">${T.quickTypesHint}</small>
-          <div class="flex">${[1, 2, 3, 4].map(r => `<label class="field"><span>${r}${T.r}, ${T.m2}</span><input type="number" step="0.1" data-qt="${r}" value="${[0, 42, 62, 84, 105][r]}"></label>`).join('')}</div></div></div>
-      <label class="field"><span>${T.firstFloor}</span><select id="wz-ff"><option value="com">${T.ffCom}</option><option value="flat">${T.ffFlat}</option><option value="none">${T.ffNone}</option></select></label>
-      <label class="field"><span>${T.comN}</span><input id="wz-cn" type="number" min="0" max="20" value="1"></label>
-      <label class="field"><span>${T.comArea}</span><input id="wz-ca" type="number" min="0" step="0.1" value="120"></label>
-      <label class="field"><span>${T.parkN}</span><input id="wz-pn" type="number" min="0" max="400" value="0"></label>
-      <label class="field"><span>${T.storN}</span><input id="wz-sn" type="number" min="0" max="400" value="0"></label>
-      <label class="field"><span>${T.storArea}</span><input id="wz-sa" type="number" min="0" step="0.1" value="4"></label>
-      <label class="field"><span>${T.numFrom}</span><input id="wz-n0" type="number" min="1" value="1"></label>
-      <label class="field"><span>${T.numMode}</span><select id="wz-nm"><option value="block">${T.numBlock}</option><option value="ent">${T.numEnt}</option><option value="floor">${T.numFloor}</option></select></label>
-      ${b && unitsOf(b.id).length ? `<label class="field"><span>${T.existing}</span><select id="wz-mode"><option value="replace">${T.modeReplace}</option><option value="add">${T.modeAdd}</option></select></label>` : ''}
-    </div>
-    <div class="alert alert-info mt" id="wz-sum"></div>
-    <div class="flex mt"><button class="btn btn-p" id="wz-go">${T.create}</button><button class="btn" data-x>${T.cancel}</button></div></div>`;
+    <div class="modal-b">
+      <div class="form wz-main">
+        ${b ? '' : `<label class="field"><span>${T.blockName}</span><input id="wz-name" value="${inv ? String.fromCharCode(65 + inv.blocks.length) : 'A'}" maxlength="40"><small>${T.blockNameHint}</small></label>`}
+        <label class="field"><span>${T.entrN}</span><input id="wz-ent" type="number" min="1" max="40" value="${b ? b.entr.length : C.build.sections || 1}" ${b ? 'disabled' : ''}></label>
+        <label class="field"><span>${T.floorsTotal}</span><input id="wz-f1" type="number" min="1" max="150" value="${b ? b.floors : C.build.floors || 9}"><small>${T.floorsTotalHint}</small></label>
+        <label class="field"><span>${T.firstFloor}</span><select id="wz-ff"><option value="com">${T.ffCom}</option><option value="flat">${T.ffFlat}</option><option value="none">${T.ffNone}</option></select></label>
+      </div>
+      <div class="wz-sec">
+        <div class="wz-sec-h"><b>${T.perFloorN}</b><span class="wz-step"><button type="button" data-n="-1" aria-label="−">−</button><b id="wz-n">${pos.length}</b><button type="button" data-n="1" aria-label="+">+</button></span></div>
+        <small class="muted">${T.perFloorHint2}</small>
+        <div id="wz-pos" class="wz-pos-row"></div>
+      </div>
+      <div class="wz-sec" id="wz-com"><div class="form" style="grid-template-columns:1fr 1fr">
+        <label class="field"><span>${T.comN}</span><input id="wz-cn" type="number" min="0" max="20" value="1"></label>
+        <label class="field"><span>${T.comArea}</span><input id="wz-ca" type="number" min="0" step="0.1" value="120"></label></div></div>
+      ${has ? `<label class="field wz-exist"><span>${T.existing}</span><select id="wz-mode"><option value="replace">${T.modeReplace}</option><option value="add">${T.modeAdd}</option></select></label>` : ''}
+      <details class="wz-more"><summary>${T.more}</summary><div class="form" style="grid-template-columns:1fr 1fr 1fr">
+        <label class="field"><span>${T.fromFloor}</span><input id="wz-f0" type="number" min="1" max="150" placeholder="${T.fromAuto}"></label>
+        <label class="field"><span>${T.numFrom}</span><input id="wz-n0" type="number" min="1" value="1"></label>
+        <label class="field"><span>${T.numMode}</span><select id="wz-nm"><option value="block">${T.numBlock}</option><option value="ent">${T.numEnt}</option><option value="floor">${T.numFloor}</option></select></label>
+        <label class="field"><span>${T.parkN}</span><input id="wz-pn" type="number" min="0" max="400" value="0"></label>
+        <label class="field"><span>${T.storN}</span><input id="wz-sn" type="number" min="0" max="400" value="0"></label>
+        <label class="field"><span>${T.storArea}</span><input id="wz-sa" type="number" min="0" step="0.1" value="4"></label>
+      </div></details>
+      <div class="wz-prev" id="wz-prev"></div>
+      <div class="alert alert-info mt" id="wz-sum"></div>
+      <div class="flex mt"><button class="btn btn-p" id="wz-go">${T.create}</button><button class="btn" data-x>${T.cancel}</button></div>
+    </div>`;
     document.body.append(dlg);
-    const box = dlg.querySelector('#wz-types');
-    const addPos = v => { const w = document.createElement('span'); w.className = 'wz-pos'; w.innerHTML = typeSel(v) + `<button type="button" class="icon-btn" title="${T.del}">✕</button>`; box.append(w); };
-    (startTypes.length ? startTypes : ['+', '+', '+', '+']).forEach(addPos);
-    if (!flatTypes.length) box.querySelectorAll('.wz-t').forEach((s, i) => { s.dataset.quick = [1, 2, 2, 3][i]; });
-    const sum = () => {
-      const ent = b ? b.entr.length : Math.max(1, num(dlg.querySelector('#wz-ent').value, 1)), f0 = num(dlg.querySelector('#wz-f0').value, 1), f1 = num(dlg.querySelector('#wz-f1').value, f0);
-      const per = box.children.length, ff = dlg.querySelector('#wz-ff').value;
-      const flats = ent * Math.max(0, f1 - f0 + 1) * per + (ff === 'flat' && f0 > 1 ? ent * per : 0);
-      const com = ff === 'com' ? ent * num(dlg.querySelector('#wz-cn').value) : 0;
-      const mode = dlg.querySelector('#wz-mode'), had = b ? unitsOf(b.id).filter(u => !deals[u.id]).length : 0;
-      const note = mode ? `<div class="mt">${(mode.value === 'replace' ? T.wzReplace : T.wzAdd).replace(':n', `<b>${had}</b>`)}</div>` : '';
-      dlg.querySelector('#wz-sum').innerHTML = note + '<div>' + T.wzSum.replace(':f', `<b>${flats}</b>`).replace(':c', `<b>${com}</b>`).replace(':p', `<b>${ent * num(dlg.querySelector('#wz-pn').value)}</b>`).replace(':s', `<b>${ent * num(dlg.querySelector('#wz-sn').value)}</b>`) + '</div>';
+    const q = s => dlg.querySelector(s), box = q('#wz-pos');
+    const drawPos = () => {
+      q('#wz-n').textContent = pos.length;
+      box.innerHTML = pos.map((p, i) => `<div class="wz-card" data-i="${i}"><b>${i + 1}</b>
+        <select data-k="r" aria-label="${T.rooms}">${[1, 2, 3, 4, 5].map(k => `<option value="${k}" ${k === p.r ? 'selected' : ''}>${k}${T.rN}</option>`).join('')}</select>
+        <label><input data-k="a" type="number" step="0.1" min="5" value="${p.a}" aria-label="${T.area}"><span>${T.m2}</span></label></div>`).join('');
     };
-    dlg.addEventListener('input', sum); dlg.addEventListener('change', sum);
+    box.addEventListener('change', e => {
+      const card = e.target.closest('.wz-card'); if (!card) return;
+      const p = pos[+card.dataset.i];
+      if (e.target.dataset.k === 'r') { const r = +e.target.value; if (Math.abs(p.a - ROOM_AREA[p.r]) < 0.01) p.a = ROOM_AREA[r]; p.r = r; drawPos(); }
+      else p.a = Math.max(5, num(e.target.value, p.a));
+      sum();
+    });
+    dlg.querySelectorAll('[data-n]').forEach(x => x.addEventListener('click', () => {
+      if (+x.dataset.n > 0 && pos.length < 30) pos.push(Object.assign({}, pos[pos.length - 1] || { r: 2, a: 62 }));
+      if (+x.dataset.n < 0 && pos.length > 1) pos.pop();
+      drawPos(); sum();
+    }));
+    /** Что задано в окне */
+    const params = () => {
+      const ff = q('#wz-ff').value, f1 = Math.max(1, Math.round(num(q('#wz-f1').value, 1)));
+      const auto = ff === 'flat' ? 1 : 2, from = Math.min(f1, Math.max(1, Math.round(num(q('#wz-f0').value, auto)) || auto));
+      return { ent: b ? b.entr.length : Math.max(1, Math.min(40, Math.round(num(q('#wz-ent').value, 1)))), f1, ff, from,
+        cn: ff === 'com' ? Math.max(0, Math.round(num(q('#wz-cn').value))) : 0, ca: num(q('#wz-ca').value, 100),
+        pn: Math.round(num(q('#wz-pn').value)), sn: Math.round(num(q('#wz-sn').value)), sa: num(q('#wz-sa').value, 4),
+        n0: Math.max(1, Math.round(num(q('#wz-n0').value, 1))), nm: q('#wz-nm').value, mode: q('#wz-mode') ? q('#wz-mode').value : 'add', pos: pos.slice() };
+    };
+    const sum = () => {
+      const P = params(), list = plan(P, b), cnt = k => list.filter(u => u.kind === k).length;
+      q('#wz-com').hidden = P.ff !== 'com';
+      // шахматка 1-го подъезда: этажи сверху вниз, номера как будут
+      const rows = [];
+      for (let f = P.f1; f >= Math.min(1, ...list.map(u => u.f)); f--) rows.push([f, list.filter(u => u.ei === 0 && u.f === f)]);
+      const show = rows.length > 11 ? [...rows.slice(0, 5), null, ...rows.slice(-4)] : rows;
+      q('#wz-prev').innerHTML = `<div class="wz-prev-h"><b>${T.prevCap}</b>${P.ent > 1 ? `<span class="muted">${T.prevMore.replace(':n', P.ent)}</span>` : ''}</div>
+        <div class="wz-chess">${show.map(r => r ? `<div class="wz-row"><i>${r[0]}</i>${r[1].length ? r[1].map(u => `<span class="k-${u.kind}">${esc(u.num)}${u.kind === 'flat' ? `<small>${u.rooms}${T.r}</small>` : ''}</span>`).join('') : `<em>${T.emptyFloor}</em>`}</div>` : '<div class="wz-row wz-gap">⋯</div>').join('')}</div>`;
+      const had = b ? unitsOf(b.id).filter(u => !deals[u.id]).length : 0;
+      const note = q('#wz-mode') ? `<div>${(P.mode === 'replace' ? T.wzReplace : T.wzAdd).replace(':n', `<b>${had}</b>`)}</div>` : '';
+      q('#wz-sum').innerHTML = note + '<div>' + T.wzSum.replace(':f', `<b>${cnt('flat')}</b>`).replace(':c', `<b>${cnt('commercial')}</b>`).replace(':p', `<b>${cnt('parking')}</b>`).replace(':s', `<b>${cnt('storage')}</b>`) + '</div>';
+    };
+    dlg.addEventListener('input', e => { if (!e.target.closest('#wz-pos')) sum(); });
+    dlg.addEventListener('change', e => { if (!e.target.closest('#wz-pos')) sum(); });
     // добавляем к имеющимся — номера продолжают их; заменяем — с 1
-    dlg.querySelector('#wz-mode')?.addEventListener('change', e => { dlg.querySelector('#wz-n0').value = e.target.value === 'add' ? Math.max(0, ...unitsOf(b.id).filter(isFlat).map(u => parseInt(u.num) || 0)) + 1 : 1; });
-    dlg.querySelector('#wz-addt').onclick = () => { addPos(box.lastElementChild ? box.lastElementChild.querySelector('select').value : '+'); sum(); };
-    box.addEventListener('click', e => { if (e.target.closest('.icon-btn') && box.children.length > 1) { e.target.closest('.wz-pos').remove(); sum(); } });
-    box.addEventListener('change', e => { if (e.target.value === '+') { dlg.querySelector('#wz-quick').hidden = false; e.target.dataset.quick = '2'; } });
+    q('#wz-mode')?.addEventListener('change', e => { q('#wz-n0').value = e.target.value === 'add' ? Math.max(0, ...unitsOf(b.id).filter(isFlat).map(u => parseInt(u.num) || 0)) + 1 : 1; sum(); });
     dlg.addEventListener('click', e => { if (e.target.closest('[data-x]') || e.target === dlg) dlg.close(); });
     dlg.addEventListener('close', () => dlg.remove());
-    dlg.querySelector('#wz-go').onclick = () => { if (buildBlock(dlg, b)) dlg.close(); };
-    sum(); dlg.showModal();
+    q('#wz-go').onclick = () => { if (buildBlock(dlg, b, params())) dlg.close(); };
+    drawPos(); sum(); dlg.showModal();
   }
-  function buildBlock(dlg, b) {
-    const q = s => dlg.querySelector(s), v = s => q(s) ? q(s).value : '';
+  /** Помещения, которые создаст мастер: ei — номер подъезда по порядку */
+  function plan(P, b) {
+    const out = [], taken = new Set(P.mode === 'add' && b ? unitsOf(b.id).map(u => u.num) : []);
+    let n = P.n0, cnum = 1, pnum = 1, snum = 1;
+    for (let ei = 0; ei < P.ent; ei++) {
+      if (P.nm === 'ent') n = P.n0;
+      for (let i = 0; i < P.pn; i++) out.push({ ei, f: -1, num: 'P' + pnum++, kind: 'parking', area: 13.25 });
+      for (let i = 0; i < P.sn; i++) out.push({ ei, f: -1, num: 'S' + snum++, kind: 'storage', area: P.sa });
+      if (P.ff === 'com' && P.from > 1) for (let i = 0; i < P.cn; i++) out.push({ ei, f: 1, num: 'N' + cnum++, kind: 'commercial', area: P.ca });
+      for (let f = P.from; f <= P.f1; f++) {
+        if (P.nm === 'floor') n = 1;
+        P.pos.forEach((p, i) => {
+          let label = P.nm === 'floor' ? `${f}${String(i + 1).padStart(2, '0')}` : String(n++);
+          while (taken.has(label) && P.nm !== 'floor') label = String(n++);
+          taken.add(label);
+          out.push({ ei, f, num: label, kind: 'flat', rooms: p.r, area: p.a });
+        });
+      }
+    }
+    return out;
+  }
+  function buildBlock(dlg, b, P) {
+    const q = s => dlg.querySelector(s);
+    if (!P.pos.length) { ui.alert(T.needPos); return false; }
     if (!inv) inv = { v: 1, blocks: [], types: [], units: [], price: { ppm2: C.build.pricePerM2 || 0, step: C.build.floorStep || 0, from: C.build.commercialFirst ? 2 : 1, commercial: C.build.commercialPrice || 0, storage: 0, parking: 0, round: 1000 }, ready: false };
-    // быстрые планировки (если их ещё нет): 1-, 2-, 3-, 4-комнатные с указанной площадью
-    const quick = {};
-    const pos = [...dlg.querySelectorAll('.wz-t')].map(s => {
-      if (s.value !== '+') return s.value;
-      const r = Math.max(1, Math.min(4, num(s.dataset.quick, 2)));
-      if (!quick[r]) { const area = num(q(`[data-qt="${r}"]`).value, [0, 42, 62, 84, 105][r]);
-        const ex = inv.types.find(t => (t.kind || 'flat') === 'flat' && t.rooms === r && Math.abs(num(t.area) - area) < 0.05);
-        quick[r] = ex ? ex.id : (inv.types.push({ id: rid('t'), name: `${r}${T.r} ${fmt(area, 1)} ${T.m2}`, kind: 'flat', rooms: r, area }), inv.types[inv.types.length - 1].id); }
-      return quick[r];
-    });
-    if (!pos.length) { ui.alert(T.needPos); return false; }
-    const f0 = Math.max(1, Math.round(num(v('#wz-f0'), 1))), f1 = Math.max(f0, Math.round(num(v('#wz-f1'), f0)));
     if (!b) {
-      const ent = Math.max(1, Math.min(40, Math.round(num(v('#wz-ent'), 1))));
-      b = { id: rid('b'), name: v('#wz-name').trim(), floors: f1, entr: Array.from({ length: ent }, (_, i) => ({ id: rid('e'), name: String(i + 1) })) };
+      b = { id: rid('b'), name: (q('#wz-name') ? q('#wz-name').value : '').trim(), floors: P.f1, entr: Array.from({ length: P.ent }, (_, i) => ({ id: rid('e'), name: String(i + 1) })) };
       inv.blocks.push(b);
-    } else b.floors = Math.max(b.floors || 1, f1);
-    if (v('#wz-mode') === 'replace') {
+    } else b.floors = P.mode === 'replace' ? P.f1 : Math.max(b.floors || 1, P.f1);
+    if (P.mode === 'replace') {
       const keep = unitsOf(b.id).filter(u => deals[u.id]);
       inv.units = inv.units.filter(u => u.b !== b.id || deals[u.id]);
       if (keep.length) toast(T.keptDeals.replace(':n', keep.length));
     }
-    const ff = v('#wz-ff'), mode = v('#wz-nm'), cn = Math.round(num(v('#wz-cn'))), ca = num(v('#wz-ca'), 100), pn = Math.round(num(v('#wz-pn'))), sn = Math.round(num(v('#wz-sn'))), sa = num(v('#wz-sa'), 4);
-    let n = Math.max(1, Math.round(num(v('#wz-n0'), 1))), cnum = 1, pnum = 1, snum = 1;
-    const taken = new Set(unitsOf(b.id).map(u => u.num));
-    const add = u => { inv.units.push(Object.assign({ id: rid('u'), b: b.id }, u)); };
-    b.entr.forEach((e, ei) => {
-      if (mode === 'ent') n = Math.max(1, Math.round(num(v('#wz-n0'), 1)));
-      for (let i = 0; i < pn; i++) add({ e: e.id, f: -1, num: 'P' + pnum++, kind: 'parking', area: 13.25 });
-      for (let i = 0; i < sn; i++) add({ e: e.id, f: -1, num: 'S' + snum++, kind: 'storage', area: sa });
-      if (ff === 'com' && f0 > 1) for (let i = 0; i < cn; i++) add({ e: e.id, f: 1, num: 'N' + cnum++, kind: 'commercial', area: ca });
-      const from = ff === 'flat' ? Math.min(1, f0) : f0;
-      for (let f = from; f <= f1; f++) {
-        if (mode === 'floor') n = 1;
-        pos.forEach((tid, i) => { const t = typeOf(tid) || {};
-          let label = mode === 'floor' ? `${f}${String(i + 1).padStart(2, '0')}` : String(n++);
-          while (taken.has(label) && mode !== 'floor') label = String(n++);
-          taken.add(label);
-          add({ e: e.id, f, num: label, kind: 'flat', type: tid, rooms: t.rooms || 1, area: num(t.area, 50) });
-        });
-      }
+    // планировка квартиры — по числу комнат и площади: есть такая — берём, нет — создаём («2-комн. 62 м²»)
+    const typeFor = (r, a) => {
+      const ex = inv.types.find(t => (t.kind || 'flat') === 'flat' && t.rooms === r && Math.abs(num(t.area) - a) < 0.05);
+      if (ex) return ex.id;
+      const t = { id: rid('t'), name: `${r}${T.r} ${fmt(a, 1)} ${T.m2}`, kind: 'flat', rooms: r, area: a };
+      inv.types.push(t);
+      return t.id;
+    };
+    plan(P, b).forEach(u => {
+      const e = b.entr[u.ei];
+      const x = { id: rid('u'), b: b.id, e: e.id, f: u.f, num: u.num, kind: u.kind, area: u.area };
+      if (u.kind === 'flat') { x.rooms = u.rooms; x.type = typeFor(u.rooms, u.area); }
+      inv.units.push(x);
     });
     cur = b.id; sel.clear(); view = 'grid'; mark(); render();
     toast(T.created);

@@ -970,6 +970,53 @@ export async function start(el, cfg) {
     block: () => curBlock,
     // карточка закрыта — не рисуем (в iframe внутри закрытого окна)
     pause(on) { renderer.setAnimationLoop(on ? null : loop); },
+    // ---------- плоский фасад: разметка окон на снимке стены, без 3D-рамок и стрелок ----------
+    /**
+     * Снимок стороны рамки без перспективы. Картинка шире стены на m с каждого края; dir — куда идёт доля a на картинке
+     * (1 — слева направо, −1 — справа налево: сзади и на правом торце стена видна «с обратной стороны»).
+     */
+    facade(face, maxSide = 1500) {
+      const c = C(curBlock), zf = Math.abs(face) === 1, Lf = zf ? c.s[0] : c.s[2], H = c.s[1], depth = zf ? c.s[2] : c.s[0], m = 0.04;
+      const W = Lf * (1 + 2 * m), Hh = H * (1 + 2 * m), out = Math.max(1, depth * 0.3);
+      applyFrame(curBlock);
+      const n = normalOf(face).applyQuaternion(frame.quaternion).normalize(), ctr = frame.getWorldPosition(new THREE.Vector3());
+      const cam = new THREE.OrthographicCamera(-W / 2, W / 2, Hh / 2, -Hh / 2, 0.01, depth + out * 2);
+      cam.position.copy(ctr).addScaledVector(n, depth / 2 + out); cam.up.set(0, 1, 0); cam.lookAt(ctr); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+      const k = maxSide / Math.max(W, Hh), w = Math.max(64, Math.round(W * k)), h = Math.max(64, Math.round(Hh * k));
+      const light = new THREE.DirectionalLight(0xffffff, 0.9); light.position.copy(cam.position).add(new THREE.Vector3(0, Hh * 0.3, 0)); light.target.position.copy(ctr);
+      const restore = hideAll();
+      scene.add(light, light.target);
+      const pr = renderer.getPixelRatio(), size = renderer.getSize(new THREE.Vector2());
+      renderer.setPixelRatio(1); renderer.setSize(w, h, false);
+      renderer.render(scene, cam);
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      const g = cv.getContext('2d'); g.fillStyle = '#e9edf3'; g.fillRect(0, 0, w, h); g.drawImage(canvas, 0, 0, w, h, 0, 0, w, h);
+      renderer.setPixelRatio(pr); renderer.setSize(size.x, size.y, false);
+      scene.remove(light, light.target); restore();
+      renderer.render(scene, camera);
+      return { url: cv.toDataURL('image/jpeg', 0.88), w, h, m, dir: { 1: 1, '-1': -1, 2: -1, '-2': 1 }[face] };
+    },
+    /** Сетка стороны: границы окон (доли) и этажи модели (доли высоты) с этажами объекта на каждом */
+    facadeGrid(face) {
+      const c = C(curBlock), B = blocks[curBlock], F = Math.max(1, c.floors || B.floors), { yAt } = floorOf({ f: 1 }, B, c), rows = [];
+      for (let k = 1; k <= F; k++) rows.push({ k, y0: yAt(k - 1), y1: yAt(k), floors: [] });
+      [...new Set(unitsOf(curBlock).map((u) => u.f))].sort((a, b) => a - b).forEach((f) => rows[floorOf({ f }, B, c).f - 1].floors.push(f));
+      return { edges: winEdges(winOf(c, face)), rows };
+    },
+    /** Чьё окно k на стороне face на этаже объекта floor: id квартиры или null */
+    facadeOwners(face, floor) {
+      const c = C(curBlock), ex = winEdges(winOf(c, face)), out = new Array(ex.length - 1).fill(null);
+      unitsOf(curBlock).filter((u) => u.f === floor).forEach((u) => cellsSet(placeNow(u, c).g, ex, face).forEach((k) => { out[k] = u.id; }));
+      return out;
+    },
+    /** Окна ks на стороне face — квартире id (add) или убрать у неё; одним шагом для «Отменить» */
+    paint(id, face, ks, add) {
+      if (!byId[id] || !ks.length) return;
+      const before = snap();
+      mark.sel = id;
+      ks.forEach((k) => paintCell(face, k, add));
+      changed(); remember(before);
+    },
     /** Для тестов: где на экране точка стены рамки (сторона, доля вдоль неё, доля высоты) */
     screenOf(face, a, y) {
       const zf = Math.abs(face) === 1, w = 0.5 * Math.sign(face);
