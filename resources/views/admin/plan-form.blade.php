@@ -1,8 +1,8 @@
 @php $p = $p ?? null; $L = config('oftob.locales'); @endphp
 <div class="form">
   <label class="field"><span>{{ __('Код (латиницей)') }}</span><input name="slug" value="{{ $p?->slug }}" required pattern="[A-Za-z0-9_\-]+"></label>
-  <label class="field"><span>{{ __('Цена в месяц') }}</span><input type="number" name="price_month" value="{{ $p ? (int) $p->price_month : '' }}" min="0" step="1000" required></label>
-  <label class="field"><span>{{ __('Цена за год') }}</span><input type="number" name="price_year" value="{{ $p ? (int) $p->price_year : '' }}" min="0" step="1000"><small>{{ __('0 — не продаётся на год') }}</small></label>
+  <label class="field"><span>{{ __('Цена в месяц') }}</span><input type="number" name="price_month" value="{{ $p ? (int) $p->price_month : '' }}" min="0" step="any" required></label>
+  <label class="field"><span>{{ __('Цена за год') }}</span><input type="number" name="price_year" value="{{ $p ? (int) $p->price_year : '' }}" min="0" step="any"><small>{{ __('0 — не продаётся на год') }}</small></label>
   <label class="field"><span>{{ __('Валюта') }}</span><input name="currency" value="{{ $p?->currency ?? 'сум' }}" required></label>
   <label class="field"><span>{{ __('Объектов (0 — без лимита)') }}</span><input type="number" name="max_objects" value="{{ $p?->max_objects ?? 1 }}" min="0" required></label>
   <label class="field"><span>{{ __('Пользователей (0 — без лимита)') }}</span><input type="number" name="max_users" value="{{ $p?->max_users ?? 5 }}" min="0" required></label>

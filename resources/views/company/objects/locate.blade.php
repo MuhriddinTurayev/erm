@@ -450,7 +450,8 @@ if (window.parent !== window) window.parent.postMessage({ type: 'oftob-locate-re
 const first = UNIT && L.units[UNIT] ? UNIT : null;
 document.querySelectorAll('#lcBar [data-act]').forEach((b) => b.addEventListener('click', (e) => {
   const a = b.dataset.act;
-  if (a === 'unit') L.focusSelected();
+  // «Квартира»: после «Весь дом» выбор сброшен — показываем ту же квартиру снова (карточка и кнопка «Внутри» возвращаются)
+  if (a === 'unit') { if (!CALIB && current) L.show(current.id); else L.focusSelected(); }
   if (a === 'house') { if (CALIB) L.overview(); else { L.statusView(); $('#lcU').innerHTML = T.pickHint + legend(); $('#lcNote').hidden = true; b.parentNode.querySelector('[data-act=inner]').hidden = true; } }
   if (a === 'inner' && current) openInner(current);
   if (a === 'full') { e.preventDefault(); const u = new URL(location.href); u.searchParams.delete('embed'); window.open(u, '_blank'); }

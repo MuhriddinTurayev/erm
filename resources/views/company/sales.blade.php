@@ -89,6 +89,9 @@
 <dialog class="modal wide" id="dlg-apt">
   <div class="modal-h"><h3 id="ap-title"></h3><button type="button" class="icon-btn" data-close>{!! ic('x') !!}</button></div>
   <div class="modal-b">
+    @if (session('open') && ($errors->any() || session('ok')))
+    <div id="ap-msg" data-for="{{ session('open') }}" class="alert {{ $errors->any() ? 'alert-bad' : 'alert-ok' }}">{!! ic($errors->any() ? 'circle-alert' : 'circle-check') !!}<div>{{ $errors->any() ? $errors->first() : session('ok') }}</div></div>
+    @endif
     <div class="sum-line" id="ap-sub" style="margin-bottom:14px"></div>
     @if ($model)
     {{-- где квартира в доме: 3D-модель здания, квартира подсвечена (company/objects/locate) --}}
@@ -97,7 +100,7 @@
     <div class="grid g2">
       <form method="post" id="ap-form" class="form" style="grid-template-columns:1fr 1fr;align-content:start">@csrf
         <label class="field"><span>{{ __('Статус') }}</span><select name="status">@foreach ($ST as $k => $v)<option value="{{ $k }}">{{ __($v) }}</option>@endforeach</select></label>
-        <label class="field"><span>{{ __('Цена') }}, {{ __($cur) }}</span><input type="number" name="price" min="0" step="1000"></label>
+        <label class="field"><span>{{ __('Цена') }}, {{ __($cur) }}</span><input type="number" name="price" min="0" step="any"></label>
         <label class="field full"><span>{{ __('Покупатель (ФИО)') }}</span><input name="buyer" maxlength="120"></label>
         <label class="field"><span>{{ __('Телефон') }}</span><input name="phone" maxlength="40" placeholder="+998"></label>
         <label class="field"><span>{{ __('Условия оплаты') }}</span><select name="plan"><option value="">—</option>@foreach ($PL as $x)<option value="{{ $x }}">{{ __($x) }}</option>@endforeach</select></label>
@@ -111,7 +114,7 @@
         @if ($canSell)
         <form method="post" id="ap-pay" class="flex mt" style="flex-wrap:wrap">@csrf
           <input class="input" type="date" name="date" value="{{ $ws->localNow()->toDateString() }}" style="width:150px">
-          <input class="input" type="number" name="amount" min="1" step="1000" placeholder="{{ __('Сумма') }}" style="width:150px" required>
+          <input class="input" type="number" name="amount" min="1" step="any" placeholder="{{ __('Сумма') }}" style="width:150px" required>
           <select class="input" name="way" style="width:auto"><option value="">{{ __('Способ') }}</option>@foreach (['Наличные', 'Перечисление', 'Карта', 'Click', 'Payme'] as $w)<option value="{{ $w }}">{{ __($w) }}</option>@endforeach</select>
           <button class="btn btn-p btn-s">{!! ic('plus') !!}{{ __('Принять оплату') }}</button>
         </form>
@@ -153,7 +156,8 @@
       + ints.map(x => `<a class="btn btn-s" href="/company/objects/${PID}/3d?m=${x.id}" target="_blank">${T.t3}: ${esc(x.title)}</a>`).join('')
       + (panos.length ? `<a class="btn btn-s" href="/company/objects/${PID}/3d?m=${panos[0].id}" target="_blank">${T.pano} (${panos.length})</a>` : '')
       + (planDoc ? `<a class="btn btn-s" href="/company/media/${planDoc.id}/file" target="_blank">${T.plan} (PDF)</a>` : '');
-    dlg.dataset.apt = a.id; dlg.showModal();
+    dlg.dataset.cur = a.id; dlg.showModal();
+    const msg = document.getElementById('ap-msg'); if (msg) msg.hidden = msg.dataset.for !== String(id);   // «Сохранено» / ошибка — только у той квартиры, где сохраняли
     show3d(a.id);
   }
   // 3D дома: модель грузится один раз, следующие квартиры переключаются сообщением
@@ -171,8 +175,8 @@
   });
   dlg.addEventListener('close', () => { if (fr && frReady) fr.contentWindow.postMessage({ type: 'oftob-locate-pause', on: true }, location.origin); });
   document.addEventListener('click', async e => {
-    const b = e.target.closest('[data-apt]'); if (b) { e.preventDefault(); open(b.dataset.apt); return; }
-    const d = e.target.closest('[data-del]'); if (d && await ui.confirm(T.del)) { const f = document.getElementById('ap-del'); f.action = `/company/sales/${PID}/apt/${dlg.dataset.apt}/pay/${d.dataset.del}`; f.submit(); }
+    const b = e.target.closest('[data-apt]'); if (b && !b.closest('dialog')) { e.preventDefault(); open(b.dataset.apt); return; }
+    const d = e.target.closest('[data-del]'); if (d && await ui.confirm(T.del)) { const f = document.getElementById('ap-del'); f.action = `/company/sales/${PID}/apt/${dlg.dataset.cur}/pay/${d.dataset.del}`; f.submit(); }
     const l = e.target.closest('[data-link]'); if (l) { const f = document.getElementById('ap-link'); f.action = `/company/sales/${PID}/apt/${l.dataset.link}/link`; f.submit(); }
   });
   @if (session('open')) open(@json(session('open'))); @endif
