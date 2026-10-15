@@ -417,3 +417,4 @@ button,.btn,select,input.txt,.inp{border-radius:10px}
 .pano-list{display:flex;gap:8px;flex-wrap:wrap}
 .inner-tools{align-items:center;gap:10px}
 .is-busy{opacity:.6;pointer-events:none;cursor:progress}
+.ms-main b.ms-full{font-size:clamp(20px,2vw,28px);line-height:1.15;word-break:break-word}

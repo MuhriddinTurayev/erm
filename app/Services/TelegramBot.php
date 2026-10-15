@@ -391,7 +391,7 @@ class TelegramBot
         $T = $s['totals'];
         $c = ' '.__($s['currency']);
         $m = fn ($v) => CompanyStats::short((float) $v).$c;
-        $L = ['💰 <b>'.__('Деньги на счету (касса)').': '.$m($T['balance']).'</b>',
+        $L = ['💰 <b>'.__('Деньги на счету (касса)').': '.CompanyStats::money((float) $T['balance']).$c.'</b>',
             '📉 '.__('Потрачено сегодня').': '.$m($T['out_day']), '📉 '.__('Потрачено вчера').': '.$m($T['out_yest']), '📈 '.__('Поступило сегодня').': '.$m($T['in_day'])];
         foreach (array_slice($s['cats_day'], 0, 4, true) as $cat => $v) {
             $L[] = '• '.e(__($cat)).' — '.$m($v);

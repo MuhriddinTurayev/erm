@@ -59,7 +59,7 @@ function homeMoneyStrip() {
   const cats = {}; P_.forEach(x => x.tx.forEach(tx => { if (tx.type === 'out' && tx.date === t) cats[tx.cat] = (cats[tx.cat] || 0) + tx.amount; }));
   const top = Object.entries(cats).sort((a, b) => b[1] - a[1])[0];
   return `<section class="money-strip" data-act="go" data-page="cash">
-    <div class="ms-main"><span>💰 Деньги компании на счету</span><b>${moneyS(bal)}</b><small>${SAAS && SAAS.cashDesks != null ? T('во всех кассах и на счетах') : P_.length + ' ' + T('объект(ов)')}</small></div>
+    <div class="ms-main"><span>💰 Деньги компании на счету</span><b class="ms-full" title="${moneyS(bal)}">${money(bal)}</b><small>${SAAS && SAAS.cashDesks != null ? T('во всех кассах и на счетах') : P_.length + ' ' + T('объект(ов)')}</small></div>
     <div><span>Потрачено сегодня</span><b class="bad">${dT ? '−' : ''}${moneyS(dT)}</b><small>${dY ? deltaHtml(dT, dY) + 'к вчера' : '&nbsp;'}</small></div>
     <div><span>Потрачено вчера</span><b>${dY ? '−' : ''}${moneyS(dY)}</b><small>${fdate(y)}</small></div>
     <div><span>Поступило сегодня</span><b class="ok">${iT ? '+' : ''}${moneyS(iT)}</b><small>&nbsp;</small></div>

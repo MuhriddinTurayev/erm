@@ -126,7 +126,7 @@ PAGES.cash = {
       ${SAAS && SAAS.canEdit ? '<button class="btn-p btn-s" data-act="cashAdd">+ Расход / приход</button>' : ''}
     </div>
     <div class="kpis">
-      ${kpi(obj ? 'Приход − расход объекта' : 'Деньги на счету (касса)', moneyS(bal), obj ? esc((DB.projects.find(p => p.id === obj) || {}).name || '') : (SAAS && SAAS.cashDesks != null ? 'во всех кассах и на счетах' : 'по всем объектам'), bal >= 0 ? 'ok' : 'bad')}
+      ${kpi(obj ? 'Приход − расход объекта' : 'Деньги на счету (касса)', money(bal), obj ? esc((DB.projects.find(p => p.id === obj) || {}).name || '') : (SAAS && SAAS.cashDesks != null ? 'во всех кассах и на счетах' : 'по всем объектам'), bal >= 0 ? 'ok' : 'bad')}
       ${kpi('Потрачено сегодня', moneyS(dT), dY ? deltaHtml(dT, dY) + 'к вчера' : '', 'bad')}
       ${kpi('Потрачено вчера', moneyS(dY), fdate(y))}
       ${kpi('Поступило сегодня', moneyS(iT), '', 'ok')}

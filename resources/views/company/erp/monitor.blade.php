@@ -17,7 +17,7 @@
     <a class="kpi hero" href="/company/cash" style="text-decoration:none">
       <span class="k-ic">{!! ic('wallet') !!}</span>
       <div class="k-l">{{ __('Деньги в кассах') }}</div>
-      <div class="k-v">{{ money_s($kpi['cash'], $cur) }}</div>
+      <div class="k-v k-full" title="{{ money_s($kpi['cash'], $cur) }}">{{ money_f($kpi['cash'], $cur) }}</div>
       <div class="k-s">{!! trend($kpi['cash'], $kpi['cash_prev'], true, __('к неделе назад')) !!}{{ __('изменение за 7 дней') }}</div>
     </a>
     <a class="kpi tone-bad" href="/company/overview" style="text-decoration:none;color:inherit">

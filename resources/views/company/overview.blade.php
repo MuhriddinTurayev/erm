@@ -23,7 +23,7 @@
   if (count($objs) < 2) { $objs = $s['objects']; }
 @endphp
 <div class="kpis">
-  <div class="kpi hero"><span class="k-ic">{!! ic('wallet') !!}</span><div class="k-l">{{ __('Деньги на счету (касса)') }}</div><div class="k-v" title="{{ money_f($T['balance'], $cur) }}">{{ $m($T['balance']) }}</div><div class="k-s">{{ isset($T['objects_balance']) ? __('во всех кассах и на счетах') : __('по всем объектам') }}</div></div>
+  <div class="kpi hero"><span class="k-ic">{!! ic('wallet') !!}</span><div class="k-l">{{ __('Деньги на счету (касса)') }}</div><div class="k-v k-full" title="{{ $m($T['balance']) }}">{{ money_f($T['balance'], $cur) }}</div><div class="k-s">{{ isset($T['objects_balance']) ? __('во всех кассах и на счетах') : __('по всем объектам') }}</div></div>
   <div class="kpi tone-bad"><span class="k-ic">{!! ic('trending-down') !!}</span><div class="k-l">{{ $isToday ? __('Потрачено сегодня') : __('Потрачено за день') }}</div><div class="k-v" title="{{ money_f($T['out_day'], $cur) }}">{{ $m($T['out_day']) }}</div>
     <div class="k-s">{!! trend($T['out_day'], $T['out_yest'], false, __('к вчера')) !!}{{ __('вчера') }}: {{ $m($T['out_yest']) }} · {{ __('операций') }}: {{ $T['ops_day'] }}</div></div>
   <div class="kpi tone-info"><span class="k-ic">{!! ic('calendar') !!}</span><div class="k-l">{{ __('Расходы за 7 дней') }}</div><div class="k-v">{{ $m($T['out_week']) }}</div><div class="k-s">{{ __('в среднем') }} {{ $m($T['out_week'] / 7) }} {{ __('в день') }}</div></div>

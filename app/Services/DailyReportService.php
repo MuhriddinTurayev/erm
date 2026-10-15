@@ -69,7 +69,7 @@ class DailyReportService
             $L[] = '☀️ <b>'.$e(PlatformSetting::brand()).' — '.__('отчёт за').' '.Carbon::parse($s['date'])->format('d.m.Y').'</b>';
             $L[] = '🏢 '.$e($ws->name);
             $L[] = '';
-            $L[] = '💰 <b>'.__('Деньги на счету (касса)').': '.$m($T['balance']).'</b>';
+            $L[] = '💰 <b>'.__('Деньги на счету (касса)').': '.CompanyStats::money((float) $T['balance']).' '.__($s['currency']).'</b>';
             $diff = $s['diff_pct'] === null ? '' : ' ('.($s['diff_pct'] >= 0 ? '▲ +' : '▼ ').$s['diff_pct'].'% '.__('к вчера').')';
             $L[] = '📉 '.__('Потрачено сегодня').': <b>'.$m($T['out_day']).'</b>'.$diff;
             $L[] = '📉 '.__('Потрачено вчера').': '.$m($T['out_yest']);
