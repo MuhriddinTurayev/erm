@@ -99,3 +99,33 @@
     f.dataset.uiOk = '1'; if (f.requestSubmit) f.requestSubmit(e.submitter && e.submitter.form === f ? e.submitter : undefined); else f.submit();
   }, true);
 })();
+
+/* Форма уходит один раз: повторное нажатие «Сохранить / Оплатить / Провести» не отправляет её второй раз.
+   У каждой отправки — одноразовый номер _once: даже если запрос всё же придёт дважды, сервер второй не выполнит (OnceSubmit). */
+(() => {
+  const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12));
+  const busy = (f, on) => f.querySelectorAll('button:not([type=button]), input[type=submit]').forEach(b => b.classList.toggle('is-busy', on));
+  // true — можно отправлять; false — эта форма уже ушла
+  const guard = f => {
+    if ((f.getAttribute('method') || 'get').toLowerCase() !== 'post') return true;
+    if (f.dataset.sending === '1') return false;
+    f.dataset.sending = '1';
+    let i = f.querySelector('input[name="_once"]');
+    if (!i) { i = document.createElement('input'); i.type = 'hidden'; i.name = '_once'; i.value = uid(); f.appendChild(i); }
+    busy(f, true);
+    // ответ без перехода (скачивание файла, сеть пропала) — через 8 с форму снова можно отправить (номер тот же: сервер не выполнит дважды)
+    clearTimeout(f._onceT); f._onceT = setTimeout(() => { delete f.dataset.sending; busy(f, false); }, 8000);
+    return true;
+  };
+  document.addEventListener('submit', e => {
+    const f = e.target; if (!(f instanceof HTMLFormElement) || e.defaultPrevented) return;
+    if (!guard(f)) e.preventDefault();
+  });
+  const native = HTMLFormElement.prototype.submit;
+  HTMLFormElement.prototype.submit = function () { if (guard(this)) native.call(this); };
+  // «Назад» в браузере вернул страницу из кэша — формы снова готовы, с новым номером
+  window.addEventListener('pageshow', e => {
+    if (!e.persisted) return;
+    document.querySelectorAll('form[data-sending]').forEach(f => { delete f.dataset.sending; busy(f, false); f.querySelector('input[name="_once"]')?.remove(); });
+  });
+})();

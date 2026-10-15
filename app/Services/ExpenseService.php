@@ -86,6 +86,12 @@ class ExpenseService
     /** Новый расход: сразу в бухгалтерию или на согласование */
     public function create(Workspace $ws, ?User $user, string $projectId, array $d, string $source = 'web', ?string $receipt = null): Expense
     {
+        // тот же расход от того же человека только что записан (сообщение ушло дважды, двойное нажатие) — второй не создаём
+        $same = Expense::where('workspace_id', $ws->id)->where('user_id', $user?->id)->where('project_id', $projectId)->where('amount', $d['amount'])
+            ->where('desc', mb_substr((string) ($d['desc'] ?? ''), 0, 300))->where('created_at', '>=', now()->subSeconds(20))->latest('id')->first();
+        if ($same) {
+            return $same;
+        }
         $e = Expense::create([
             'workspace_id' => $ws->id, 'project_id' => $projectId, 'user_id' => $user?->id, 'source' => $source,
             'date' => $d['date'] ?? $ws->localNow()->toDateString(), 'amount' => $d['amount'], 'cat' => $d['cat'] ?? self::guessCategory(($d['desc'] ?? '').' '.($d['who'] ?? '')),

@@ -4753,5 +4753,8 @@
     "Приход − расход": "Kirim − chiqim",
     "приход − расход": "kirim − chiqim",
     "Перевод из другой кассы": "Boshqa kassadan o'tkazma",
-    "Перевод в другую кассу": "Boshqa kassaga o'tkazma"
+    "Перевод в другую кассу": "Boshqa kassaga o'tkazma",
+    "Это действие уже выполнено — повторное нажатие не учтено.": "Bu amal allaqachon bajarildi — qayta bosish hisobga olinmadi.",
+    "Такая же операция только что проведена — похоже, кнопку нажали дважды. Второй раз не проводим. Если это действительно ещё одна операция — повторите через несколько секунд.": "Xuddi shunday operatsiya hozirgina o'tkazildi — tugma ikki marta bosilganga o'xshaydi. Ikkinchi marta o'tkazilmadi. Agar bu haqiqatan yana bitta operatsiya bo'lsa — bir necha soniyadan keyin qaytaring.",
+    "Повтор без двойного действия: передайте заголовок Idempotency-Key (уникальная строка на каждое действие) — повтор с тем же ключом вернёт первый ответ, а не создаст запись ещё раз.": "Takrorlashda amal ikki marta bajarilmaydi: Idempotency-Key sarlavhasini yuboring (har bir amal uchun noyob qator) — xuddi shu kalit bilan takrorlansa, yangi yozuv yaratilmaydi, birinchi javob qaytadi."
 }

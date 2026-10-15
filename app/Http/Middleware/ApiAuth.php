@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\ApiToken;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
 
 /**
@@ -62,7 +63,27 @@ class ApiAuth
         $lang = strtolower(substr((string) ($request->query('lang') ?: $request->header('Accept-Language', 'ru')), 0, 2));
         app()->setLocale(in_array($lang, ['ru', 'uz', 'tg'], true) ? $lang : 'ru');
 
+        // Idempotency-Key: программа повторила запрос (таймаут, сбой сети) — действие не выполняется второй раз, отдаём первый ответ
+        $idem = $request->isMethod('GET') ? null : $request->header('Idempotency-Key');
+        if ($idem !== null) {
+            if (! preg_match('/^[A-Za-z0-9_\-:.]{8,100}$/', (string) $idem)) {
+                return self::fail(400, 'bad_idempotency_key', 'Idempotency-Key: 8–100 characters (letters, digits, - _ : .)');
+            }
+            $ck = 'idem:'.$token->id.':'.sha1($request->method().' '.$request->path().' '.$idem);
+            if ($hit = Cache::get($ck)) {
+                return response($hit['body'], $hit['status'], ['Content-Type' => 'application/json', 'Idempotent-Replayed' => 'true']);
+            }
+            if (! Cache::add($ck.':lock', 1, 60)) {
+                return self::fail(409, 'request_in_progress', 'The same request (Idempotency-Key) is still being processed');
+            }
+        }
         $res = $next($request);
+        if ($idem !== null) {
+            if ($res->getStatusCode() < 500) {
+                Cache::put($ck, ['status' => $res->getStatusCode(), 'body' => $res->getContent()], now()->addDay());
+            }
+            Cache::forget($ck.':lock');
+        }
         $res->headers->set('X-RateLimit-Limit', (string) self::PER_MINUTE);
         $res->headers->set('X-RateLimit-Remaining', (string) max(0, RateLimiter::remaining($limitKey, self::PER_MINUTE)));
 

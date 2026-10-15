@@ -794,3 +794,4 @@ dialog.modal::backdrop{background:rgba(15,13,40,.5)}
 .api-events .check{align-items:flex-start}.api-events .check small{font-size:11px}
 @media (max-width:760px){.api-steps{grid-template-columns:1fr}}
 .api-objs{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px 14px}
+.is-busy{opacity:.6;pointer-events:none;cursor:progress}

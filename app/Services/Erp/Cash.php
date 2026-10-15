@@ -13,6 +13,7 @@ use App\Models\Workspace;
 use App\Services\Apartments;
 use App\Services\StateWriter;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -122,6 +123,11 @@ class Cash
             throw new \DomainException(__('Сумма должна быть больше нуля'));
         }
         $bal = self::lockedBalance($ws, $desk->id);
+        // та же операция того же сотрудника только что проведена — это двойное нажатие (сайт, Telegram, API), второй раз не проводим
+        if (empty($d['transfer_key']) && ! self::once($ws, 'op', [$by->id, $desk->id, $d['type'], $amount, $d['project_id'] ?? null, $d['category_id'] ?? null,
+            $d['counterparty_id'] ?? null, $d['payment_request_id'] ?? null, $d['employee'] ?? null, trim((string) ($d['note'] ?? ''))])) {
+            throw new \DomainException(self::twice());
+        }
         if ($d['type'] === 'out' && $amount > $bal + 0.001) {
             throw new \DomainException(__('В кассе «:n» только :s', ['n' => $desk->name, 's' => Money::fmt($bal, $desk->currency)]));
         }
@@ -142,6 +148,20 @@ class Cash
         }
 
         return $op;
+    }
+
+    /**
+     * Защита от двойного нажатия: одинаковая операция за $sec секунд проходит один раз.
+     * Метка ставится в той же транзакции, что и операция: не прошла операция (нет денег, ошибка) — метки тоже нет.
+     */
+    public static function once(Workspace $ws, string $kind, array $parts, int $sec = 15): bool
+    {
+        return Cache::add('dup:'.$kind.':'.$ws->id.':'.sha1(json_encode($parts)), 1, $sec);
+    }
+
+    public static function twice(): string
+    {
+        return __('Такая же операция только что проведена — похоже, кнопку нажали дважды. Второй раз не проводим. Если это действительно ещё одна операция — повторите через несколько секунд.');
     }
 
     /** Отразить операцию в бухгалтерии объекта (в валюте компании) */
@@ -211,6 +231,9 @@ class Cash
             // блокируем обе кассы в одном порядке (по id), чтобы встречные переводы не зависли
             foreach (collect([$a->id, $b->id])->sort() as $id) {
                 self::lockedBalance($ws, $id);
+            }
+            if (! self::once($ws, 'transfer', [$by->id, $a->id, $b->id, round($amount, 2), trim((string) $note)])) {
+                throw new \DomainException(self::twice());
             }
             $base = ['date' => $date, 'transfer_key' => $key, 'note' => $note];
             $o1 = self::add($ws, $by, $base + ['cash_desk_id' => $a->id, 'type' => 'out', 'amount' => $amount, 'rate' => $a->currency === 'USD' ? $usd : 1]);

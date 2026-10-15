@@ -143,6 +143,9 @@ class SalesController extends ErpController
         if ($a['status'] === 'free' && ($err = $this->guardReady($p, 'booked'))) {   // первая оплата ставит бронь
             return back()->withErrors(['amount' => $err])->with('open', $aptId);
         }
+        if (! \App\Services\Erp\Cash::once($ws, 'aptpay', [$request->user()->id, $pid, $aptId, round((float) $d['amount'], 2), $d['date']])) {
+            return back()->with('warn', \App\Services\Erp\Cash::twice())->with('open', $aptId);
+        }
         $payId = Str::lower(Str::random(8));
         StateWriter::mutate($ws->id, function (array &$data) use ($pid, $aptId, $d, $a, $payId) {
             foreach ($data['projects'] as &$p) {
