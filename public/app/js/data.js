@@ -49,6 +49,25 @@ function migrate(p) {
     else if (d[k] && typeof d[k] === 'object' && !Array.isArray(d[k]) && p[k] && typeof p[k] === 'object') for (const kk in d[k]) if (p[k][kk] === undefined) p[k][kk] = d[k][kk];
   }
 }
+/* Новый объект открывается с параметрами-образцом (12 этажей, 56×17 м…): смета, материалы, котлован, бригады и 3D
+   посчитаны для него. Пока параметры своего дома не введены (или не подтверждены) — показываем это явно. */
+let _defB = null;
+function isDraft(p) {
+  if (p.draft != null) return !!p.draft;
+  if (p.demo || (p.tx || []).length) return false;
+  _defB = _defB || newProject().b;
+  return Object.keys(_defB).every(k => p.b[k] === _defB[k]);   // объекты, созданные до этой отметки: параметры не трогали — образец
+}
+const DRAFT_PAGES = new Set(['home', 'dashboard', 'build', 'project', 'prep', 'ground', 'geology', 'pit', 'finance', 'smeta', 'materials', 'labour', 'schedule', 'sell', 'sales', 'apt', 'design', 'site']);
+function draftNotice(p, page) {
+  if (!isDraft(p) || !DRAFT_PAGES.has(page)) return '';
+  const b = p.b;
+  return `<div class="draft-note"><div class="dn-t">📐 <b>${T('Это расчёт по образцу дома, а не ваши данные')}</b></div>
+    <div class="dn-s">${T('Образец программы')}: ${b.floors} ${T('эт.')} · ${b.length}×${b.width} ${T('м')} · ${T('подъездов')}: ${b.sections} · ${T('квартир на этаже')}: ${b.aptsPerFloor}.
+    ${T('Смета, материалы, котлован, бригады, квартиры и 3D посчитаны для него. Это план «сколько понадобится», а не деньги в кассе и не остатки на складе.')}</div>
+    <div class="dn-a">${page !== 'project' ? `<button class="btn-p btn-s" data-act="go" data-page="project">${T('Ввести параметры своего дома')}</button>` : ''}<button class="btn-s" data-act="draftOk">${T('Параметры верны')}</button></div></div>`;
+}
+
 function addTx(p, t) { const tx = { id: uid(), date: today(), type: 'out', cat: 'Офис и прочее', amount: 0, who: '', desc: '', ...t }; p.tx.push(tx); return tx; }
 
 /* ---------- Демо-проект ---------- */

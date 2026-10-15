@@ -12,6 +12,7 @@ const phUrl = (p, min) => PH_BASE + p.file + (min ? '_min.webp' : '.png');
 function photoGallery(style) {
   const own = INTERIOR_PHOTOS.filter(p => p.style === style), main = own[0] || INTERIOR_PHOTOS[0];
   return `<div class="card ph-card"><h3>📸 Фотореалистичный дизайн квартиры <span class="tools"><button class="btn-p btn-s pv-open" data-act="ph360" data-style="${own.length ? style : ''}">🌐 Осмотреться 360°</button></span></h3>
+    <div class="small muted" style="margin:-6px 0 10px">Примеры стилей (нарисованы нейросетью) — это не ваша квартира. Загрузите интерьер своей квартиры — покупатели увидят его.</div>
     <div class="ph-wrap">
       <button class="ph-main" data-act="phOpen" data-i="${INTERIOR_PHOTOS.indexOf(main)}" id="phMain"><img src="${phUrl(main)}" alt="" loading="lazy"><span class="ph-tag">${STYLES[main.style].name} · ${main.room}</span><span class="ph-zoom">🔍</span></button>
       <div class="ph-thumbs">${INTERIOR_PHOTOS.map((p, i) => `<button class="ph-th${p.style === style ? ' on' : ''}" data-act="phOpen" data-i="${i}"><img src="${phUrl(p, 1)}" alt="" loading="lazy"><span>${STYLES[p.style].name}<br><b>${p.room}</b></span></button>`).join('')}</div>

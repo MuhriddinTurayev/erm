@@ -95,7 +95,7 @@ function startSteps(p) {
       </div>
       <div class="hero-stats">
         <div><span>Готовность</span><b>${fmt(pr, 1)}%</b>${progBar(pr, '#fff')}</div>
-        <div><span>Себестоимость</span><b>${moneyS(S.total)}</b></div>
+        <div><span>Себестоимость (смета)</span><b>${moneyS(S.total)}</b></div>
         <div><span>Выручка (план)</span><b>${moneyS(S.revenue)}</b></div>
         <div><span>Продано квартир</span><b>${sold} из ${A.length}</b></div>
         <div><span>Касса</span><b>${moneyS(S.F.bal)}</b></div>

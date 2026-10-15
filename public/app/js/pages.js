@@ -212,6 +212,7 @@ PAGES.materials = {
       return h;
     }).join('');
     return `
+    <div class="note">🧮 <b>Это расчёт, а не склад.</b> Программа считает, сколько материалов понадобится на всё здание по его параметрам и нормативам, и примерную стоимость по ценам ниже. Что реально куплено и лежит на складе — в разделе «Склад».${SAAS && SAAS.stock ? ` <a href="/company/stock">${T('Открыть склад')} →</a>` : ''}</div>
     <div class="card"><h3>Нормативы конструкций</h3><div class="form">
       ${field('m.slabThk', 'Толщина фундаментной плиты', { unit: 'м' })}${field('m.floorThk', 'Толщина перекрытия', { unit: 'м' })}
       ${field('m.wallsK', 'Монолит стен и колонн', { unit: 'м³/м²', hint: 'на 1 м² этажа, обычно 0.10–0.15' })}${field('m.rebarK', 'Армирование', { unit: 'т/м³', hint: '0.09–0.13 т на 1 м³ бетона' })}
@@ -219,16 +220,16 @@ PAGES.materials = {
       ${field('m.glazingK', 'Доля остекления фасада', { hint: '0.18–0.30' })}${field('m.boardK', 'Доска на 1 м² опалубки', { unit: 'м³', hint: 'обычно 0.003–0.006' })}${field('m.beamK', 'Брус на 1 м² опалубки', { unit: 'м³', hint: 'обычно 0.002–0.004' })}${field('m.brickFacing', 'Облицовка кирпичом', { type: 'checkbox' })}
     </div></div>
     <div id="results">${this.results(p)}</div>
-    <div class="card"><h3>Ведомость материалов <span class="tools"><button class="btn-s" data-act="addMat">+ Своя позиция</button><button class="btn-s" data-act="matCsv">⬇ Excel (CSV)</button></span></h3>
-      <div class="tbl-wrap"><table><thead><tr><th>Материал</th><th>Ед.</th><th class="n">Количество</th><th></th><th class="n">Цена за ед., ${cur()}</th><th class="n">Сумма</th><th></th></tr></thead>
-      <tbody>${rows}<tr class="tot"><td colspan="5">ИТОГО материалы</td><td class="n">${money(M.total)}</td><td></td></tr></tbody></table></div></div>`;
+    <div class="card"><h3>Сколько материалов нужно (расчёт) <span class="tools"><button class="btn-s" data-act="addMat">+ Своя позиция</button><button class="btn-s" data-act="matCsv">⬇ Excel (CSV)</button></span></h3>
+      <div class="tbl-wrap"><table><thead><tr><th>Материал</th><th>Ед.</th><th class="n">Нужно</th><th></th><th class="n">Цена за ед., ${cur()}</th><th class="n">Сумма по расчёту</th><th></th></tr></thead>
+      <tbody>${rows}<tr class="tot"><td colspan="5">ИТОГО по расчёту</td><td class="n">${money(M.total)}</td><td></td></tr></tbody></table></div></div>`;
   },
   results(p) {
     const { q } = matQty(p), M = matCalc(p);
-    return `<div class="card res"><h3>Объёмы работ</h3><div class="big-res">
+    return `<div class="card res"><h3>Объёмы работ (расчёт)</h3><div class="big-res">
       ${rbox('Бетон всего', fmt(q.concreteAll) + ' м³', 1)}${rbox('Арматура', fmt(q.rebar, 1) + ' т', 1)}${rbox('Кладка газоблок', fmt(q.blocks) + ' м³')}
       ${rbox('Кирпич облицовочный', fmt(q.bricks) + ' шт')}${rbox('Окна и витражи', fmt(q.windows) + ' м²')}${rbox('Фасад', fmt(q.extNet) + ' м²')}
-      ${rbox('Штукатурка стен', fmt(q.plasterArea) + ' м²')}${rbox('Кабель', fmt(q.cable) + ' м')}${rbox('Доска + брус', fmt(q.board + q.beam, 1) + ' м³')}${rbox('Итого материалы', moneyS(M.total), 1)}
+      ${rbox('Штукатурка стен', fmt(q.plasterArea) + ' м²')}${rbox('Кабель', fmt(q.cable) + ' м')}${rbox('Доска + брус', fmt(q.board + q.beam, 1) + ' м³')}${rbox('Материалы по расчёту', moneyS(M.total), 1)}
     </div></div>`;
   }
 };

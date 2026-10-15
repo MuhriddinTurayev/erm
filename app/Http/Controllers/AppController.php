@@ -33,6 +33,7 @@ class AppController extends Controller
                 // загруженные 3D-модели и панорамы по объектам — в «Объект в 3D» и «Дизайн квартиры» показываем кнопки к ним
                 'media' => self::mediaCounts($ws->id),
                 'canMedia' => $user->canMedia(),
+                'stock' => $user->canModule('warehouse'),   // «Материалы» (расчёт) ведут на настоящий склад
                 'firstObject' => $ws->setting('first_object'),
                 'plan' => [
                     'name' => $plan?->title(),

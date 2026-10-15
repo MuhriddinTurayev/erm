@@ -80,7 +80,9 @@ function applyBind(el) {
   else if (el.type === 'number') v = num(el.value);
   else if (el.tagName === 'SELECT' && typeof getPath(src, key) === 'number') v = num(el.value);
   else v = el.value;
-  setPath(src, key, v); save();
+  setPath(src, key, v);
+  if (src !== DB.settings && key.startsWith('b.') && src.draft !== false) { src.draft = false; const n = $('.draft-note'); if (n) n.remove(); }   // свои параметры дома — уже не образец
+  save();
 }
 const kpi = (label, value, sub = '', cls = '') => `<div class="kpi${cls ? ' k-' + cls : ''}"><span>${label}</span><b title="${esc(String(value).replace(/<[^>]+>/g, ''))}">${value}</b><small>${sub}</small></div>`;
 const rbox = (label, value, hl) => `<div class="rbox${hl ? ' hl' : ''}"><span>${label}</span><b>${value}</b></div>`;

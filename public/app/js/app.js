@@ -17,7 +17,7 @@ function load() {
   }
   DB.settings = Object.assign({ lang: 'ru', aiModel: 'claude-opus-5-5', currency: 'сум', company: 'Моя строительная компания', fuelPrice: 12500, normHours: 8, overtimeK: 1.5 }, DB.settings);
   // новая компания начинает с чистого объекта (без демо и чужих данных); без сервера — демо для знакомства
-  if (!DB.projects.length) { const p = window.OFTOB ? newProject(window.OFTOB.firstObject || T('Мой первый объект'), today()) : demoProject(); DB.projects.push(p); DB.currentId = p.id; save(); }
+  if (!DB.projects.length) { const p = window.OFTOB ? Object.assign(newProject(window.OFTOB.firstObject || T('Мой первый объект'), today()), { draft: true }) : demoProject(); DB.projects.push(p); DB.currentId = p.id; save(); }
   DB.projects.forEach(migrate);
   DB.projects.filter(p => /демо/i.test(p.name)).forEach(p => { if (!Object.keys(p.safety.brief).length) safetyDemo(p); if (!p.legal.contracts.length) legalDemo(p); if (!p.leads.length) leadsDemo(p); if (!p.geoEv.length) gpsDemo(p); });
   if (!P()) DB.currentId = DB.projects[0].id;
@@ -40,7 +40,7 @@ function render() {
   $('#pageTitle').textContent = pg.title;
   document.title = T(pg.title) + ' — ' + APP_NAME; $('#aiFab').style.display = (curPage === 'ai' || curPage === 'home') ? 'none' : '';
   $('#langSel').innerHTML = opts(LANGS, curLang()); $('#homeBtn').style.display = curPage === 'home' ? 'none' : '';
-  $('#main').innerHTML = planNotice() + (GROUP_OF[curPage] ? groupSubnav(curPage) : '') + pg.render(p, pageArgs);
+  $('#main').innerHTML = planNotice() + draftNotice(p, curPage) + (GROUP_OF[curPage] ? groupSubnav(curPage) : '') + pg.render(p, pageArgs);
   if (pg.mounted) pg.mounted(p, pageArgs);
   document.body.classList.remove('menu');
 }
@@ -74,6 +74,8 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
 
 ACT.go = d => go(d.page);
+// новый объект: параметры-образец подходят — расчёты считаем своими (плашка «по образцу» уходит)
+ACT.draftOk = () => { P().draft = false; save(); rerender(); toast(T('Готово: расчёты — по параметрам вашего дома')); };
 ACT.menu = () => document.body.classList.toggle('menu');
 ACT.closeModal = closeModal;
 ACT.newProject = async () => {
@@ -85,7 +87,7 @@ ACT.newProject = async () => {
     { name: 'start', type: 'date', label: 'Дата начала', value: today(), required: true },
   ], { ok: T('Создать объект') });
   if (!f || !f.name) return;
-  const p = newProject(f.name.slice(0, 120), f.start || today()); p.address = (f.address || '').slice(0, 200);
+  const p = newProject(f.name.slice(0, 120), f.start || today()); p.address = (f.address || '').slice(0, 200); p.draft = true;
   DB.projects.push(p); DB.currentId = p.id; save(); go('project'); toast('Объект создан — заполните параметры здания');
 };
 window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h && h !== curPage && PAGES[h]) go(h); });
