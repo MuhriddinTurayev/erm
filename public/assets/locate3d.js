@@ -33,8 +33,27 @@ function groundOf(C, F) {
   return F > 1 && C.gf > 0 && H > C.gf ? C.gf / H : 1 / F;
 }
 
-/** Где квартира стоит на фасаде, если её поставили на окна (ИИ или человек): [сторона ±1, x0, x1] в долях длины рамки */
-export const slotOf = (u, C) => (C.ux && C.ux[u.id]) || (C.slots && C.slots[`${u.e}|${Math.max(1, u.n)}|${u.i}`]) || null;
+/**
+ * Стороны рамки: 1 — лицевая (+Z), −1 — задняя (−Z), 2 — правый торец (+X), −2 — левый торец (−X).
+ * Вдоль стороны — доля a от 0 до 1: у лицевой и задней по длине рамки (X), у торцов — по глубине (Z).
+ */
+export const FACES = [1, -1, 2, -2];
+export const faceKey = (f) => ({ 1: 'f', '-1': 'b', 2: 'r', '-2': 'l' })[f];
+export const normalOf = (f) => (Math.abs(f) === 1 ? new THREE.Vector3(0, 0, Math.sign(f)) : new THREE.Vector3(Math.sign(f), 0, 0));
+/**
+ * Где квартира на фасаде, если её поставили на окна: { g: [[сторона, a0, a1], …], m } — квартира может смотреть окнами
+ * сразу на две стороны (сквозная) или на торец (угловая); m=1 — поставил человек. Старый вид [s, x0, x1, m] тоже понимаем.
+ */
+export function placeNorm(v) {
+  if (!v) return null;
+  if (Array.isArray(v) && typeof v[0] === 'number') return { g: [[v[0] < 0 ? -1 : 1, v[1], v[2]]], m: v[3] ? 1 : 0 };
+  if (Array.isArray(v.g)) return { g: v.g.filter((s) => Array.isArray(s) && s.length >= 3 && FACES.includes(s[0]) && s[2] > s[1]), m: v.m ? 1 : 0 };
+  return null;
+}
+export const slotKey = (u) => `${u.e}|${Math.max(1, u.n)}|${u.i}`;
+export const slotOf = (u, C) => placeNorm((C.ux && C.ux[u.id]) || (C.slots && C.slots[slotKey(u)]));
+/** Как стоят квартиры этажа: 1 — на одну сторону, 2 — половина спереди, половина сзади, 3 — сквозные (окна и спереди, и сзади) */
+const rowsOf = (C, n) => (C.rows === 3 ? 3 : C.rows === 1 || n < 2 ? 1 : 2);
 /** Этаж модели для этажа объекта (в модели этажей может быть меньше) и доли высоты его низа и верха */
 export function floorOf(u, B, C) {
   const F = Math.max(1, C.floors || B.floors), g = groundOf(C, F);
@@ -44,32 +63,39 @@ export function floorOf(u, B, C) {
   const f = N > F ? Math.min(F, Math.ceil((uf * F) / N)) : Math.min(F, uf);
   return { f, F, y0: yAt(f - 1), y1: yAt(f), yAt };
 }
+/** Объём квартиры у стороны face на отрезке a0…a1 (координаты рамки −0.5…0.5); depth — сколько глубины от стены внутрь */
+function cellBox(face, a0, a1, Y0, Y1, depth) {
+  const s = Math.sign(face), w = s > 0 ? [0.5 - depth, 0.5] : [-0.5, -0.5 + depth];
+  const [min, max] = Math.abs(face) === 1
+    ? [new THREE.Vector3(a0 - 0.5, Y0, w[0]), new THREE.Vector3(a1 - 0.5, Y1, w[1])]
+    : [new THREE.Vector3(w[0], Y0, a0 - 0.5), new THREE.Vector3(w[1], Y1, a1 - 0.5)];
+  return { face, facing: Math.abs(face) === 1 ? s : 0, normal: normalOf(face), min, max, floorY: [Y0, Y1], a: [a0, a1] };
+}
 
-/** Ячейка помещения в рамке корпуса, координаты рамки от −0.5 до 0.5 */
-export function cellOf(u, B, C) {
+/** Где квартира в рамке: части у стен (одна или несколько — сквозная, угловая) */
+export function cellsOf(u, B, C) {
   const E = Math.max(1, B.entr.length), n = Math.max(1, u.n), e = Math.min(E - 1, Math.max(0, u.e));
-  const { y0, y1 } = floorOf(u, B, C);
-  // квартиру поставили на её окна — сторона и место как есть (развороты рамки на неё не действуют)
+  const { y0, y1 } = floorOf(u, B, C), Y0 = y0 - 0.5, Y1 = y1 - 0.5;
+  // квартиру поставили на её окна — стороны и место как есть (развороты рамки на неё не действуют)
   const m = slotOf(u, C);
-  if (m) {
-    const facing = m[0] < 0 ? -1 : 1, zc = facing > 0 ? [0.5, 1] : [0, 0.5];
-    return { min: new THREE.Vector3(m[1] - 0.5, y0 - 0.5, zc[0] - 0.5), max: new THREE.Vector3(m[2] - 0.5, y1 - 0.5, zc[1] - 0.5), facing, floorY: [y0 - 0.5, y1 - 0.5], placed: true };
-  }
-  const rows = C.rows === 1 || n < 2 ? 1 : 2, front = Math.ceil(n / rows);
-  let side = 'all', col = u.i, cols = n;
-  if (rows === 2) {
-    if (u.i < front) { side = 'front'; col = u.i; cols = front; } else { side = 'back'; cols = n - front; col = u.i - front; if (C.back !== 'fwd') col = cols - 1 - col; }
-  }
+  if (m && m.g.length) return m.g.map(([f, a0, a1]) => Object.assign(cellBox(f, a0, a1, Y0, Y1, Math.abs(f) === 1 ? 0.5 : 0.2), { placed: true }));
+  const rows = rowsOf(C, n), front = rows === 2 ? Math.ceil(n / 2) : n;
+  const side = rows === 2 ? (u.i < front ? 'front' : 'back') : 'all';
+  let col = u.i, cols = n;
+  if (side === 'front') cols = front;
+  if (side === 'back') { cols = n - front; col = u.i - front; if (C.back !== 'fwd') col = cols - 1 - col; }
   const sp = splitsOf(B, C), w = sp[e + 1] - sp[e];
   let x0 = sp[e] + (w * col) / cols, x1 = sp[e] + (w * (col + 1)) / cols;
   if (C.flipX) [x0, x1] = [1 - x1, 1 - x0];
-  let z0 = 0, z1 = 1;
-  if (side !== 'all') {
-    const isFront = (side === 'front') !== !!C.flipZ;
-    [z0, z1] = isFront ? [0.5, 1] : [0, 0.5];
-  }
-  const facing = side === 'all' ? (C.flipZ ? -1 : 1) : ((side === 'front') !== !!C.flipZ ? 1 : -1);
-  return { min: new THREE.Vector3(x0 - 0.5, y0 - 0.5, z0 - 0.5), max: new THREE.Vector3(x1 - 0.5, y1 - 0.5, z1 - 0.5), facing, floorY: [y0 - 0.5, y1 - 0.5] };
+  const F0 = C.flipZ ? -1 : 1;
+  if (rows === 3) return [cellBox(F0, x0, x1, Y0, Y1, 0.5), cellBox(-F0, x0, x1, Y0, Y1, 0.5)];
+  if (side === 'all') return [cellBox(F0, x0, x1, Y0, Y1, 1)];
+  return [cellBox(side === 'front' ? F0 : -F0, x0, x1, Y0, Y1, 0.5)];
+}
+/** Главная часть квартиры (для камеры и подписи): со стороны лица рамки, иначе первая */
+export function cellOf(u, B, C) {
+  const cs = cellsOf(u, B, C), F0 = C.flipZ ? -1 : 1;
+  return cs.find((c) => c.face === F0) || cs[0];
 }
 
 /** Отрезок [a0, a1] — квартирам по их весам; окна W (середины) есть — граница посередине между окнами соседей */
@@ -96,33 +122,35 @@ function split(a0, a1, W, weights) {
 
 /**
  * Квартиры — на окна фасада: двухкомнатной обычно 3 окна (комнаты и кухня), то есть окон — по числу комнат + 1;
- * окон не нашли — по тому же весу. Раскладка одна на все этажи с тем же числом квартир (ключ «подъезд|квартир на этаже|номер»).
+ * окон не нашли — по тому же весу. Сквозные квартиры (rows=3) — на тот же отрезок спереди и сзади.
+ * Раскладка одна на все этажи с тем же числом квартир (ключ «подъезд|квартир на этаже|номер»).
  * Группы, где человек сам поставил хоть одну квартиру (m=1), не трогаем.
  */
 export function allocate(B, C, list, keepManual = true) {
   const old = keepManual ? C.slots || {} : {}, slots = {}, groups = {};
   for (const u of list) { const k = u.e + '|' + Math.max(1, u.n); ((groups[k] ??= {})[u.f] ??= []).push(u); }
-  const sp = splitsOf(B, C), win = { f: (C.win && C.win.f) || [], b: (C.win && C.win.b) || [] };
+  const sp = splitsOf(B, C), win = C.win || {};
   for (const [k, floors] of Object.entries(groups)) {
     const mine = Object.keys(old).filter((s) => s.startsWith(k + '|'));
-    if (mine.some((s) => old[s][3])) { mine.forEach((s) => { slots[s] = old[s]; }); continue; }
+    if (mine.some((s) => (placeNorm(old[s]) || {}).m)) { mine.forEach((s) => { slots[s] = old[s]; }); continue; }
     // этаж-образец: самый частый набор квартир (комнаты по порядку)
     const seqs = {};
     for (const us of Object.values(floors)) { us.sort((a, b) => a.i - b.i); (seqs[us.map((u) => (u.r || 0) + (u.k || '')).join(',')] ??= []).push(us); }
     const rep = Object.values(seqs).sort((a, b) => b.length - a.length)[0][0], n = rep.length, e = Math.min(sp.length - 2, Math.max(0, rep[0].e));
     if (n === 1 && !rep[0].r) continue;   // коммерция на весь этаж — как была, без окон
-    const rows = C.rows === 1 || n < 2 ? 1 : 2, front = Math.ceil(n / rows);
+    const rows = rowsOf(C, n), front = rows === 2 ? Math.ceil(n / 2) : n, F0 = C.flipZ ? -1 : 1;
     // слева направо по рамке (до разворота): лицевая — по порядку, задняя — «по кругу» в обратном порядке
-    const sides = rows === 1 ? [[rep, 'f']] : [[rep.slice(0, front), 'f'], [C.back !== 'fwd' ? rep.slice(front).reverse() : rep.slice(front), 'b']];
-    for (const [us, side] of sides) {
+    const sides = rows === 2 ? [[rep.slice(0, front), F0], [C.back !== 'fwd' ? rep.slice(front).reverse() : rep.slice(front), -F0]] : [[rep, F0]];
+    for (const [us, face] of sides) {
       if (!us.length) continue;
-      const facing = (side === 'f') !== !!C.flipZ ? 1 : -1, raw = facing > 0 ? win.f : win.b;
+      const raw = win[faceKey(face)] || [];
       const W = raw.map((x) => (C.flipX ? 1 - x : x)).filter((x) => x > sp[e] && x < sp[e + 1]).sort((p, q) => p - q);
       const ranges = split(sp[e], sp[e + 1], W, us.map((u) => (u.r > 0 ? u.r + 1 : Math.max(2, Math.round((u.a || 40) / 25)))));
       us.forEach((u, j) => {
         let [x0, x1] = ranges[j];
         if (C.flipX) [x0, x1] = [1 - x1, 1 - x0];
-        slots[`${u.e}|${n}|${u.i}`] = [facing, +x0.toFixed(4), +x1.toFixed(4)];
+        const seg = [+x0.toFixed(4), +x1.toFixed(4)];
+        slots[`${u.e}|${n}|${u.i}`] = { g: rows === 3 ? [[face, ...seg], [-face, ...seg]] : [[face, ...seg]] };
       });
     }
   }
@@ -242,20 +270,32 @@ export async function start(el, cfg) {
     for (const g of [layer, overlay]) while (g.children.length) { const o = g.children.pop(); if (o.element) o.element.remove(); }
     lineMats.length = 0;
   };
-  /** Толстая линия по точкам (мир), поверх модели. dashed — пунктир */
-  function thick(points, color, width, dashed = false) {
+  /** Толстая линия по точкам (мир), поверх модели. dashed — пунктир; depth — прятать за домом (разметка: контур задней стороны не видно спереди) */
+  function thick(points, color, width, dashed = false, depth = false) {
     const g = new LineGeometry(); g.setPositions(points.flatMap((p) => [p.x, p.y, p.z]));
-    const m = new LineMaterial({ color, linewidth: width, transparent: true, depthTest: false, dashed, dashSize: 1.2, gapSize: 0.8 });
+    const m = new LineMaterial({ color, linewidth: width, transparent: true, depthTest: depth, dashed, dashSize: 1.2, gapSize: 0.8 });
     m.resolution.set(el.clientWidth || 1, el.clientHeight || 1); lineMats.push(m);
     const l = new Line2(g, m); if (dashed) l.computeLineDistances(); l.renderOrder = 30; overlay.add(l);
     return l;
   }
-  /** Точки на стене рамки (координаты рамки) → мир, чуть впереди стены */
-  function onWall(pts, facing) {
-    const z = facing > 0 ? 0.5 : -0.5, off = (growOf() * 1.6 / frame.scale.z) * facing;
-    return pts.map(([x, y]) => frame.localToWorld(new THREE.Vector3(x, y, z + off)));
+  /** Точки на стене рамки → мир, чуть впереди стены. face ±1 — лицевая/задняя (точки [x, y]), ±2 — торцы (точки [z, y]) */
+  function onWall(pts, face) {
+    const s = Math.sign(face), zf = Math.abs(face) === 1;
+    const w = 0.5 * s + (growOf() * 1.6 / (zf ? frame.scale.z : frame.scale.x)) * s;
+    return pts.map(([a, y]) => frame.localToWorld(zf ? new THREE.Vector3(a, y, w) : new THREE.Vector3(w, y, a)));
   }
-  const wallRect = (x0, y0, x1, y1, facing) => onWall([[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]], facing);
+  const wallRect = (a0, y0, a1, y1, face) => onWall([[a0, y0], [a1, y0], [a1, y1], [a0, y1], [a0, y0]], face);
+  /** Контур части квартиры на её стене */
+  const cellRect = (cl) => (Math.abs(cl.face) === 1 ? wallRect(cl.min.x, cl.min.y, cl.max.x, cl.max.y, cl.face) : wallRect(cl.min.z, cl.min.y, cl.max.z, cl.max.y, cl.face));
+  /** Плитка части квартиры на стене (координаты рамки): out — насколько впереди стены, thick — толщина (в метрах), pad — зазор по краям */
+  function wallTile(cl, S, out, thickW, pad = 0) {
+    const zf = Math.abs(cl.face) === 1, ax = zf ? 'z' : 'x', al = zf ? 'x' : 'z', s = Math.sign(cl.face), sc = zf ? S[2] : S[0];
+    const min = cl.min.clone(), max = cl.max.clone(), d = ((max[al] - min[al]) * pad) / 2, dy = ((max.y - min.y) * pad) / 2;
+    min[al] += d; max[al] -= d; min.y += dy; max.y -= dy;
+    const o = out / sc, t = thickW / sc;
+    if (s > 0) { min[ax] = 0.5 + o; max[ax] = 0.5 + o + t; } else { max[ax] = -0.5 - o; min[ax] = -0.5 - o - t; }
+    return { min, max, center: min.clone().add(max).multiplyScalar(0.5), size: max.clone().sub(min) };
+  }
   function boxMesh(min, max, mat, grow = 0) {
     const m = new THREE.Mesh(unitBox, mat);
     const size = max.clone().sub(min), g = new THREE.Vector3(grow / frame.scale.x, grow / frame.scale.y, grow / frame.scale.z);
@@ -267,6 +307,12 @@ export async function start(el, cfg) {
     const size = max.clone().sub(min), g = new THREE.Vector3(grow / frame.scale.x, grow / frame.scale.y, grow / frame.scale.z);
     l.scale.copy(size.add(g.multiplyScalar(2))); l.position.copy(min.clone().add(max).multiplyScalar(0.5)); l.renderOrder = 21;
     return l;
+  }
+  /** Подпись на стене (CSS2D в координатах рамки); видна, только когда её сторона смотрит на камеру */
+  function wallLabel(text, cls, pos, normal) {
+    const lab = document.createElement('div'); lab.className = cls; lab.textContent = text;
+    const o = new CSS2DObject(lab); o.position.copy(pos); o.userData.normal = normal; layer.add(o);
+    return o;
   }
   const entrName = (B, e) => (B.name && blockIds.length > 1 ? B.name + ' · ' : '') + (B.entr[e] || e + 1) + '-' + (T.en || '');
   /** Подпись подъезда у земли, посередине его участка фасада */
@@ -289,18 +335,21 @@ export async function start(el, cfg) {
     clearStatus();
     if (curBlock !== u.b || cfg.calibrate) { curBlock = u.b; applyFrame(u.b); }
     clear(); pulse.length = 0; selected = u;
-    const B = blocks[u.b], c = C(u.b), cell = cellOf(u, B, c);
-    const grow = growOf();
+    const B = blocks[u.b], c = C(u.b), cells = cellsOf(u, B, c), cell = cellOf(u, B, c);
+    const grow = growOf(), mat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.42, depthTest: false, depthWrite: false });
     // весь этаж — тонкий контур, чтобы видеть уровень
     layer.add(edges(new THREE.Vector3(-0.5, cell.floorY[0], -0.5), new THREE.Vector3(0.5, cell.floorY[1], 0.5), accent2, 0.45, grow * 0.5));
-    // квартира — светящийся объём поверх модели (виден с любой стороны)
-    const fill = boxMesh(cell.min, cell.max, new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.42, depthTest: false, depthWrite: false }), grow);
-    fill.renderOrder = 19; layer.add(fill); pulse.push(fill.material);
-    // контур квартиры на стене — толстая линия; подъезд — пунктир во всю высоту и подпись у земли: видно, в каком подъезде квартира
-    thick(wallRect(cell.min.x, cell.min.y, cell.max.x, cell.max.y, cell.facing), accent, 5);
+    // квартира — светящийся объём у каждой стены, куда смотрят её окна; контур на стене — толстая линия
+    cells.forEach((cl) => {
+      const fill = boxMesh(cl.min, cl.max, mat, grow); fill.renderOrder = 19; layer.add(fill);
+      thick(cellRect(cl), accent, 5);
+    });
+    pulse.push(mat);
+    // подъезд — пунктир во всю высоту и подпись у земли: видно, в каком подъезде квартира
+    const F0 = c.flipZ ? -1 : 1, ef = cell.facing || F0;
     if (B.entr.length > 1 || blockIds.length > 1) {
-      const [ex0, ex1] = entrLabel(B, c, Math.min(B.entr.length - 1, u.e), cell.facing, overlay);
-      thick(wallRect(ex0 - 0.5, -0.5, ex1 - 0.5, 0.5, cell.facing), accent2, 2.5, true);
+      const [ex0, ex1] = entrLabel(B, c, Math.min(B.entr.length - 1, u.e), ef, overlay);
+      thick(wallRect(ex0 - 0.5, -0.5, ex1 - 0.5, 0.5, ef), accent2, 2.5, true);
     }
     // подпись над квартирой
     const div = document.createElement('div');
@@ -316,7 +365,7 @@ export async function start(el, cfg) {
   function worldOf(v) { return frame.localToWorld(v.clone()); }
   function focus(cell) {
     const ctr = worldOf(cell.min.clone().add(cell.max).multiplyScalar(0.5));
-    const normal = new THREE.Vector3(0, 0, cell.facing).applyQuaternion(frame.quaternion).normalize();
+    const normal = cell.normal.clone().applyQuaternion(frame.quaternion).normalize();
     const L = Math.max(frame.scale.x, frame.scale.y);
     const dist = Math.max(L * 1.4, 14);   // весь фасад корпуса в кадре, квартира в центре
     const to = ctr.clone().add(normal.multiplyScalar(dist)).add(new THREE.Vector3(0, dist * 0.28, 0));
@@ -331,7 +380,7 @@ export async function start(el, cfg) {
     const dir = new THREE.Vector3(0.9, 0.6, 1.1).normalize();
     camera.position.copy(mCenter.clone().add(dir.multiplyScalar(D * 1.1))); controls.target.copy(mCenter); controls.update();
   }
-  /** Ровно спереди, сбоку или сверху на рамку — так удобнее ставить её по окнам и углам */
+  /** Ровно спереди, сзади, сбоку или сверху на рамку — так удобнее ставить её и отмечать окна */
   function view(name) {
     if (curBlock == null) return;
     if (name === '3d') { overview(); return; }
@@ -343,6 +392,7 @@ export async function start(el, cfg) {
     const [L, H, Dp] = c.s;
     let dir, dist;
     if (name === 'front') { dir = az; dist = fit(L, H) + Dp / 2; }
+    else if (name === 'back') { dir = az.clone().negate(); dist = fit(L, H) + Dp / 2; }
     else if (name === 'side') { dir = ax; dist = fit(Dp, H) + L / 2; }
     else { dir = new THREE.Vector3(0, 1, 0).addScaledVector(az, 0.002).normalize(); dist = fit(L, Dp) + H / 2; }
     const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), dir).normalize();
@@ -361,18 +411,16 @@ export async function start(el, cfg) {
   function drawGrid(bid) {
     if (mark.on) return drawMark(bid);
     clear(); pulse.length = 0;
-    const B = blocks[bid], c = C(bid), F = floorsOf(bid);
-    const grow = growOf() * 0.3;
+    const B = blocks[bid], c = C(bid), F = floorsOf(bid), mats = {};
     units.filter((u) => u.b === bid).forEach((u) => {
-      const cell = cellOf(u, B, c);
-      // плитка на наружной грани (лицевой или задней) с номером
-      const min = cell.min.clone(), max = cell.max.clone();
-      if (cell.facing > 0) min.z = max.z - 0.002; else max.z = min.z + 0.002;
-      const tile = boxMesh(min, max, new THREE.MeshBasicMaterial({ color: colors[u.e % 2], transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }), grow);
-      layer.add(tile);
-      layer.add(edges(cell.min, cell.max, colors[u.e % 2], 0.35));
-      const lab = document.createElement('div'); lab.className = 'lc-num'; lab.textContent = u.num;
-      const o = new CSS2DObject(lab); o.position.set((min.x + max.x) / 2, (min.y + max.y) / 2, cell.facing > 0 ? max.z : min.z); o.userData.facing = cell.facing; layer.add(o);
+      const col = colors[u.e % 2], mat = (mats[col] ??= new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }));
+      // плитка на наружной стене каждой части квартиры, номер на ней
+      cellsOf(u, B, c).forEach((cl) => {
+        const t = wallTile(cl, c.s, 0.01, 0.02);
+        const tile = new THREE.Mesh(unitBox, mat); tile.scale.copy(t.size); tile.position.copy(t.center); layer.add(tile);
+        layer.add(edges(cl.min, cl.max, col, 0.35));
+        wallLabel(u.num, 'lc-num', t.center, cl.normal);
+      });
     });
     // лицевая сторона: подписи подъездов у земли, их границы — синие линии, верх 1-го этажа — оранжевая
     const facing = c.flipZ ? -1 : 1, sp = splitsOf(B, c);
@@ -382,150 +430,156 @@ export async function start(el, cfg) {
     buildHandles();
   }
 
-  // ---------- разметка квартир вручную: щелчок по фасаду — выбрать квартиру, протянуть по окнам — поставить её на эти окна ----------
-  const mark = { on: false, sel: null, all: true, paint: null };
+  // ---------- разметка квартир вручную ----------
+  // «Выбрать»: щелчок по фасаду — квартира в этом месте. «Окна»: щелчок по окну — добавить его выбранной квартире или убрать,
+  // протянуть мышью — сразу несколько окон. Окна — на любой стороне: спереди, сзади, на торцах (сквозные и угловые квартиры).
+  const mark = { on: false, sel: null, all: true, mode: 'select', floor: null, paint: null };
   const MARKC = ['#6c4cf1', '#0ea5e9', '#f59e0b', '#10b981', '#ef4444', '#ec4899', '#14b8a6', '#8b5cf6'];
   const unitsOf = (bid) => units.filter((u) => u.b === bid);
   const uniform = (n) => Array.from({ length: Math.max(1, n) }, (_, k) => +((k + 0.5) / Math.max(1, n)).toFixed(4));
-  /** Окна стороны рамки (±1): найденные на фасаде, иначе — поровну, столько, сколько обычно у квартир этой стороны */
-  function winOf(c, facing) {
-    const cs = c.win && c.win[facing > 0 ? 'f' : 'b'];
-    return cs && cs.length > 1 ? cs : uniform(guessWins(c, facing));
+  /** Окна стороны: найденные на фасаде, иначе поровну — сколько обычно у квартир этой стороны; у торцов — по глубине дома */
+  function winOf(c, face) {
+    const cs = c.win && c.win[faceKey(face)];
+    if (cs && cs.length > 1) return cs;
+    if (Math.abs(face) === 2) return uniform(Math.max(1, Math.round(guessWins(c, 1) * (c.s[2] / c.s[0]))));
+    return uniform(guessWins(c, face));
   }
   // по самому частому этажу каждого подъезда: у квартиры окон — комнат + 1 (двухкомнатная — 3 окна)
-  function guessWins(c, facing) {
+  function guessWins(c, face) {
     const byE = {};
     unitsOf(curBlock).forEach((u) => { ((byE[u.e] ??= {})[u.f] ??= []).push(u); });
     let total = 0;
     for (const floors of Object.values(byE)) {
       const fl = Object.values(floors).sort((a, b) => b.length - a.length)[0].sort((a, b) => a.i - b.i);
-      const n = fl.length, rows = c.rows === 1 || n < 2 ? 1 : 2, front = Math.ceil(n / rows);
-      const side = rows === 1 ? fl : (facing > 0) !== !!c.flipZ ? fl.slice(0, front) : fl.slice(front);
+      const n = fl.length, rows = rowsOf(c, n), front = rows === 2 ? Math.ceil(n / 2) : n;
+      const side = rows !== 2 ? fl : (face > 0) !== !!c.flipZ ? fl.slice(0, front) : fl.slice(front);
       total += side.reduce((s, u) => s + (u.r > 0 ? u.r + 1 : 2), 0);
     }
     return Math.max(2, total);
   }
   const gridMat = new THREE.LineBasicMaterial({ color: 0x1f1d36, transparent: true, opacity: 0.45 });
-  const prevMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
-  const preview = new THREE.Mesh(unitBox, prevMat); preview.visible = false; preview.renderOrder = 25; frame.add(preview);
   function drawMark(bid) {
     clear(); pulse.length = 0;
     const B = blocks[bid], c = C(bid), list = unitsOf(bid), { F, yAt } = floorOf(list[0] || { f: 1 }, B, c);
-    const off = 0.004;
-    // сетка окон и этажей на обеих сторонах — чуть впереди стены, дом её закрывает с обратной стороны
-    for (const facing of [1, -1]) {
-      const z = (0.5 + off) * facing, pts = [], ex = winEdges(winOf(c, facing));
-      ex.forEach((x) => pts.push(x - 0.5, -0.5, z, x - 0.5, 0.5, z));
-      for (let k = 0; k <= F; k++) { const y = yAt(k) - 0.5; pts.push(-0.5, y, z, 0.5, y, z); }
+    // сетка окон и этажей на всех четырёх сторонах — чуть впереди стены (с обратной стороны её закрывает дом)
+    for (const face of FACES) {
+      const zf = Math.abs(face) === 1, w = (0.5 + 0.004) * Math.sign(face), P = (a, y) => (zf ? [a - 0.5, y, w] : [w, y, a - 0.5]), pts = [];
+      winEdges(winOf(c, face)).forEach((a) => pts.push(...P(a, -0.5), ...P(a, 0.5)));
+      for (let k = 0; k <= F; k++) { const y = yAt(k) - 0.5; pts.push(...P(0, y), ...P(1, y)); }
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
       const ls = new THREE.LineSegments(g, gridMat); ls.renderOrder = 22; layer.add(ls);
     }
-    const sel = mark.sel && byId[mark.sel];
-    const seen = new Set();
+    const sel = mark.sel && byId[mark.sel], fl = mark.floor, mats = {};
+    const mat = (col, op) => (mats[col + op] ??= new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: op, depthWrite: false, side: THREE.DoubleSide }));
     list.forEach((u) => {
-      const cell = cellOf(u, B, c), min = cell.min.clone(), max = cell.max.clone(), on = sel && u.id === sel.id;
-      if (cell.facing > 0) { min.z = 0.5 + off; max.z = 0.5 + off * 2; } else { max.z = -0.5 - off; min.z = -0.5 - off * 2; }
-      const pad = (max.x - min.x) * 0.04;
-      min.x += pad; max.x -= pad;
-      const col = on ? accent : MARKC[u.i % MARKC.length];
-      const m = new THREE.Mesh(unitBox, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: on ? 0.62 : cell.placed ? 0.3 : 0.16, depthWrite: false, side: THREE.DoubleSide }));
-      m.scale.copy(max.clone().sub(min)); m.position.copy(min.clone().add(max).multiplyScalar(0.5)); m.renderOrder = on ? 24 : 23;
-      layer.add(m);
-      if (on) { pulse.push(m.material); thick(wallRect(cell.min.x, cell.min.y, cell.max.x, cell.max.y, cell.facing), accent, 5); }
-      // в модели этажей меньше: на одном месте несколько квартир — подписываем одну, выбранную или нижнюю
-      const key = cell.facing + '|' + cell.min.x.toFixed(3) + '|' + cell.min.y.toFixed(3);
-      if (seen.has(key) && !on) return;
-      seen.add(key);
-      const lab = document.createElement('div'); lab.className = 'lc-num' + (on ? ' on' : ''); lab.textContent = u.num;
-      const o = new CSS2DObject(lab); o.position.set((min.x + max.x) / 2, (min.y + max.y) / 2, cell.facing > 0 ? max.z : min.z); o.userData.facing = cell.facing; layer.add(o);
+      const on = !!sel && u.id === sel.id, here = fl == null || u.f === fl;
+      cellsOf(u, B, c).forEach((cl) => {
+        const t = wallTile(cl, c.s, 0.02, 0.01, 0.04);
+        const op = on ? 0.62 : !here ? 0.05 : cl.placed ? 0.32 : 0.18;
+        const m = new THREE.Mesh(unitBox, on ? new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: op, depthWrite: false, side: THREE.DoubleSide }) : mat(MARKC[u.i % MARKC.length], op));
+        m.scale.copy(t.size); m.position.copy(t.center); m.renderOrder = on ? 24 : 23; layer.add(m);
+        if (on) { pulse.push(m.material); thick(cellRect(cl), accent, 5, false, true); }
+        // номера — только у квартир выбранного этажа: на остальных этажах те же места, номера мешали бы
+        if (here || on) wallLabel(u.num, 'lc-num' + (on ? ' on' : ''), t.center, cl.normal);
+      });
     });
     const facing = c.flipZ ? -1 : 1;
     for (let e = 0; e < B.entr.length; e++) entrLabel(B, c, e, facing, overlay);
   }
-  /** Точка на лицевой или задней стене рамки под курсором (та, что смотрит на камеру): сторона, доли длины и высоты */
+  /** Точка на стене рамки под курсором (сторона, что смотрит на камеру): сторона, доля вдоль неё и доля высоты */
   function facadeHit(e) {
     setRay(e);
     let best = null;
-    for (const facing of [1, -1]) {
-      const n = new THREE.Vector3(0, 0, facing).applyQuaternion(frame.quaternion), p = frame.localToWorld(new THREE.Vector3(0, 0, 0.5 * facing));
+    for (const face of FACES) {
+      const n = normalOf(face).applyQuaternion(frame.quaternion), p = frame.localToWorld(normalOf(face).multiplyScalar(0.5));
       if (n.dot(camera.position.clone().sub(p)) <= 0) continue;
       const hit = ray.ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(n, p), new THREE.Vector3());
       if (!hit) continue;
-      const l = frame.worldToLocal(hit.clone());
-      if (Math.abs(l.x) > 0.5 || Math.abs(l.y) > 0.5) continue;
+      const l = frame.worldToLocal(hit.clone()), a = Math.abs(face) === 1 ? l.x : l.z;
+      if (Math.abs(a) > 0.5 || Math.abs(l.y) > 0.5) continue;
       const d = hit.distanceTo(camera.position);
-      if (!best || d < best.d) best = { facing, x: l.x + 0.5, y: l.y + 0.5, d };
+      if (!best || d < best.d) best = { face, a: a + 0.5, y: l.y + 0.5, d };
     }
     return best;
   }
-  /** Квартира в этой точке фасада (нижняя из совпавших; выбранная — первой) */
+  /** Квартира в этой точке фасада: сначала выбранного этажа, затем выбранная, затем нижняя */
   function unitAt(h) {
     const B = blocks[curBlock], c = C(curBlock);
-    const hits = unitsOf(curBlock).filter((u) => {
-      const cell = cellOf(u, B, c);
-      return cell.facing === h.facing && h.x >= cell.min.x + 0.5 && h.x <= cell.max.x + 0.5 && h.y >= cell.floorY[0] + 0.5 && h.y <= cell.floorY[1] + 0.5;
-    });
-    return hits.find((u) => u.id === mark.sel) || hits.sort((a, b) => a.f - b.f)[0] || null;
+    const hits = unitsOf(curBlock).filter((u) => cellsOf(u, B, c).some((cl) => cl.face === h.face && h.a >= cl.a[0] && h.a <= cl.a[1] && h.y >= cl.floorY[0] + 0.5 && h.y <= cl.floorY[1] + 0.5));
+    return hits.find((u) => mark.floor != null && u.f === mark.floor) || hits.find((u) => u.id === mark.sel) || hits.sort((a, b) => a.f - b.f)[0] || null;
   }
-  /** Отрезок окон, которые протянули мышью: от левого края первого окна до правого края последнего */
-  function cellsRange(facing, xa, xb) {
-    const ex = winEdges(winOf(C(curBlock), facing));
-    const at = (x) => { for (let i = 0; i < ex.length - 2; i++) if (x <= ex[i + 1]) return i; return ex.length - 2; };
-    const a = at(Math.min(xa, xb)), b = at(Math.max(xa, xb));
-    return [ex[a], ex[b + 1]];
+  const cellIdx = (c, face, a) => { const ex = winEdges(winOf(c, face)); for (let i = 0; i < ex.length - 2; i++) if (a <= ex[i + 1]) return i; return ex.length - 2; };
+  /** Окна квартиры на стороне: номера ячеек сетки, чьи середины внутри её отрезков */
+  function cellsSet(g, ex, face) {
+    const s = new Set();
+    for (let k = 0; k < ex.length - 1; k++) { const m = (ex[k] + ex[k + 1]) / 2; if (g.some(([f, a0, a1]) => f === face && m > a0 && m < a1)) s.add(k); }
+    return s;
   }
-  function showPreview(facing, x0, x1) {
-    const u = byId[mark.sel];
-    const fy = u ? floorOf(u, blocks[curBlock], C(curBlock)) : { y0: 0, y1: 1 };
-    const z = facing > 0 ? 0.5 + 0.008 : -0.5 - 0.008;
-    preview.scale.set(x1 - x0, fy.y1 - fy.y0, 0.004); preview.position.set((x0 + x1) / 2 - 0.5, (fy.y0 + fy.y1) / 2 - 0.5, z);
-    preview.visible = true;
+  /** Ячейки подряд → отрезки стороны */
+  function segsFrom(set, ex, face) {
+    const out = [];
+    [...set].sort((a, b) => a - b).forEach((k) => { const last = out[out.length - 1]; if (last && last.k === k - 1) { last.a1 = ex[k + 1]; last.k = k; } else out.push({ a0: ex[k], a1: ex[k + 1], k }); });
+    return out.map((s) => [face, +s.a0.toFixed(4), +s.a1.toFixed(4)]);
+  }
+  /** Где сейчас квартира (поставленная или по умолчанию) — отрезками */
+  const placeNow = (u, c) => slotOf(u, c) || { g: cellsOf(u, blocks[u.b], c).map((cl) => [cl.face, +cl.a[0].toFixed(4), +cl.a[1].toFixed(4)]), m: 0 };
+  /** Окно k на стороне face — выбранной квартире (add) или убрать у неё */
+  function paintCell(face, k, add) {
+    const u = byId[mark.sel]; if (!u) return;
+    const c = C(curBlock), B = blocks[curBlock], ex = winEdges(winOf(c, face));
+    if (mark.all && !c.slots) c.slots = allocate(B, c, unitsOf(curBlock), true);
+    const cur = placeNow(u, c), set = cellsSet(cur.g, ex, face);
+    if (add) set.add(k); else set.delete(k);
+    const g = cur.g.filter((s) => s[0] !== face).concat(segsFrom(set, ex, face));
+    if (!mark.all) { (c.ux ??= {})[u.id] = { g }; return; }
+    c.slots[slotKey(u)] = { g, m: 1 };
+    if (c.ux) delete c.ux[u.id];
+    // окно было у соседа по этажу — забираем у него: одно окно у двух квартир не бывает
+    if (add) for (const v of unitsOf(curBlock)) {
+      if (v.id === u.id || v.e !== u.e || v.f !== u.f) continue;
+      const pv = placeNow(v, c), sv = cellsSet(pv.g, ex, face);
+      if (!sv.has(k)) continue;
+      sv.delete(k);
+      c.slots[slotKey(v)] = { g: pv.g.filter((s) => s[0] !== face).concat(segsFrom(sv, ex, face)), m: 1 };
+    }
   }
   function relayout(bid) { const c = C(bid); if (c.slots || c.win) c.slots = allocate(blocks[bid], c, unitsOf(bid), true); }
-  function assign(id, facing, x0, x1) {
-    const u = byId[id]; if (!u) return;
-    const before = snap(), c = C(curBlock);
-    if (mark.all) {
-      if (!c.slots) c.slots = allocate(blocks[curBlock], c, unitsOf(curBlock), true);
-      c.slots[`${u.e}|${Math.max(1, u.n)}|${u.i}`] = [facing, +x0.toFixed(4), +x1.toFixed(4), 1];
-      if (c.ux) delete c.ux[u.id];
-    } else (c.ux ??= {})[u.id] = [facing, +x0.toFixed(4), +x1.toFixed(4)];
-    changed(); remember(before);
-    cfg.onAssign && cfg.onAssign(u);
-  }
   canvas.addEventListener('pointerdown', (e) => {
     if (!mark.on || e.button !== 0) return;
     const h = facadeHit(e);
     if (!h) return;   // мимо дома — крутим камеру как обычно
     e.stopImmediatePropagation(); e.preventDefault();
-    mark.paint = { h, cur: h, at: [e.clientX, e.clientY], moved: false, id: e.pointerId };
+    const P = (mark.paint = { h, at: [e.clientX, e.clientY], moved: false, id: e.pointerId, done: new Set(), add: null, before: null });
+    if (mark.mode === 'paint' && mark.sel) {
+      const c = C(curBlock), k = cellIdx(c, h.face, h.a);
+      P.add = !cellsSet(placeNow(byId[mark.sel], c).g, winEdges(winOf(c, h.face)), h.face).has(k);
+      P.before = snap(); paintCell(h.face, k, P.add); P.done.add(h.face + ':' + k); drawMark(curBlock);
+    }
     controls.enabled = false;
     canvas.setPointerCapture(e.pointerId);
   }, { capture: true });
   canvas.addEventListener('pointermove', (e) => {
     if (!mark.on) return;
     const P = mark.paint;
-    if (!P) { canvas.style.cursor = facadeHit(e) ? 'crosshair' : ''; return; }
-    const h = facadeHit(e);
+    if (!P) { canvas.style.cursor = facadeHit(e) ? (mark.mode === 'paint' && mark.sel ? 'cell' : 'pointer') : ''; return; }
     if (Math.hypot(e.clientX - P.at[0], e.clientY - P.at[1]) > 6) P.moved = true;
-    if (!h || h.facing !== P.h.facing || !P.moved || !mark.sel) return;
-    P.cur = h;
-    const [x0, x1] = cellsRange(h.facing, P.h.x, h.x);
-    showPreview(h.facing, x0, x1);
+    if (P.add == null) return;
+    const h = facadeHit(e);
+    if (!h) return;
+    const k = cellIdx(C(curBlock), h.face, h.a), key = h.face + ':' + k;
+    if (P.done.has(key)) return;
+    P.done.add(key); paintCell(h.face, k, P.add); drawMark(curBlock);
   });
   const endPaint = () => {
     const P = mark.paint;
     if (!P) return;
-    mark.paint = null; preview.visible = false; controls.enabled = true;
+    mark.paint = null; controls.enabled = true;
     try { canvas.releasePointerCapture(P.id); } catch (e) { /* уже отпущен */ }
-    if (!P.moved || !mark.sel) {
-      // щелчок — выбрать квартиру в этом месте
-      const u = unitAt(P.h);
-      if (u) { mark.sel = u.id; drawMark(curBlock); cfg.onSelect && cfg.onSelect(u); }
-      return;
-    }
-    const [x0, x1] = cellsRange(P.h.facing, P.h.x, P.cur.x);
-    assign(mark.sel, P.h.facing, x0, x1);
+    if (P.add != null) { changed(); remember(P.before); cfg.onAssign && cfg.onAssign(byId[mark.sel]); return; }
+    if (P.moved) return;
+    // щелчок в «Выбрать» — квартира в этом месте
+    const u = unitAt(P.h);
+    if (u) { mark.sel = u.id; mark.floor = u.f; drawMark(curBlock); cfg.onSelect && cfg.onSelect(u); }
   };
   canvas.addEventListener('pointerup', endPaint);
   canvas.addEventListener('pointercancel', endPaint);
@@ -682,18 +736,16 @@ export async function start(el, cfg) {
       const c = C(bid), g = new THREE.Group();
       g.position.set(c.c[0], c.c[1], c.c[2]); g.rotation.set(0, c.r, 0); g.scale.set(c.s[0], c.s[1], c.s[2]);
       statusGroup.add(g);
-      const B = blocks[bid];
+      const B = blocks[bid], grow = growOf();
       units.filter((u) => u.b === bid).forEach((u) => {
-        const cell = cellOf(u, B, c), min = cell.min.clone(), max = cell.max.clone();
-        const pad = 0.12;   // зазор между плитками — видно, где кончается одна квартира и начинается другая
-        const dx = (max.x - min.x) * pad / 2, dy = (max.y - min.y) * pad / 2;
-        min.x += dx; max.x -= dx; min.y += dy; max.y -= dy;
-        const out = 0.004 + (growOf() / c.s[2]);
-        if (cell.facing > 0) { min.z = 0.5 + out * 0.5; max.z = 0.5 + out; } else { max.z = -0.5 - out * 0.5; min.z = -0.5 - out; }
-        const m = new THREE.Mesh(unitBox, tileMat(u.s || 'free', false));
-        m.scale.copy(max.clone().sub(min)); m.position.copy(min.clone().add(max).multiplyScalar(0.5));
-        m.userData.unit = u.id; m.renderOrder = 12;
-        g.add(m);
+        // плитка на каждой стене, куда смотрят окна квартиры; зазор между плитками — видно, где кончается одна квартира
+        cellsOf(u, B, c).forEach((cl) => {
+          const t = wallTile(cl, c.s, grow * 0.5, grow * 0.5, 0.12);
+          const m = new THREE.Mesh(unitBox, tileMat(u.s || 'free', false));
+          m.scale.copy(t.size); m.position.copy(t.center);
+          m.userData.unit = u.id; m.renderOrder = 12;
+          g.add(m);
+        });
       });
       g.updateMatrixWorld(true);
       box.union(new THREE.Box3().setFromObject(g));
@@ -705,14 +757,16 @@ export async function start(el, cfg) {
     selected = null;
   }
   const pickTile = (e) => { setRay(e); return ray.intersectObject(statusGroup, true)[0]?.object || null; };
+  /** Все плитки квартиры (у сквозной — спереди и сзади) — подсветить вместе */
+  const tilesOf = (id) => { const out = []; statusGroup.traverse((o) => { if (o.isMesh && o.userData.unit === id) out.push(o); }); return out; };
   canvas.addEventListener('pointermove', (e) => {
     if (!statusGroup.children.length || e.buttons) return;
-    const o = pickTile(e);
-    if (o === hovered) return;
-    if (hovered) hovered.material = tileMat(byId[hovered.userData.unit]?.s || 'free', false);
-    hovered = o;
-    canvas.style.cursor = o ? 'pointer' : '';
-    if (o) { o.material = tileMat(byId[o.userData.unit]?.s || 'free', true); cfg.onHover && cfg.onHover(byId[o.userData.unit]); }
+    const o = pickTile(e), id = o ? o.userData.unit : null;
+    if (id === hovered) return;
+    if (hovered) tilesOf(hovered).forEach((t) => { t.material = tileMat(byId[hovered]?.s || 'free', false); });
+    hovered = id;
+    canvas.style.cursor = id ? 'pointer' : '';
+    if (id) { tilesOf(id).forEach((t) => { t.material = tileMat(byId[id]?.s || 'free', true); }); cfg.onHover && cfg.onHover(byId[id]); }
   });
   let downAt = null;
   canvas.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
@@ -738,8 +792,8 @@ export async function start(el, cfg) {
   const _n = new THREE.Vector3(), _p = new THREE.Vector3();
   function hideBackLabels() {
     for (const o of layer.children) {
-      if (!o.isCSS2DObject || !o.userData.facing) continue;
-      _n.set(0, 0, o.userData.facing).applyQuaternion(frame.quaternion);
+      if (!o.isCSS2DObject || !o.userData.normal) continue;
+      _n.copy(o.userData.normal).applyQuaternion(frame.quaternion);
       o.getWorldPosition(_p);
       o.visible = _n.dot(camera.position.clone().sub(_p)) > 0;
     }
@@ -795,32 +849,42 @@ export async function start(el, cfg) {
     /** Подъезды снова поровну */
     even() { const before = snap(); delete C(curBlock).ex; relayout(curBlock); changed(); remember(before); return C(curBlock); },
     // ---------- разметка квартир ----------
-    /** Режим «Квартиры»: рамку не двигаем, щёлкаем и тянем по окнам */
+    /** Режим «Квартиры»: рамку не двигаем, выбираем квартиры и отмечаем их окна */
     mark(on) {
-      mark.on = !!on; mark.paint = null; preview.visible = false;
+      mark.on = !!on; mark.paint = null;
       const helper = tc && (tc.getHelper ? tc.getHelper() : tc);
       if (helper) helper.visible = !mark.on;
       if (tc) tc.enabled = !mark.on;
       handles.visible = !mark.on && !!cfg.calibrate;
       if (curBlock != null) drawGrid(curBlock);
     },
-    /** Выбрать квартиру (в разметке) */
+    /** 'select' — щелчок выбирает квартиру, 'paint' — щелчок по окну добавляет/убирает его у выбранной */
+    markMode(m) { mark.mode = m === 'paint' ? 'paint' : 'select'; },
+    /** Этаж, чьи номера видны на фасаде (null — все) */
+    markFloor(f) { mark.floor = f == null ? null : +f; if (mark.on && curBlock != null) drawMark(curBlock); },
+    floor: () => mark.floor,
+    /** Выбрать квартиру (в разметке) — и её этаж */
     select(id) {
       const u = byId[id]; if (!u) return null;
       if (u.b !== curBlock) { curBlock = u.b; applyFrame(u.b); }
-      mark.sel = id; drawGrid(curBlock);
+      mark.sel = id; mark.floor = u.f; drawGrid(curBlock);
       return u;
     },
     selected: () => (mark.sel ? byId[mark.sel] : null),
     /** На все этажи с таким же набором квартир (true) или только эта квартира */
     markAll(on) { mark.all = !!on; },
-    /** Где сейчас квартира: сторона, x0, x1 и кем поставлена */
-    placeOf(id) { const u = byId[id]; if (!u) return null; const c = C(u.b); return { slot: slotOf(u, c), own: !!(c.ux && c.ux[u.id]) }; },
-    /** Окон на стороне ('f' лицевая, 'b' задняя): найденные ИИ или заданные числом */
-    winCount: (side) => { const cs = C(curBlock).win && C(curBlock).win[side]; return cs && cs.length > 1 ? cs.length : winOf(C(curBlock), side === 'f' ? 1 : -1).length; },
+    /** Где сейчас квартира: отрезки по сторонам, кем поставлена, сколько окон на каждой стороне */
+    placeOf(id) {
+      const u = byId[id]; if (!u) return null;
+      const c = C(u.b), slot = slotOf(u, c), g = placeNow(u, c).g, wins = {};
+      FACES.forEach((f) => { const n = cellsSet(g, winEdges(winOf(c, f)), f).size; if (n) wins[faceKey(f)] = n; });
+      return { slot, own: !!(c.ux && c.ux[u.id]), wins };
+    },
+    /** Окон на стороне ('f' лицевая, 'b' задняя, 's' торцы) */
+    winCount: (side) => winOf(C(curBlock), { f: 1, b: -1, s: 2 }[side] || 1).length,
     setWin(side, n) {
-      const before = snap(), c = C(curBlock);
-      c.win = Object.assign({}, c.win || {}, { [side]: uniform(Math.max(1, Math.min(120, n))) });
+      const before = snap(), c = C(curBlock), w = uniform(Math.max(1, Math.min(120, n)));
+      c.win = Object.assign({}, c.win || {}, side === 's' ? { r: w, l: w } : { [side]: w });
       relayout(curBlock); changed(); remember(before); return c;
     },
     /** Найти окна на фасадах там, где стоит рамка (привязка сделана раньше, без окон) */
@@ -906,6 +970,17 @@ export async function start(el, cfg) {
     block: () => curBlock,
     // карточка закрыта — не рисуем (в iframe внутри закрытого окна)
     pause(on) { renderer.setAnimationLoop(on ? null : loop); },
+    /** Для тестов: где на экране точка стены рамки (сторона, доля вдоль неё, доля высоты) */
+    screenOf(face, a, y) {
+      const zf = Math.abs(face) === 1, w = 0.5 * Math.sign(face);
+      const p = frame.localToWorld(zf ? new THREE.Vector3(a - 0.5, y - 0.5, w) : new THREE.Vector3(w, y - 0.5, a - 0.5)).project(camera), r = canvas.getBoundingClientRect();
+      return [r.left + ((p.x + 1) / 2) * r.width, r.top + ((1 - p.y) / 2) * r.height];
+    },
+    /** Для тестов: середины окон стороны и середина этажа квартиры по высоте */
+    cellsInfo(face, id) {
+      const c = C(curBlock), ex = winEdges(winOf(c, face)), u = byId[id], fy = u ? floorOf(u, blocks[u.b], c) : { y0: 0, y1: 1 };
+      return { mids: ex.slice(0, -1).map((v, k) => (v + ex[k + 1]) / 2), y: (fy.y0 + fy.y1) / 2 };
+    },
     // проверка из консоли / тестов: рамка и подсветка в мировых координатах
     debug() {
       const hl = layer.children.find((o) => o.isMesh), b = hl ? new THREE.Box3().setFromObject(hl) : null;

@@ -145,6 +145,7 @@
         <div class="toolbar inv-bar"><div class="chips">${chips}<a href="#" class="chip" data-a="wizard">+ ${T.block}</a></div><span class="grow"></span>
           <button class="btn btn-s" data-a="blockEdit">${T.blockSet}</button>
           <button class="btn btn-s" data-a="wizard" data-b="${b.id}">${T.fill}</button>
+          <button class="btn btn-s" data-a="renumBlock">${T.renumBlock}</button>
           ${inv.blocks.length > 1 ? `<button class="btn btn-s btn-ghost btn-d" data-a="blockDel" title="${T.blockDel}">✕</button>` : ''}
           <label class="switch" title="${T.multiHint}"><input type="checkbox" data-a="multi" ${multi ? 'checked' : ''}> ${T.multi}</label></div>
         <div class="chess-legend flex inv-legend"><span><i class="st-free"></i>${T.s_free}</span><span><i class="st-reserve"></i>${T.s_reserve}</span><span><i class="st-booked"></i>${T.s_booked}</span><span><i class="st-sold"></i>${T.s_sold}</span><span class="muted">${T.legendHint}</span></div>
@@ -177,6 +178,8 @@
         <label class="field full"><span>${T.note}</span><input data-f="note" value="${esc(u.note || '')}" maxlength="120" placeholder="${T.notePh}"></label>
         <label class="switch full"><input type="checkbox" data-f="sale" ${s === 'reserve' ? '' : 'checked'} ${d ? 'disabled' : ''}> ${T.forSale}</label>
       </div>
+      <div class="flex mt inv-acts"><button class="btn btn-s" data-a="move" data-d="-1">← ${T.moveL}</button><button class="btn btn-s" data-a="move" data-d="1">${T.moveR} →</button></div>
+      <small class="muted">${T.moveHint}</small>
       <div class="flex mt inv-acts"><button class="btn btn-s" data-a="dup">${T.dup}</button><button class="btn btn-s btn-d" data-a="del" ${d ? 'disabled' : ''}>${T.del}</button></div>`;
     }
     const flats = list.filter(isFlat).length, withDeal = list.filter(u => deals[u.id]).length;
@@ -314,9 +317,9 @@
       <label class="field"><span>${T.parkN}</span><input id="wz-pn" type="number" min="0" max="400" value="0"></label>
       <label class="field"><span>${T.storN}</span><input id="wz-sn" type="number" min="0" max="400" value="0"></label>
       <label class="field"><span>${T.storArea}</span><input id="wz-sa" type="number" min="0" step="0.1" value="4"></label>
-      <label class="field"><span>${T.numFrom}</span><input id="wz-n0" type="number" min="1" value="${b ? (Math.max(0, ...unitsOf(b.id).filter(isFlat).map(u => parseInt(u.num) || 0)) + 1) : 1}"></label>
+      <label class="field"><span>${T.numFrom}</span><input id="wz-n0" type="number" min="1" value="1"></label>
       <label class="field"><span>${T.numMode}</span><select id="wz-nm"><option value="block">${T.numBlock}</option><option value="ent">${T.numEnt}</option><option value="floor">${T.numFloor}</option></select></label>
-      ${b && unitsOf(b.id).length ? `<label class="field"><span>${T.existing}</span><select id="wz-mode"><option value="add">${T.modeAdd}</option><option value="replace">${T.modeReplace}</option></select></label>` : ''}
+      ${b && unitsOf(b.id).length ? `<label class="field"><span>${T.existing}</span><select id="wz-mode"><option value="replace">${T.modeReplace}</option><option value="add">${T.modeAdd}</option></select></label>` : ''}
     </div>
     <div class="alert alert-info mt" id="wz-sum"></div>
     <div class="flex mt"><button class="btn btn-p" id="wz-go">${T.create}</button><button class="btn" data-x>${T.cancel}</button></div></div>`;
@@ -330,9 +333,13 @@
       const per = box.children.length, ff = dlg.querySelector('#wz-ff').value;
       const flats = ent * Math.max(0, f1 - f0 + 1) * per + (ff === 'flat' && f0 > 1 ? ent * per : 0);
       const com = ff === 'com' ? ent * num(dlg.querySelector('#wz-cn').value) : 0;
-      dlg.querySelector('#wz-sum').innerHTML = '<div>' + T.wzSum.replace(':f', `<b>${flats}</b>`).replace(':c', `<b>${com}</b>`).replace(':p', `<b>${ent * num(dlg.querySelector('#wz-pn').value)}</b>`).replace(':s', `<b>${ent * num(dlg.querySelector('#wz-sn').value)}</b>`) + '</div>';
+      const mode = dlg.querySelector('#wz-mode'), had = b ? unitsOf(b.id).filter(u => !deals[u.id]).length : 0;
+      const note = mode ? `<div class="mt">${(mode.value === 'replace' ? T.wzReplace : T.wzAdd).replace(':n', `<b>${had}</b>`)}</div>` : '';
+      dlg.querySelector('#wz-sum').innerHTML = note + '<div>' + T.wzSum.replace(':f', `<b>${flats}</b>`).replace(':c', `<b>${com}</b>`).replace(':p', `<b>${ent * num(dlg.querySelector('#wz-pn').value)}</b>`).replace(':s', `<b>${ent * num(dlg.querySelector('#wz-sn').value)}</b>`) + '</div>';
     };
     dlg.addEventListener('input', sum); dlg.addEventListener('change', sum);
+    // добавляем к имеющимся — номера продолжают их; заменяем — с 1
+    dlg.querySelector('#wz-mode')?.addEventListener('change', e => { dlg.querySelector('#wz-n0').value = e.target.value === 'add' ? Math.max(0, ...unitsOf(b.id).filter(isFlat).map(u => parseInt(u.num) || 0)) + 1 : 1; });
     dlg.querySelector('#wz-addt').onclick = () => { addPos(box.lastElementChild ? box.lastElementChild.querySelector('select').value : '+'); sum(); };
     box.addEventListener('click', e => { if (e.target.closest('.icon-btn') && box.children.length > 1) { e.target.closest('.wz-pos').remove(); sum(); } });
     box.addEventListener('change', e => { if (e.target.value === '+') { dlg.querySelector('#wz-quick').hidden = false; e.target.dataset.quick = '2'; } });
@@ -459,6 +466,38 @@
     mark(); render();
   }
 
+  /* ---------- нумерация всего корпуса: подъезд → этаж снизу вверх → слева направо; номера квартир со сделкой не трогаем ---------- */
+  async function renumBlock() {
+    const b = blockOf(cur);
+    const v = await ui.form(T.renumBlockQ, [
+      { name: 'start', label: T.numFrom, type: 'number', value: 1, min: 1 },
+      { name: 'mode', label: T.numMode, type: 'select', value: 'block', options: [['block', T.numBlock], ['ent', T.numEnt], ['floor', T.numFloor]] },
+    ], { ok: T.ok, text: T.renumBlockHint });
+    if (!v) return;
+    const start = Math.max(1, Math.round(num(v.start, 1))), taken = new Set(unitsOf(b.id).filter(u => deals[u.id]).map(u => u.num));
+    let n = start, done = 0;
+    b.entr.forEach(e => {
+      if (v.mode === 'ent') n = start;
+      const us = unitsOf(b.id, e.id).filter(isFlat), fs = [...new Set(us.map(u => u.f))].sort((x, y) => x - y);
+      fs.forEach(f => us.filter(u => u.f === f).forEach((u, i) => {
+        if (deals[u.id]) return;
+        let label = v.mode === 'floor' ? `${f}${String(i + 1).padStart(2, '0')}` : String(n++);
+        while (taken.has(label) && v.mode !== 'floor') label = String(n++);
+        u.num = label; taken.add(label); done++;
+      }));
+    });
+    mark(); render(); toast(T.renumDone.replace(':n', done));
+  }
+  /** Квартиру — левее или правее на её этаже (порядок слева направо = окна на фасаде и место на 3D-модели) */
+  function moveUnit(u, d) {
+    if (!u) return;
+    const row = inv.units.filter(x => x.b === u.b && x.e === u.e && x.f === u.f), k = row.indexOf(u), other = row[k + d];
+    if (!other) return;
+    const i = inv.units.indexOf(u), j = inv.units.indexOf(other);
+    [inv.units[i], inv.units[j]] = [inv.units[j], inv.units[i]];
+    mark(); render();
+  }
+
   /* ---------- отрисовка ---------- */
   function render() {
     if (!inv) { app.innerHTML = empty(); return; }
@@ -523,6 +562,8 @@
       case 'bPpm2': { const v = num(document.getElementById('bk-ppm2').value), R = rule(); if (v <= 0) return; list().filter(u => !deals[u.id]).forEach(u => { u.price = Math.round(num(u.area) * v / R.round) * R.round; }); mark(); return render(); }
       case 'bAuto': list().forEach(u => delete u.price); mark(); return render();
       case 'bNum': return renumber(document.getElementById('bk-num').value.trim() || '1');
+      case 'renumBlock': return renumBlock();
+      case 'move': return moveUnit(list()[0], +a.dataset.d);
       case 'bSale': list().forEach(u => setField(u, 'sale', a.dataset.on === '1')); mark(); return render();
       case 'typeEdit': return typeEdit(a.dataset.t || null);
       case 'typeDel': return typeDel(a.dataset.t);

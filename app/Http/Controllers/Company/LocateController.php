@@ -46,9 +46,9 @@ class LocateController extends ErpController
         abort_unless($media->kind === 'exterior', 422);
         $d = $request->validate(['block' => ['nullable', 'string', 'max:40'], 'c' => ['required', 'array', 'size:3'], 'c.*' => ['numeric'],
             's' => ['required', 'array', 'size:3'], 's.*' => ['numeric'], 'r' => ['required', 'numeric'], 'floors' => ['required', 'integer', 'min:1', 'max:200'], 'gf' => ['nullable', 'numeric', 'min:0', 'max:30'],
-            'rows' => ['required', 'integer', 'in:1,2'], 'back' => ['required', 'in:rev,fwd'], 'flipX' => ['boolean'], 'flipZ' => ['boolean'],
+            'rows' => ['required', 'integer', 'in:1,2,3'], 'back' => ['required', 'in:rev,fwd'], 'flipX' => ['boolean'], 'flipZ' => ['boolean'],
             'ex' => ['nullable', 'array', 'max:60'], 'ex.*' => ['numeric', 'gt:0', 'lt:1'],
-            'win' => ['nullable', 'array'], 'win.f' => ['nullable', 'array', 'max:200'], 'win.b' => ['nullable', 'array', 'max:200'],
+            'win' => ['nullable', 'array'], 'win.*' => ['nullable', 'array', 'max:200'],
             'slots' => ['nullable', 'array', 'max:3000'], 'ux' => ['nullable', 'array', 'max:6000'],
             'auto' => ['nullable', 'array'], 'auto.by' => ['nullable', 'in:ai,geo'], 'auto.mf' => ['nullable', 'integer', 'min:0', 'max:300'],
             'auto.doors' => ['nullable', 'integer', 'min:0', 'max:100'], 'auto.warn' => ['nullable', 'array', 'max:8'], 'auto.warn.*' => ['string', 'in:'.implode(',', Locate::WARN)]]);

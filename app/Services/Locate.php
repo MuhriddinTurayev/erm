@@ -126,7 +126,7 @@ class Locate
         $out = [
             'c' => $v3($d['c'] ?? [0, 0, 0]), 's' => $s, 'r' => round((float) ($d['r'] ?? 0), 5),
             'floors' => max(1, min(200, (int) ($d['floors'] ?? 1))), 'gf' => round(max(0, min(30, (float) ($d['gf'] ?? 0))), 2),
-            'rows' => ((int) ($d['rows'] ?? 2)) === 1 ? 1 : 2,
+            'rows' => in_array($rw = (int) ($d['rows'] ?? 2), [1, 2, 3], true) ? $rw : 2,   // 3 — сквозные квартиры (окна и спереди, и сзади)
             'back' => ($d['back'] ?? 'rev') === 'fwd' ? 'fwd' : 'rev', 'flipX' => (bool) ($d['flipX'] ?? false), 'flipZ' => (bool) ($d['flipZ'] ?? false),
         ];
         // границы подъездов вдоль рамки (доли длины): подъезды бывают разной ширины; нет — делим поровну
@@ -135,28 +135,45 @@ class Locate
         if ($ex && count($ex) <= 60) {
             $out['ex'] = $ex;
         }
-        // ряды окон на фасадах: середины окон вдоль рамки (доли длины), f — лицевая сторона (+Z рамки), b — задняя
+        // окна на сторонах рамки: середины окон вдоль стороны (доли): f — лицевая (+Z), b — задняя (−Z), r и l — торцы (+X и −X)
         $frac = fn ($x) => round(max(0, min(1, (float) $x)), 4);
-        foreach (['f', 'b'] as $side) {
+        foreach (['f', 'b', 'r', 'l'] as $side) {
             $w = array_map($frac, array_slice(array_values((array) ($d['win'][$side] ?? [])), 0, 200));
             sort($w);
             if ($w) {
                 $out['win'][$side] = $w;
             }
         }
-        // где квартира на фасаде: s — сторона рамки (1 лицевая, −1 задняя), x0…x1 — доли длины. slots — по месту на этаже
-        // («подъезд|квартир на этаже|номер на этаже»: на всех таких этажах одинаково), ux — у одной квартиры; m=1 — поставил человек
+        // где квартира на фасаде: g — отрезки [сторона, a0, a1] (сторона 1/−1 — лицевая/задняя, 2/−2 — торцы; квартира бывает
+        // сразу на двух сторонах — сквозная или угловая). slots — по месту на этаже («подъезд|квартир на этаже|номер»: на всех
+        // таких этажах одинаково), ux — у одной квартиры; m=1 — поставил человек. Старый вид [s, x0, x1, m] переводим.
         $slot = function ($v, bool $withM) use ($frac) {
-            $v = array_values((array) $v);
-            if (count($v) < 3) {
+            $v = (array) $v;
+            if (isset($v['g'])) {
+                $list = (array) $v['g'];
+                $m = ! empty($v['m']);
+            } elseif (count($v) >= 3 && is_numeric($v[0] ?? null)) {
+                $list = [[(float) $v[0] < 0 ? -1 : 1, $v[1] ?? 0, $v[2] ?? 0]];
+                $m = ! empty($v[3]);
+            } else {
                 return null;
             }
-            [$x0, $x1] = [$frac($v[1]), $frac($v[2])];
-            if ($x1 - $x0 < 0.002) {
+            $g = [];
+            foreach (array_slice($list, 0, 16) as $s) {
+                $s = array_values((array) $s);
+                if (count($s) < 3 || ! in_array((int) $s[0], [1, -1, 2, -2], true)) {
+                    continue;
+                }
+                [$a0, $a1] = [$frac($s[1]), $frac($s[2])];
+                if ($a1 - $a0 >= 0.002) {
+                    $g[] = [(int) $s[0], $a0, $a1];
+                }
+            }
+            if (! $g && ! ($withM && $m)) {
                 return null;
             }
 
-            return $withM && ! empty($v[3]) ? [(float) $v[0] < 0 ? -1 : 1, $x0, $x1, 1] : [(float) $v[0] < 0 ? -1 : 1, $x0, $x1];
+            return $withM && $m ? ['g' => $g, 'm' => 1] : ['g' => $g];
         };
         foreach (array_slice((array) ($d['slots'] ?? []), 0, 3000, true) as $k => $v) {
             if (preg_match('/^\d{1,3}\|\d{1,3}\|\d{1,3}$/', (string) $k) && ($s = $slot($v, true))) {
