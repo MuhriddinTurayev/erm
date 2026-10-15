@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\RateLimiter;
 
 /**
  * Вход в API по ключу: «Authorization: Bearer oft_…» или «X-Api-Key: oft_…».
- * Проверяет срок ключа, подписку компании, лимит запросов и право на раздел (api:objects:read).
+ * Проверяет срок ключа, подписку компании, лимит запросов и право на раздел (api:objects:read) — по роли, с которой выдан ключ.
  */
 class ApiAuth
 {
@@ -39,6 +39,9 @@ class ApiAuth
         }
         if (! $token->workspace->hasAccess()) {
             return self::fail(402, 'subscription_inactive', 'Company subscription is not active');
+        }
+        if (! \App\Services\Api\Scopes::enabled()) {
+            return self::fail(403, 'api_disabled', 'API is temporarily disabled on the platform');
         }
         $limitKey = 'api:'.$token->id;
         if (RateLimiter::tooManyAttempts($limitKey, self::PER_MINUTE)) {

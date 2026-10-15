@@ -3,6 +3,7 @@
 namespace App\Services\Api;
 
 use App\Jobs\DeliverWebhook;
+use App\Models\ApiToken;
 use App\Models\Webhook;
 use App\Models\WebhookDelivery;
 use App\Models\Workspace;
@@ -33,18 +34,35 @@ class Webhooks
         'task.updated' => ['Задача изменена: статус, срок, исполнитель', 'tasks'],
     ];
 
-    public const MAX_HOOKS = 10;
+    /** Вебхуков у одного ключа */
+    public const MAX_HOOKS = 5;
 
     /** Столько неудачных отправок подряд — и вебхук выключается (адрес, видимо, больше не работает) */
     public const MAX_FAILS = 50;
 
     private const CACHE = 'webhooks:';
 
-    /** Включённые вебхуки компании: [[id, события], …] — из кэша на минуту */
+    /** событие => право, без которого ключ это событие не получает (роль ключа не видит раздел — не видит и событие) */
+    public const SCOPE = [
+        'lead.created' => 'leads:read', 'apartment.updated' => 'sales:read', 'apartment.paid' => 'sales:read', 'payment.updated' => 'payments:read',
+        'cash.created' => 'cash:read', 'stock.moved' => 'stock:read', 'counterparty.created' => 'parties:read', 'task.created' => 'tasks:read', 'task.updated' => 'tasks:read',
+    ];
+
+    /** События, которые может получать ключ с такими правами */
+    public static function eventsFor(array $scopes): array
+    {
+        return array_values(array_filter(array_keys(self::EVENTS), fn ($e) => in_array(self::SCOPE[$e], $scopes, true)));
+    }
+
+    /** Включённые вебхуки компании: [[id, события, id ключа], …] — из кэша на минуту; API выключен на платформе — никаких */
     public static function active(int $wsId): array
     {
-        return Cache::remember(self::CACHE.$wsId, 60, fn () => Webhook::of($wsId)->where('is_active', true)->get(['id', 'events'])
-            ->map(fn ($h) => [$h->id, (array) $h->events])->all());
+        if (! Scopes::enabled()) {
+            return [];
+        }
+
+        return Cache::remember(self::CACHE.$wsId, 60, fn () => Webhook::of($wsId)->where('is_active', true)->get(['id', 'events', 'api_token_id'])
+            ->map(fn ($h) => [$h->id, (array) $h->events, $h->api_token_id])->all());
     }
 
     public static function forget(int $wsId): void
@@ -75,8 +93,19 @@ class Webhooks
             if (! $hooks) {
                 return;
             }
-            $body = self::body($wsId, $event, $data instanceof Closure ? $data() : $data);
-            foreach ($hooks as [$id]) {
+            $data = $data instanceof Closure ? $data() : $data;
+            $oid = $data['object_id'] ?? ($data['apartment']['object_id'] ?? null);
+            $tokens = ApiToken::with('workspace')->whereIn('id', array_values(array_filter(array_column($hooks, 2))))->get()->keyBy('id');
+            $body = null;
+            foreach ($hooks as [$id, , $tid]) {
+                // вебхук ключа: событие уходит, только если ключ действует, его роль видит этот раздел и это его объект
+                if ($tid) {
+                    $t = $tokens[$tid] ?? null;
+                    if (! $t || ! $t->isActive() || ! $t->can(self::SCOPE[$event] ?? '-') || ! $t->seesObject($oid)) {
+                        continue;
+                    }
+                }
+                $body ??= self::body($wsId, $event, $data);
                 $d = WebhookDelivery::create(['webhook_id' => $id, 'uuid' => $body['id'], 'event' => $event, 'payload' => self::json($body)]);
                 DeliverWebhook::dispatch($d->id)->afterCommit();
             }

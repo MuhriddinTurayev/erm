@@ -38,7 +38,8 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Открытый API v1 для других программ (сайт, CRM, 1С, Make/Zapier, свои приложения).
- * Доступ — по ключу компании с правами по разделам (см. ApiAuth), каждое изменение — в «Истории изменений».
+ * Ключ выдаёт администратор платформы с ролью в компании: ключ видит и меняет то же, что сотрудник с этой ролью,
+ * и только на своих объектах (см. ApiAuth). Каждое изменение — в «Истории изменений».
  */
 class V1Controller extends Controller
 {
@@ -94,12 +95,32 @@ class V1Controller extends Controller
     private function audit(Request $r, string $action, string $summary, ?string $project = null): void
     {
         $t = $this->token($r);
-        AuditLog::create(['workspace_id' => $t->workspace_id, 'user_id' => $t->user_id, 'project' => $project, 'action' => $action, 'summary' => 'API «'.$t->name.'»: '.$summary]);
+        AuditLog::create(['workspace_id' => $t->workspace_id, 'user_id' => null, 'project' => $project, 'action' => $action, 'summary' => 'API «'.$t->name.'»: '.$summary]);
     }
 
-    private function projectOr404(Workspace $ws, string $id): array
+    /** Объект, если он есть и ключ его видит (чужой объект — как будто его нет) */
+    private function projectOr404(Workspace $ws, string $id, ?Request $r = null): array
     {
-        return StateWriter::project($ws, $id) ?? abort(404, 'Object not found');
+        $p = StateWriter::project($ws, $id);
+        abort_if(! $p || ($r && ! $this->token($r)->seesObject($id)), 404, 'Object not found');
+
+        return $p;
+    }
+
+    /** Объекты, которые видит ключ */
+    private function visibleProjects(Request $r): array
+    {
+        $t = $this->token($r);
+
+        return array_values(array_filter($this->company($r)->projects(), fn ($p) => is_array($p) && ! empty($p['id']) && $t->seesObject((string) $p['id'])));
+    }
+
+    /** Записи своих объектов и общие (без объекта) — как у сотрудника объекта */
+    private function scoped($q, Request $r, string $col = 'project_id')
+    {
+        $only = $this->token($r)->allowedObjects();
+
+        return $only === null ? $q : $q->where(fn ($x) => $x->whereIn($col, $only)->orWhereNull($col));
     }
 
     /* ---------------- общее ---------------- */
@@ -122,7 +143,8 @@ class V1Controller extends Controller
 
         return response()->json(['data' => [
             'company' => ['id' => $ws->id, 'name' => $ws->name, 'currency' => Money::base($ws), 'timezone' => $ws->timezone ?: 'Asia/Tashkent'],
-            'key' => ['name' => $t->name, 'scopes' => array_values((array) $t->scopes), 'created_at' => $t->created_at?->toIso8601String(), 'expires_at' => $t->expires_at?->toIso8601String()],
+            'key' => ['name' => $t->name, 'role' => $t->role, 'role_name' => $t->roleName(), 'read_only' => (bool) $t->read_only, 'objects' => $t->allowedObjects(),
+                'scopes' => $t->effectiveScopes(), 'created_at' => $t->created_at?->toIso8601String(), 'expires_at' => $t->expires_at?->toIso8601String()],
             'limits' => ['requests_per_minute' => ApiAuth::PER_MINUTE],
         ]]);
     }
@@ -138,19 +160,17 @@ class V1Controller extends Controller
 
     public function objects(Request $r)
     {
-        $list = array_values(array_filter($this->company($r)->projects(), fn ($p) => is_array($p) && ! empty($p['id'])));
-
-        return response()->json(['data' => array_map(fn ($p) => Present::object($p), $list)]);
+        return response()->json(['data' => array_map(fn ($p) => Present::object($p), $this->visibleProjects($r))]);
     }
 
     public function object(Request $r, string $object)
     {
-        return response()->json(['data' => Present::object($this->projectOr404($this->company($r), $object))]);
+        return response()->json(['data' => Present::object($this->projectOr404($this->company($r), $object, $r))]);
     }
 
     public function apartments(Request $r, string $object)
     {
-        $p = $this->projectOr404($this->company($r), $object);
+        $p = $this->projectOr404($this->company($r), $object, $r);
         $f = $r->validate(['status' => ['nullable', Rule::in(array_keys(SalesController::STATUSES))], 'rooms' => ['nullable', 'integer', 'min:0'], 'floor' => ['nullable', 'integer']]);
         $sales = $this->token($r)->can('sales:read');
         $rows = array_filter(Apartments::list($p), fn ($a) => (! isset($f['status']) || $a['status'] === $f['status'])
@@ -161,7 +181,7 @@ class V1Controller extends Controller
 
     public function apartment(Request $r, string $object, string $apartment)
     {
-        $p = $this->projectOr404($this->company($r), $object);
+        $p = $this->projectOr404($this->company($r), $object, $r);
         $a = Apartments::find($p, $apartment) ?? abort(404, 'Apartment not found');
 
         return response()->json(['data' => Present::apartment($a, $object, $this->token($r)->can('sales:read'))]);
@@ -171,7 +191,7 @@ class V1Controller extends Controller
     public function apartmentUpdate(Request $r, string $object, string $apartment)
     {
         $ws = $this->company($r);
-        $p = $this->projectOr404($ws, $object);
+        $p = $this->projectOr404($ws, $object, $r);
         $a = Apartments::find($p, $apartment) ?? abort(404, 'Apartment not found');
         $d = $r->validate([
             'status' => ['sometimes', Rule::in(array_keys(SalesController::STATUSES))], 'buyer_name' => ['sometimes', 'nullable', 'string', 'max:120'],
@@ -229,8 +249,8 @@ class V1Controller extends Controller
         [$from, $to] = $this->dates($r);
         $only = $r->query('object');
         $rows = [];
-        foreach ($this->company($r)->projects() as $p) {
-            if (! is_array($p) || empty($p['id']) || ($only && (string) $p['id'] !== $only)) {
+        foreach ($this->visibleProjects($r) as $p) {
+            if ($only && (string) $p['id'] !== $only) {
                 continue;
             }
             foreach (Apartments::list($p) as $a) {
@@ -290,8 +310,8 @@ class V1Controller extends Controller
             ->when($q !== '', fn ($x) => $x->where(fn ($y) => $y->where('name', 'like', "%$q%")->orWhere('sku', 'like', "%$q%")->orWhere('group', 'like', "%$q%")))
             ->orderBy('group')->orderBy('name')->get();
         $bal = Stock::balances($ws);
-        $names = Warehouse::of($ws->id)->get()->mapWithKeys(fn ($w) => [$w->id => __($w->name)])->all();
-        $rows = $items->map(fn ($i) => Present::item($i, $bal[$i->id] ?? [], $names))->all();
+        $names = $this->scoped(Warehouse::of($ws->id), $r)->get()->mapWithKeys(fn ($w) => [$w->id => __($w->name)])->all();
+        $rows = $items->map(fn ($i) => Present::item($i, array_intersect_key($bal[$i->id] ?? [], $names), $names))->all();
         if ($r->boolean('low')) {
             $rows = array_filter($rows, fn ($x) => $x['low']);
         }
@@ -301,7 +321,7 @@ class V1Controller extends Controller
 
     public function stockWarehouses(Request $r)
     {
-        return response()->json(['data' => Warehouse::of($this->token($r)->workspace_id)->orderBy('id')->get()->map(fn ($w) => Present::warehouse($w))->values()]);
+        return response()->json(['data' => $this->scoped(Warehouse::of($this->token($r)->workspace_id), $r)->orderBy('id')->get()->map(fn ($w) => Present::warehouse($w))->values()]);
     }
 
     public function stockMoves(Request $r)
@@ -309,6 +329,7 @@ class V1Controller extends Controller
         [$from, $to] = $this->dates($r);
         $f = $r->validate(['type' => ['nullable', Rule::in(['in', 'out', 'transfer', 'adjust'])], 'item' => ['nullable', 'integer'], 'warehouse' => ['nullable', 'integer'], 'object' => ['nullable', 'string', 'max:40']]);
         $q = StockMove::of($this->token($r)->workspace_id)->with(['item', 'warehouse'])
+            ->whereIn('warehouse_id', $this->scoped(Warehouse::of($this->token($r)->workspace_id), $r)->pluck('id'))
             ->when($from, fn ($x) => $x->where('date', '>=', $from))->when($to, fn ($x) => $x->where('date', '<=', $to))
             ->when($f['type'] ?? null, fn ($x, $v) => $x->where('type', $v))->when($f['item'] ?? null, fn ($x, $v) => $x->where('item_id', $v))
             ->when($f['warehouse'] ?? null, fn ($x, $v) => $x->where('warehouse_id', $v))->when($f['object'] ?? null, fn ($x, $v) => $x->where('project_id', $v))
@@ -324,14 +345,14 @@ class V1Controller extends Controller
         $ws = $this->company($r);
         $bal = Cash::balances($ws);
 
-        return response()->json(['data' => CashDesk::of($ws->id)->orderBy('id')->get()->map(fn ($d) => Present::desk($d, $bal[$d->id] ?? 0))->values()]);
+        return response()->json(['data' => $this->scoped(CashDesk::of($ws->id), $r)->orderBy('id')->get()->map(fn ($d) => Present::desk($d, $bal[$d->id] ?? 0))->values()]);
     }
 
     public function cashOps(Request $r)
     {
         [$from, $to] = $this->dates($r);
         $f = $r->validate(['desk' => ['nullable', 'integer'], 'type' => ['nullable', Rule::in(['in', 'out'])], 'object' => ['nullable', 'string', 'max:40']]);
-        $q = CashOp::of($this->token($r)->workspace_id)->with(['desk', 'category'])
+        $q = $this->scoped(CashOp::of($this->token($r)->workspace_id), $r)->with(['desk', 'category'])
             ->when($from, fn ($x) => $x->where('date', '>=', $from))->when($to, fn ($x) => $x->where('date', '<=', $to))
             ->when($f['desk'] ?? null, fn ($x, $v) => $x->where('cash_desk_id', $v))->when($f['type'] ?? null, fn ($x, $v) => $x->where('type', $v))
             ->when($f['object'] ?? null, fn ($x, $v) => $x->where('project_id', $v))
@@ -343,7 +364,7 @@ class V1Controller extends Controller
     public function paymentRequests(Request $r)
     {
         $f = $r->validate(['status' => ['nullable', Rule::in(['pending', 'approved', 'rejected', 'paid', 'cancelled'])]]);
-        $q = $this->since(PaymentRequest::of($this->token($r)->workspace_id), $r)->with(['counterparty', 'category'])
+        $q = $this->scoped($this->since(PaymentRequest::of($this->token($r)->workspace_id), $r), $r)->with(['counterparty', 'category'])
             ->when($f['status'] ?? null, fn ($x, $v) => $x->where('status', $v))->orderByDesc('id');
 
         return $this->paged($q, $r, fn ($x) => Present::paymentRequest($x));
@@ -395,7 +416,7 @@ class V1Controller extends Controller
             return response()->json(['error' => ['code' => 'duplicate', 'message' => 'Counterparty with this INN already exists', 'existing_id' => $dup->id]], 409);
         }
         $t = $this->token($r);
-        $cp = Counterparty::create($d + ['workspace_id' => $ws->id, 'status' => 'check', 'created_by' => $t->user_id]);
+        $cp = Counterparty::create($d + ['workspace_id' => $ws->id, 'status' => 'check', 'created_by' => null]);
         $this->audit($r, 'party.add', 'Новый контрагент: '.$cp->name.($cp->inn ? ' · ИНН '.$cp->inn : ''));
         if (Telegram::enabled()) {
             foreach ($ws->users()->where('role', 'admin')->whereNotNull('telegram_chat_id')->get() as $a) {
@@ -430,7 +451,7 @@ class V1Controller extends Controller
     public function tasks(Request $r)
     {
         $f = $r->validate(['status' => ['nullable', Rule::in(array_keys(WorkController::STATUSES))], 'object' => ['nullable', 'string', 'max:40'], 'assignee' => ['nullable', 'integer']]);
-        $q = $this->since(Task::of($this->token($r)->workspace_id), $r)->with('assignee')
+        $q = $this->scoped($this->since(Task::of($this->token($r)->workspace_id), $r), $r)->with('assignee')
             ->when($f['status'] ?? null, fn ($x, $v) => $x->where('status', $v))->when($f['object'] ?? null, fn ($x, $v) => $x->where('project_id', $v))
             ->when($f['assignee'] ?? null, fn ($x, $v) => $x->where('assignee_id', $v))->orderByDesc('id');
 
@@ -439,7 +460,10 @@ class V1Controller extends Controller
 
     private function taskOr404(Request $r, int $id): Task
     {
-        return Task::of($this->token($r)->workspace_id)->with('assignee')->find($id) ?? abort(404, 'Task not found');
+        $t = Task::of($this->token($r)->workspace_id)->with('assignee')->find($id);
+        abort_if(! $t || ! $this->token($r)->seesObject($t->project_id), 404, 'Task not found');
+
+        return $t;
     }
 
     public function task(Request $r, int $id)
@@ -447,13 +471,14 @@ class V1Controller extends Controller
         return response()->json(['data' => Present::task($this->taskOr404($r, $id))]);
     }
 
-    private function taskRules(Workspace $ws, bool $create): array
+    /** $only — объекты ключа: тогда задача обязательно на одном из них */
+    private function taskRules(Workspace $ws, bool $create, ?array $only = null): array
     {
         $req = $create ? 'required' : 'sometimes';
 
         return [
             'title' => [$req, 'string', 'max:200'], 'description' => ['sometimes', 'nullable', 'string', 'max:5000'],
-            'object_id' => ['sometimes', 'nullable', Rule::in(array_keys(StateWriter::projects($ws)))],
+            'object_id' => [$create && $only !== null ? 'required' : 'sometimes', $only === null ? 'nullable' : 'filled', Rule::in(array_keys(StateWriter::projects($ws, $only)))],
             'assignee_id' => ['sometimes', 'nullable', Rule::exists('users', 'id')->where('workspace_id', $ws->id)],
             'due_date' => ['sometimes', 'nullable', 'date'], 'priority' => ['sometimes', Rule::in(['low', 'normal', 'high'])],
         ];
@@ -473,8 +498,8 @@ class V1Controller extends Controller
     {
         $ws = $this->company($r);
         $t = $this->token($r);
-        $d = $this->taskData($r->validate($this->taskRules($ws, true)));
-        $task = Task::create($d + ['workspace_id' => $ws->id, 'author_id' => $t->user_id, 'priority' => 'normal', 'status' => 'todo']);
+        $d = $this->taskData($r->validate($this->taskRules($ws, true, $t->allowedObjects())));
+        $task = Task::create($d + ['workspace_id' => $ws->id, 'author_id' => null, 'priority' => 'normal', 'status' => 'todo']);
         $task->load('assignee');
         $this->audit($r, 'task.add', 'Задача: '.$task->title.($task->assignee ? ' → '.$task->assignee->name : ''), StateWriter::projects($ws)[$task->project_id] ?? null);
         $this->tell($task, '📌 <b>'.__('Новая задача').'</b>'."\n".e($task->title).($task->due_date ? "\n📅 ".$task->due_date->format('d.m.Y') : '')."\n🔌 API: ".e($t->name));
@@ -486,13 +511,13 @@ class V1Controller extends Controller
     {
         $ws = $this->company($r);
         $task = $this->taskOr404($r, $id);
-        $d = $this->taskData($r->validate($this->taskRules($ws, false) + [
+        $d = $this->taskData($r->validate($this->taskRules($ws, false, $this->token($r)->allowedObjects()) + [
             'status' => ['sometimes', Rule::in(array_keys(WorkController::STATUSES))], 'progress' => ['sometimes', 'integer', 'min:0', 'max:100'],
         ]));
         $before = $task->assignee_id;
         $task->fill($d);
         if (($d['status'] ?? null) === 'done' && $task->getOriginal('status') !== 'done') {
-            $task->fill(['progress' => 100, 'done_at' => now(), 'approved_by' => $this->token($r)->user_id]);
+            $task->fill(['progress' => 100, 'done_at' => now()]);
         }
         $task->save();
         $task->load('assignee');

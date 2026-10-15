@@ -23,6 +23,8 @@ Route::get('/sitemap.xml', [SiteController::class, 'sitemap']);
 Route::get('/robots.txt', [SiteController::class, 'robots']);
 Route::get('/manifest.webmanifest', [SiteController::class, 'manifest']);
 Route::post('/demo', [SiteController::class, 'demo'])->middleware('throttle:6,1');   // запись на бесплатный разбор
+// документация API для разработчика, которому выдали ключ (без входа)
+Route::get('/developers', fn () => view('developers', ['base' => url('/api/v1'), 'endpoints' => \App\Services\Api\Spec::endpoints()]));
 
 /* ---------- Вход и регистрация ---------- */
 Route::middleware('guest')->group(function () {
@@ -263,16 +265,10 @@ Route::middleware(['auth', 'role:company'])->group(function () {
             Route::post('/company/telegram/link', [Company\SettingsController::class, 'telegramLink']);
             Route::post('/company/settings/ops', [Company\SettingsController::class, 'updateOps']);
             Route::get('/company/audit', [Company\OpsController::class, 'audit']);
-            // API и интеграции: ключи для других программ, вебхуки, документация
+            // API и интеграции: ключи выдаёт администратор платформы; руководитель видит их, просит новый, может срочно отозвать
             Route::get('/company/api', [Company\ApiController::class, 'index']);
-            Route::post('/company/api/tokens', [Company\ApiController::class, 'tokenStore']);
+            Route::post('/company/api/request', [Company\ApiController::class, 'request'])->middleware('throttle:10,1');
             Route::post('/company/api/tokens/{id}/revoke', [Company\ApiController::class, 'tokenRevoke'])->whereNumber('id');
-            Route::post('/company/api/hooks', [Company\ApiController::class, 'hookStore']);
-            Route::post('/company/api/hooks/{id}/toggle', [Company\ApiController::class, 'hookToggle'])->whereNumber('id');
-            Route::post('/company/api/hooks/{id}/test', [Company\ApiController::class, 'hookTest'])->whereNumber('id')->middleware('throttle:20,1');
-            Route::post('/company/api/hooks/{id}/secret', [Company\ApiController::class, 'hookSecret'])->whereNumber('id');
-            Route::delete('/company/api/hooks/{id}', [Company\ApiController::class, 'hookDelete'])->whereNumber('id');
-            Route::post('/company/api/deliveries/{id}/retry', [Company\ApiController::class, 'deliveryRetry'])->whereNumber('id')->middleware('throttle:20,1');
             Route::get('/company/users', [Company\UserController::class, 'index']);
             Route::post('/company/users', [Company\UserController::class, 'store']);
             Route::put('/company/users/{user}', [Company\UserController::class, 'update']);
@@ -340,6 +336,21 @@ Route::middleware(['auth', 'role:superadmin'])->prefix('admin')->group(function 
         Route::get('/posts/{post}', [Admin\SiteContentController::class, 'postEdit']);
         Route::post('/posts/{post}', [Admin\SiteContentController::class, 'postSave']);
         Route::delete('/posts/{post}', [Admin\SiteContentController::class, 'postDelete']);
+    });
+
+    // API: ключи компаниям и партнёрам (с ролью в компании), вебхуки ключей, заявки компаний, общий выключатель
+    Route::middleware('perm:api')->prefix('api')->group(function () {
+        Route::get('/', [Admin\ApiController::class, 'index']);
+        Route::post('/toggle', [Admin\ApiController::class, 'toggle']);
+        Route::post('/tokens', [Admin\ApiController::class, 'tokenSave']);
+        Route::post('/tokens/{token}/revoke', [Admin\ApiController::class, 'tokenRevoke']);
+        Route::post('/requests/{workspace}/dismiss', [Admin\ApiController::class, 'requestDismiss']);
+        Route::post('/hooks', [Admin\ApiController::class, 'hookSave']);
+        Route::post('/hooks/{webhook}/toggle', [Admin\ApiController::class, 'hookToggle']);
+        Route::post('/hooks/{webhook}/test', [Admin\ApiController::class, 'hookTest'])->middleware('throttle:20,1');
+        Route::post('/hooks/{webhook}/secret', [Admin\ApiController::class, 'hookSecret']);
+        Route::delete('/hooks/{webhook}', [Admin\ApiController::class, 'hookDelete']);
+        Route::post('/deliveries/{delivery}/retry', [Admin\ApiController::class, 'deliveryRetry'])->middleware('throttle:20,1');
     });
 
     // администраторы платформы — только владелец

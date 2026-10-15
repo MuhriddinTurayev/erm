@@ -7,11 +7,13 @@
     if ($u->isSuperAdmin()) {
         $req = $u->adminCan('companies') ? \App\Models\Workspace::whereNotNull('plan_request')->count() : 0;
         $newLeads = $u->adminCan('companies') ? \App\Models\SiteLead::where('status', 'new')->count() : 0;
+        $apiReq = $u->adminCan('api') ? \App\Models\Workspace::whereNotNull('settings->api_request')->count() : 0;
         $main = array_values(array_filter([
             ['/admin', 'layout-dashboard', __('Обзор')],
             $u->adminCan('companies') ? ['/admin/leads', 'inbox', __('Заявки с сайта'), $newLeads] : null,
             $u->adminCan('companies') ? ['/admin/companies', 'building-2', __('Компании'), $req] : null,
             $u->adminCan('payments') ? ['/admin/payments', 'credit-card', __('Оплаты')] : null,
+            $u->adminCan('api') ? ['/admin/api', 'plug', __('API и интеграции'), $apiReq] : null,
         ]));
         $groups = [
             ['site', 'globe', __('Сайт'), array_values(array_filter([
@@ -29,6 +31,7 @@
         $alerts = array_values(array_filter([
             $newLeads ? ['/admin/leads', 'inbox', __('Новые заявки с сайта'), $newLeads, 'info'] : null,
             $req ? ['/admin/companies', 'building-2', __('Компании просят сменить тариф'), $req, 'warn'] : null,
+            $apiReq ? ['/admin/api', 'plug', __('Компании просят ключ API'), $apiReq, 'info'] : null,
         ]));
     } else {
         $m = fn (string $k) => $u->canModule($k);

@@ -15,6 +15,8 @@
   <div class="kpi"><div class="k-l">{!! ic('construction') !!}{{ __('Объекты') }}</div><div class="k-v">{{ count($s['objects']) }}</div><div class="k-s">{{ __('лимит') }} {{ $w->maxObjects() ?: '∞' }}</div></div>
   <div class="kpi"><div class="k-l">{!! ic('users') !!}{{ __('Пользователи') }}</div><div class="k-v">{{ $users->count() }}</div><div class="k-s">{{ __('лимит') }} {{ $w->maxUsers() ?: '∞' }}</div></div>
   <div class="kpi"><div class="k-l">{!! ic('bot') !!}{{ __('ИИ за месяц') }}</div><div class="k-v">{{ $ai }}</div><div class="k-s">{{ __('лимит') }} {{ $w->aiLimit() ?: '∞' }}</div></div>
+  @if (auth()->user()->adminCan('api'))@php $apiKeys = \App\Models\ApiToken::of($w->id)->whereNull('revoked_at')->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))->count(); @endphp
+  <div class="kpi"><div class="k-l">{!! ic('plug') !!}{{ __('Ключи API') }}</div><div class="k-v">{{ $apiKeys }}</div><div class="k-s"><a href="/admin/api?company={{ $w->id }}">{{ $apiKeys ? __('Открыть') : __('Выдать ключ') }} →</a>@if (is_array($w->setting('api_request'))) · <span class="bad">{{ __('просят ключ') }}</span>@endif</div></div>@endif
 </div>
 
 <div class="grid g2">
