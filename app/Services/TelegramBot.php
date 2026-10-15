@@ -317,7 +317,7 @@ class TelegramBot
     /** Нажали язык: запомнить (у сотрудника — в профиле бота, у незнакомого чата — по чату) и продолжить на нём */
     private function setLang(array $q, string $chat, string $data, ?User $user): void
     {
-        [, $l, $then] = array_pad(explode(':', $data, 3), 3, '');
+        [, $l] = array_pad(explode(':', $data, 3), 3, '');   // третья часть (help / hello) — что показать после выбора; решает наличие сотрудника
         if (! isset(self::LANGS[$l])) {
             Telegram::answer($q['id']);
 
@@ -327,7 +327,7 @@ class TelegramBot
         if ($user) {
             $user->forceFill(['tg_locale' => $l])->save();
         }
-        $this->as($user, function () use ($q, $chat, $user, $l, $then) {
+        $this->as($user, function () use ($q, $chat, $user, $l) {
             Telegram::answer($q['id'], '✅ '.self::LANGS[$l]);
             if (! empty($q['message']['message_id'])) {
                 Telegram::edit($chat, (int) $q['message']['message_id'], '🌐 '.__('Язык бота').': <b>'.self::LANGS[$l].'</b>');
@@ -400,6 +400,17 @@ class TelegramBot
         if ($pending) {
             $L[] = '';
             $L[] = '⏳ '.__('Ждут согласования').': '.$pending;
+        }
+        // заявки на оплату утверждены, но кассир ещё не оплатил: деньги ещё на счету, в «Потрачено» их нет
+        $ws = $user->workspace;
+        $allowed = $user->allowedObjects();
+        $toPay = \App\Models\PaymentRequest::of($ws->id)->where('status', 'approved')->when($allowed !== null, fn ($q) => $q->whereIn('project_id', $allowed))->get();
+        if ($toPay->count()) {
+            $sum = $toPay->sum(fn ($pr) => \App\Services\Erp\Money::toBase($ws, (float) $pr->amount, (string) $pr->currency));
+            $next = $toPay->whereNotNull('due_date')->sortBy('due_date')->first();
+            $L[] = '';
+            $L[] = '💳 '.__('Утверждено к оплате, ещё не оплачено').': '.$toPay->count().' · <b>'.$m($sum).'</b>'.($next ? ' · '.__('ближайший срок').' '.$next->due_date->format('d.m') : '');
+            $L[] = '<i>'.__('В «Потрачено сегодня» попадёт, когда кассир оплатит.').'</i>';
         }
         $this->say($chat, implode("\n", $L));
     }

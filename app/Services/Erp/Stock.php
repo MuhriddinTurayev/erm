@@ -42,11 +42,137 @@ class Stock
             ->when($batch !== null, fn ($q) => $q->where('batch', $batch))->sum('qty'), 3);
     }
 
-    /** Партии товара на складе с остатком */
+    /**
+     * Что лежит на складе по партиям, в порядке прихода (FIFO): [['batch', 'q', 'price', 'd'], …].
+     * Выдачи и перемещения без партии (так было раньше) списаны с самых старых партий; остаток без партии — последним (batch null).
+     */
+    public static function fifo(Workspace $ws, int $itemId, int $warehouseId): array
+    {
+        $rows = StockMove::of($ws->id)->where('item_id', $itemId)->where('warehouse_id', $warehouseId)
+            ->selectRaw('batch, sum(qty) q, max(price) price, min(date) d, min(id) i')->groupBy('batch')->get();
+        $loose = 0.0;
+        $list = [];
+        foreach ($rows as $r) {
+            if ($r->batch === null || $r->batch === '') {
+                $loose += (float) $r->q;
+            } else {
+                $list[] = ['batch' => (string) $r->batch, 'q' => (float) $r->q, 'price' => (float) $r->price, 'd' => (string) $r->d, 'i' => (int) $r->i];
+            }
+        }
+        usort($list, fn ($a, $b) => [$a['d'], $a['i']] <=> [$b['d'], $b['i']]);
+        if ($loose < 0) {
+            $need = -$loose;
+            foreach ($list as &$b) {
+                $take = min(max(0, $b['q']), $need);
+                $b['q'] -= $take;
+                $need -= $take;
+            }
+            unset($b);
+            $loose = -$need;
+        }
+        $out = array_values(array_filter(array_map(fn ($b) => ['batch' => $b['batch'], 'q' => round($b['q'], 3), 'price' => $b['price'], 'd' => $b['d']], $list), fn ($b) => $b['q'] > 0.0005));
+        if ($loose > 0.0005) {
+            $out[] = ['batch' => null, 'q' => round($loose, 3), 'price' => 0.0, 'd' => null];
+        }
+
+        return $out;
+    }
+
+    /** Партии товара на складе с остатком (по FIFO) */
     public static function batches(Workspace $ws, int $itemId, int $warehouseId): array
     {
-        return StockMove::of($ws->id)->where('item_id', $itemId)->where('warehouse_id', $warehouseId)->whereNotNull('batch')
-            ->selectRaw('batch, sum(qty) q, max(price) price, min(date) d')->groupBy('batch')->havingRaw('sum(qty) > 0')->orderBy('d')->get()->toArray();
+        return array_values(array_filter(self::fifo($ws, $itemId, $warehouseId), fn ($b) => $b['batch'] !== null));
+    }
+
+    /**
+     * Подписи для таблицы движений: партия (у старых строк без партии — по FIFO) и откуда/куда у перемещений.
+     * ['batch' => [id => 'P…'], 'route' => [id => '→ Склад' | '← Склад']]
+     */
+    public static function moveLabels(Workspace $ws, $moves): array
+    {
+        $moves = collect($moves);
+        $keys = $moves->pluck('transfer_key')->filter()->unique()->values();
+        $pairs = $keys->count() ? StockMove::of($ws->id)->whereIn('transfer_key', $keys)->with('warehouse')->get()->groupBy('transfer_key') : collect();
+        $batch = self::batchesOf($ws, $moves->concat($pairs->flatten(1))->unique('id'));
+        $route = [];
+        foreach ($moves as $m) {
+            if (! $m->transfer_key || ! isset($pairs[$m->transfer_key])) {
+                continue;
+            }
+            $other = $pairs[$m->transfer_key]->first(fn ($x) => ($x->qty > 0) !== ($m->qty > 0) && (! $m->batch || $x->batch === $m->batch));
+            if ($other) {
+                $route[$m->id] = ($m->qty < 0 ? '→ ' : '← ').__($other->warehouse?->name ?? '');
+                if (! $m->batch && $m->qty > 0 && isset($batch[$other->id])) {
+                    $batch[$m->id] = $batch[$other->id];   // пришло перемещением — те же партии, что ушли со склада-отправителя
+                }
+            }
+        }
+
+        return ['batch' => $batch, 'route' => $route];
+    }
+
+    /** Сколько взять из каких партий: самые старые — первыми; [[партия|null, количество], …] */
+    private static function allocate(Workspace $ws, int $itemId, int $warehouseId, float $qty): array
+    {
+        $parts = [];
+        foreach (self::fifo($ws, $itemId, $warehouseId) as $b) {
+            if ($qty <= 0.0005) {
+                break;
+            }
+            $take = min($b['q'], $qty);
+            $parts[] = [$b['batch'], round($take, 3)];
+            $qty -= $take;
+        }
+        if ($qty > 0.0005) {   // остаток по общему счёту есть, а по партиям не сошлось — без партии
+            $parts[] = [null, round($qty, 3)];
+        }
+
+        return $parts;
+    }
+
+    /**
+     * Для показа: из каких партий ушли старые выдачи и перемещения без партии (тот же FIFO, по хронологии склада).
+     * [id движения => 'P…, P…']
+     */
+    public static function batchesOf(Workspace $ws, $moves): array
+    {
+        $need = collect($moves)->filter(fn ($m) => ! $m->batch && $m->qty < 0);
+        $out = [];
+        foreach ($need->groupBy(fn ($m) => $m->item_id.'|'.$m->warehouse_id) as $key => $list) {
+            [$itemId, $whId] = array_map('intval', explode('|', $key));
+            $want = $list->pluck('id')->flip();
+            $queue = [];   // партия => остаток, в порядке прихода
+            foreach (StockMove::of($ws->id)->where('item_id', $itemId)->where('warehouse_id', $whId)->orderBy('date')->orderBy('id')->get(['id', 'qty', 'batch']) as $m) {
+                $q = (float) $m->qty;
+                if ($m->batch) {
+                    $queue[$m->batch] = ($queue[$m->batch] ?? 0) + $q;
+                    continue;
+                }
+                if ($q >= 0) {
+                    $queue[''] = ($queue[''] ?? 0) + $q;
+                    continue;
+                }
+                $left = -$q;
+                $used = [];
+                foreach ($queue as $b => $have) {
+                    if ($left <= 0.0005) {
+                        break;
+                    }
+                    if ($have <= 0.0005) {
+                        continue;
+                    }
+                    $take = min($have, $left);
+                    $queue[$b] -= $take;
+                    $left -= $take;
+                    $used[] = $b === '' ? __('без партии (старый остаток)') : $b;   // пришло без партии: начальный остаток, инвентаризация
+                }
+                if (isset($want[$m->id]) && $used) {
+                    $out[$m->id] = implode(', ', array_unique($used));
+                }
+            }
+        }
+
+        return $out;
     }
 
     /** Средняя цена закупки (для стоимости выдачи на объект) */
@@ -109,9 +235,16 @@ class Stock
                 throw new \DomainException(__('На складе только :q :u', ['q' => self::n($left), 'u' => $item->unit]));
             }
 
-            return [$item, StockMove::create(['workspace_id' => $ws->id, 'item_id' => $item->id, 'warehouse_id' => $d['warehouse_id'], 'type' => 'out', 'qty' => -$qty,
-                'price' => self::avgPrice($ws, $item->id), 'batch' => $d['batch'] ?? null, 'project_id' => $d['project_id'] ?? null, 'note' => $d['note'] ?? null,
-                'date' => $d['date'] ?? now()->toDateString(), 'user_id' => $by->id])];
+            $parts = ! empty($d['batch']) ? [[$d['batch'], $qty]] : self::allocate($ws, $item->id, (int) $d['warehouse_id'], $qty);
+            $first = null;
+            foreach ($parts as [$batch, $q]) {
+                $mv = StockMove::create(['workspace_id' => $ws->id, 'item_id' => $item->id, 'warehouse_id' => $d['warehouse_id'], 'type' => 'out', 'qty' => -$q,
+                    'price' => self::avgPrice($ws, $item->id), 'batch' => $batch, 'project_id' => $d['project_id'] ?? null, 'note' => $d['note'] ?? null,
+                    'date' => $d['date'] ?? now()->toDateString(), 'user_id' => $by->id]);
+                $first ??= $mv;
+            }
+
+            return [$item, $first];
         });
         self::log($ws, $by, 'del', 'Выдача: '.$item->name.' −'.self::n($qty).' '.$item->unit.($m->project_id ? ' → '.(StateWriter::projects($ws)[$m->project_id] ?? '') : '').($m->note ? ' · '.$m->note : ''), $m->project_id);
 
@@ -137,10 +270,13 @@ class Stock
             if ($qty > $left + 0.0005) {
                 throw new \DomainException(__('На складе только :q :u', ['q' => self::n($left), 'u' => $item->unit]));
             }
-            $base = ['workspace_id' => $ws->id, 'item_id' => $item->id, 'type' => 'transfer', 'price' => self::avgPrice($ws, $item->id), 'batch' => $d['batch'] ?? null,
-                'transfer_key' => $key, 'note' => $d['note'] ?? null, 'date' => $d['date'] ?? now()->toDateString(), 'user_id' => $by->id];
-            StockMove::create($base + ['warehouse_id' => $d['warehouse_id'], 'qty' => -$qty]);
-            StockMove::create($base + ['warehouse_id' => $to->id, 'qty' => $qty]);
+            $parts = ! empty($d['batch']) ? [[$d['batch'], $qty]] : self::allocate($ws, $item->id, (int) $d['warehouse_id'], $qty);
+            foreach ($parts as [$batch, $q]) {
+                $base = ['workspace_id' => $ws->id, 'item_id' => $item->id, 'type' => 'transfer', 'price' => self::avgPrice($ws, $item->id), 'batch' => $batch,
+                    'transfer_key' => $key, 'note' => $d['note'] ?? null, 'date' => $d['date'] ?? now()->toDateString(), 'user_id' => $by->id];
+                StockMove::create($base + ['warehouse_id' => $d['warehouse_id'], 'qty' => -$q]);
+                StockMove::create($base + ['warehouse_id' => $to->id, 'qty' => $q]);
+            }
         });
         self::log($ws, $by, 'edit', 'Перемещение: '.$item->name.' '.self::n($qty).' '.$item->unit.' · '.Warehouse::find($d['warehouse_id'])->name.' → '.$to->name);
 

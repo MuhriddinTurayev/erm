@@ -4420,5 +4420,9 @@
     "Получить сообщения сейчас": "Xabarlarni hozir olish",
     "Сообщения боту получены — ответы уже в Telegram": "Botga yozilgan xabarlar olindi — javoblar Telegram'da",
     "Язык бота": "Bot tili",
-    "язык бота: узбекский, русский, таджикский": "bot tili: o'zbek, rus, tojik"
+    "язык бота: узбекский, русский, таджикский": "bot tili: o'zbek, rus, tojik",
+    "Утверждено к оплате, ещё не оплачено": "Tasdiqlangan, hali to'lanmagan",
+    "ближайший срок": "eng yaqin muddat",
+    "В «Потрачено сегодня» попадёт, когда кассир оплатит.": "Kassir to'laganda «Bugun sarflandi»ga tushadi.",
+    "без партии (старый остаток)": "partiyasiz (eski qoldiq)"
 }

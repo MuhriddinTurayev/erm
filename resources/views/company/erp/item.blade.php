@@ -34,7 +34,7 @@
   <div class="tbl-wrap"><table class="tbl"><thead><tr><th>{{ __('Дата') }}</th><th>{{ __('Операция') }}</th><th>{{ __('Склад') }}</th><th class="n">{{ __('Кол-во') }}</th><th class="n">{{ __('Цена') }}</th><th>{{ __('Партия') }}</th><th>{{ __('Куда / от кого') }}</th><th>{{ __('Кто') }}</th></tr></thead><tbody>
   @foreach ($moves as $m)
     <tr><td>{{ $m->date->format('d.m.Y') }}</td><td>{{ $ops[$m->type] ?? $m->type }}</td><td>{{ __($m->warehouse?->name ?? '') }}</td><td class="n"><b class="{{ $m->qty > 0 ? 'in-c' : 'out-c' }}">{{ $m->qty > 0 ? '+' : '' }}{{ $n($m->qty) }}</b></td>
-      <td class="n">{{ $m->price ? money_s($m->price, $cur) : '' }}</td><td>{{ $m->batch }}</td><td>{{ $m->project_id ? ($projects[$m->project_id] ?? '') : $m->counterparty?->name }} <small>{{ sys_tr($m->note) }}</small></td><td>{{ $m->user?->name }}</td></tr>
+      <td class="n">{{ $m->price ? money_s($m->price, $cur) : '' }}</td><td>{{ $m->batch ?: ($ml['batch'][$m->id] ?? '—') }}</td><td>{{ $m->project_id ? ($projects[$m->project_id] ?? '') : ($m->counterparty?->name ?? ($ml['route'][$m->id] ?? '')) }} <small>{{ sys_tr($m->note) }}</small></td><td>{{ $m->user?->name }}</td></tr>
   @endforeach
   </tbody></table></div>
 </div>

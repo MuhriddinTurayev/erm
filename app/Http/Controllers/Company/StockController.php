@@ -33,11 +33,13 @@ class StockController extends ErpController
         $items = Item::of($ws->id)->when($q !== '', fn ($x) => $x->where(fn ($y) => $y->where('name', 'like', "%$q%")->orWhere('sku', 'like', "%$q%")->orWhere('group', 'like', "%$q%")))
             ->orderBy('group')->orderBy('name')->get();
 
+        $moves = StockMove::of($ws->id)->with(['item', 'warehouse', 'user', 'counterparty'])->whereIn('warehouse_id', $whs->pluck('id'))->when($wid, fn ($x) => $x->where('warehouse_id', $wid))
+            ->latest('date')->latest('id')->limit(60)->get();
+
         return view('company.erp.stock', [
             'ws' => $ws, 'whs' => $whs, 'wid' => $wid, 'items' => $items, 'bal' => Stock::balances($ws), 'q' => $q, 'low' => Stock::low($ws),
             'projects' => $this->projects(), 'counterparties' => $this->counterparties(), 'staff' => $this->staff(),
-            'moves' => StockMove::of($ws->id)->with(['item', 'warehouse', 'user', 'counterparty'])->whereIn('warehouse_id', $whs->pluck('id'))->when($wid, fn ($x) => $x->where('warehouse_id', $wid))
-                ->latest('date')->latest('id')->limit(60)->get(),
+            'moves' => $moves, 'ml' => Stock::moveLabels($ws, $moves),
             'costs' => Stock::costByProject($ws),
         ]);
     }
@@ -50,7 +52,8 @@ class StockController extends ErpController
 
         return view('company.erp.item', ['ws' => $ws, 'item' => $item, 'whs' => $whs, 'bal' => Stock::balances($ws)[$item->id] ?? [], 'projects' => $this->projects(),
             'batches' => $whs->mapWithKeys(fn ($w) => [$w->id => Stock::batches($ws, $item->id, $w->id)]),
-            'moves' => $item->moves()->with(['warehouse', 'user', 'counterparty'])->latest('date')->latest('id')->limit(200)->get(), 'avg' => Stock::avgPrice($ws, $item->id)]);
+            'moves' => $moves = $item->moves()->with(['warehouse', 'user', 'counterparty'])->latest('date')->latest('id')->limit(200)->get(), 'ml' => Stock::moveLabels($ws, $moves),
+            'avg' => Stock::avgPrice($ws, $item->id)]);
     }
 
     public function itemSave(Request $request)

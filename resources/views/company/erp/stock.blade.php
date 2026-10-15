@@ -63,7 +63,7 @@
   @foreach ($moves as $m)
     <tr><td class="nowrap">{{ $m->date->format('d.m.Y') }}<br><small>{{ $m->user?->name }}</small></td><td><span class="st st-{{ ['in' => 'done', 'out' => 'pending', 'transfer' => 'approved', 'adjust' => 'draft'][$m->type] }}">{{ $ops[$m->type] ?? $m->type }}</span></td>
       <td>{{ $m->item?->name }}</td><td>{{ __($m->warehouse?->name ?? '') }}</td><td class="n"><b class="{{ $m->qty > 0 ? 'in-c' : 'out-c' }}">{{ $m->qty > 0 ? '+' : '' }}{{ $n($m->qty) }}</b> {{ __($m->item?->unit ?? '') }}</td>
-      <td>{{ $m->batch ?: '—' }}</td><td>{{ $m->project_id ? ($projects[$m->project_id] ?? '') : ($m->counterparty?->name ?? '') }} <small>{{ sys_tr($m->note) }}</small></td></tr>
+      <td>{{ $m->batch ?: ($ml['batch'][$m->id] ?? '—') }}</td><td>{{ $m->project_id ? ($projects[$m->project_id] ?? '') : ($m->counterparty?->name ?? ($ml['route'][$m->id] ?? '')) }} <small>{{ sys_tr($m->note) }}</small></td></tr>
   @endforeach
   </tbody></table></div>
   @else<div class="empty">{{ __('Движений пока нет') }}</div>@endif
