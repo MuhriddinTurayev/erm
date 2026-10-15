@@ -34,6 +34,8 @@ class AppController extends Controller
                 'media' => self::mediaCounts($ws->id),
                 'canMedia' => $user->canMedia(),
                 'stock' => $user->canModule('warehouse'),   // «Материалы» (расчёт) ведут на настоящий склад
+                // деньги в кассах и на счетах (с начальными остатками и переводами) — «Деньги на счету» как в ERP; только тому, кто видит все деньги
+                'cashDesks' => $user->seesMoney() && $user->allowedObjects() === null ? \App\Services\Erp\Cash::totalBase($ws) : null,
                 'firstObject' => $ws->setting('first_object'),
                 'plan' => [
                     'name' => $plan?->title(),

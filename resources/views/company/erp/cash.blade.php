@@ -123,8 +123,10 @@
 <dialog class="modal" id="dlg-tr"><form method="post" action="/company/cash/transfer" id="tr-form">@csrf
   <div class="modal-h"><h3>{!! ic('arrow-left-right') !!}{{ __('Перевод между кассами и обмен валюты') }}</h3><button type="button" class="icon-btn" data-close>{!! ic('x') !!}</button></div>
   <div class="modal-b form">
-    <label class="field"><span>{{ __('Откуда') }}</span><select name="from" required>@foreach ($desks as $d)<option value="{{ $d->id }}" data-cur="{{ $d->currency }}">{{ __($d->name) }} ({{ $M($balances[$d->id] ?? 0, $d->currency) }})</option>@endforeach</select></label>
-    <label class="field"><span>{{ __('Куда') }}</span><select name="to" required>@foreach ($desks as $d)<option value="{{ $d->id }}" data-cur="{{ $d->currency }}" @selected($loop->index === 1)>{{ __($d->name) }} ({{ $d->currency }})</option>@endforeach</select></label>
+    @php $deskObj = fn ($d) => $d->project_id ? ($projects[$d->project_id] ?? '') : ''; $q = fn ($x) => str_starts_with($x, '«') ? $x : '«'.$x.'»';
+      $deskTag = fn ($d) => $deskObj($d) && ! str_contains(__($d->name), $deskObj($d)) ? ' · '.__('касса объекта').' '.$q($deskObj($d)) : ''; @endphp
+    <label class="field"><span>{{ __('Откуда (списать)') }}</span><select name="from" required>@foreach ($desks as $d)<option value="{{ $d->id }}" data-cur="{{ $d->currency }}" data-name="{{ __($d->name) }}" data-obj="{{ $deskObj($d) }}">{{ __($d->name) }}{{ $deskTag($d) }} ({{ $M($balances[$d->id] ?? 0, $d->currency) }})</option>@endforeach</select></label>
+    <label class="field"><span>{{ __('Куда (зачислить)') }} <button type="button" class="btn btn-s btn-ghost" data-swap title="{{ __('Поменять местами') }}" style="height:22px;padding:0 6px;margin-left:4px">⇅</button></span><select name="to" required>@foreach ($desks as $d)<option value="{{ $d->id }}" data-cur="{{ $d->currency }}" data-name="{{ __($d->name) }}" data-obj="{{ $deskObj($d) }}" @selected($loop->index === 1)>{{ __($d->name) }}{{ $deskTag($d) }} ({{ $M($balances[$d->id] ?? 0, $d->currency) }})</option>@endforeach</select></label>
     <label class="field"><span>{{ __('Сумма списания') }}</span><input name="amount" type="number" step="0.01" min="0.01" required></label>
     <label class="field" id="tr-rate"><span>{{ __('Курс сделки, 1 USD =') }}</span><input name="rate" type="number" step="0.0001" min="0" value="{{ $rate }}"></label>
     <label class="field"><span>{{ __('Дата') }}</span><input name="date" type="date" value="{{ $ws->localNow()->toDateString() }}" required></label>
@@ -186,13 +188,22 @@
 <script>
 (() => {
   const f = document.getElementById('tr-form'); if (!f) return;
+  const TT = { got: @json(__('Поступит')), objIn: @json(__('В бухгалтерии объекта «:o» — приход: деньги для объекта')), objOut: @json(__('В бухгалтерии объекта «:o» — расход: деньги ушли с объекта')),
+    same: @json(__('Выберите разные кассы')), total: @json(__('Общая сумма денег компании не меняется — деньги просто переходят из одной кассы в другую.')) };
   const calc = () => {
-    const a = f.from.selectedOptions[0]?.dataset.cur, b = f.to.selectedOptions[0]?.dataset.cur, s = +f.amount.value || 0, r = +f.rate.value || 0;
+    const A = f.from.selectedOptions[0]?.dataset || {}, Bd = f.to.selectedOptions[0]?.dataset || {}, a = A.cur, b = Bd.cur, s = +f.amount.value || 0, r = +f.rate.value || 0;
     document.getElementById('tr-rate').style.display = a !== b ? '' : 'none';
     let got = s; if (a !== b && r) got = a === 'USD' ? s * r : s / r;
-    f.querySelector('#tr-res div').textContent = @json(__('Поступит')) + ': ' + got.toLocaleString('ru-RU', {maximumFractionDigits: 2}) + ' ' + (b || '');
+    const box = f.querySelector('#tr-res div');
+    if (f.from.value === f.to.value) { box.textContent = TT.same; return; }
+    const q = x => /^«/.test(x || '') ? x : `«${x}»`;
+    const lines = [`${q(A.name)} → ${q(Bd.name)} · ${TT.got}: ${got.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ${b || ''}`];
+    if (A.obj !== Bd.obj) { if (Bd.obj) lines.push('↳ ' + TT.objIn.replace(/«?:o»?/, q(Bd.obj))); if (A.obj) lines.push('↳ ' + TT.objOut.replace(/«?:o»?/, q(A.obj))); }
+    lines.push(TT.total);
+    box.innerHTML = lines.map(x => `<div>${x.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</div>`).join('');
   };
   f.addEventListener('input', calc); f.addEventListener('change', calc); calc();
+  f.querySelector('[data-swap]').addEventListener('click', () => { const x = f.from.value; f.from.value = f.to.value; f.to.value = x; calc(); });
   // статьи по типу операции
   const op = document.querySelector('#dlg-op form');
   const sync = () => op.category_id.querySelectorAll('option[data-kind]').forEach(o => o.hidden = o.dataset.kind !== op.type.value);

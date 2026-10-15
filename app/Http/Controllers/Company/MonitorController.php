@@ -141,7 +141,7 @@ class MonitorController extends ErpController
         }
         if ($stats) {
             $prev = CompanyStats::build($ws, $ws->localNow()->subMonthNoOverflow()->toDateString(), $only)['totals'];
-            $total = Cash::totalBase($ws);
+            $total = $only === null ? (float) $stats['totals']['balance'] : Cash::totalBase($ws);
             $net7 = (float) \App\Models\CashOp::of($ws->id)->whereNull('transfer_key')->where('date', '>=', $ws->localNow()->subDays(6)->toDateString())
                 ->selectRaw("sum(case when type = 'in' then amount_base else -amount_base end) s")->value('s');
 

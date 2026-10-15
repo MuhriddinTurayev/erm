@@ -389,14 +389,6 @@ class TelegramBot
         }
         $s = CompanyStats::build($user->workspace, null, $user->allowedObjects());
         $T = $s['totals'];
-        if ($user->allowedObjects() === null) {   // оплаты компании без объекта (офис, налоги…) в бухгалтерию объектов не попадают — добавляем
-            $loc = $user->workspace->localNow();
-            $extra = fn (string $type, string $date) => (float) \App\Models\CashOp::of($user->workspace_id)->whereNull('transfer_key')->whereNull('project_id')
-                ->where('type', $type)->where('date', $date)->sum('amount_base');
-            $T['out_day'] += $extra('out', $loc->toDateString());
-            $T['in_day'] += $extra('in', $loc->toDateString());
-            $T['out_yest'] += $extra('out', $loc->copy()->subDay()->toDateString());
-        }
         $c = ' '.__($s['currency']);
         $m = fn ($v) => CompanyStats::short((float) $v).$c;
         $L = ['💰 <b>'.__('Деньги на счету (касса)').': '.$m($T['balance']).'</b>',

@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\CashOp;
 use App\Models\Workspace;
+use App\Services\Erp\Cash;
 use Illuminate\Support\Carbon;
 
 /**
@@ -28,6 +30,7 @@ class CompanyStats
             'out_week' => 0.0, 'out_month' => 0.0, 'in_month' => 0.0, 'ops_day' => 0];
         $catsDay = $catsMonth = [];
         $top = $objects = [];
+        $nonCash = 0.0;   // записи только в бухгалтерии объектов (оплаты квартир, расходы из Telegram, своя бухгалтерия) — в кассах их нет
 
         foreach ($ws->projects() as $p) {
             if (! is_array($p) || ($onlyObjects !== null && ! in_array((string) ($p['id'] ?? ''), $onlyObjects, true))) {
@@ -41,6 +44,9 @@ class CompanyStats
                 $in = ($t['type'] ?? '') === 'in';
                 $cat = (string) ($t['cat'] ?? '—');
                 $o['balance'] += $in ? $amt : -$amt;
+                if ((($t['link'] ?? [])['kind'] ?? '') !== 'cash') {
+                    $nonCash += $in ? $amt : -$amt;
+                }
                 $T[$in ? 'in_all' : 'out_all'] += $amt;
                 if ($td === $date) {
                     $o[$in ? 'in_day' : 'out_day'] += $amt;
@@ -92,6 +98,46 @@ class CompanyStats
             $T['out_month'] += $o['out_month'];
             $T['in_month'] += $o['in_month'];
             $objects[] = $o;
+        }
+
+        if ($onlyObjects === null) {
+            // операции касс без объекта (офис, налоги, управление) в бухгалтерию объектов не попадают — это тоже движение денег компании
+            $from = min(array_key_first($days14), $month.'-01', $weekFrom, $yest);
+            foreach (CashOp::of($ws->id)->whereNull('transfer_key')->whereNull('project_id')->whereBetween('date', [$from, $date])->with('category')->get() as $op) {
+                $amt = (float) $op->amount_base;
+                $td = $op->date->toDateString();
+                $in = $op->type === 'in';
+                $cat = $op->category?->name ?? ($op->employee ? 'Зарплата' : 'Офис и прочее');
+                if ($td === $date) {
+                    $T[$in ? 'in_day' : 'out_day'] += $amt;
+                    $T['ops_day']++;
+                    if (! $in) {
+                        $catsDay[$cat] = ($catsDay[$cat] ?? 0) + $amt;
+                        $top[] = ['obj' => __('Компания'), 'cat' => $cat, 'desc' => (string) $op->note, 'who' => (string) $op->employee, 'amount' => $amt];
+                    }
+                }
+                if ($td === $yest) {
+                    $T[$in ? 'in_yest' : 'out_yest'] += $amt;
+                }
+                if (str_starts_with($td, $month)) {
+                    $T[$in ? 'in_month' : 'out_month'] += $amt;
+                    if (! $in) {
+                        $catsMonth[$cat] = ($catsMonth[$cat] ?? 0) + $amt;
+                    }
+                }
+                if (! $in && $td >= $weekFrom) {
+                    $T['out_week'] += $amt;
+                }
+                if ($in && isset($in14[$td])) {
+                    $in14[$td] += $amt;
+                } elseif (! $in && isset($days14[$td])) {
+                    $days14[$td] += $amt;
+                }
+            }
+            // деньги на счету — то, что реально лежит в кассах и на счетах (с начальными остатками и переводами),
+            // плюс то, что записано только в бухгалтерии объектов; операции касс дважды не считаются
+            $T['objects_balance'] = $T['balance'];
+            $T['balance'] = round(Cash::totalBase($ws) + $nonCash, 2);
         }
 
         arsort($catsDay);

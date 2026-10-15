@@ -159,6 +159,19 @@ class Cash
         $op->forceFill(['tx_id' => $txId])->saveQuietly();
     }
 
+    /** Перевод с кассы объекта или на неё: запись в бухгалтерии этого объекта (между кассами одного объекта — не нужна) */
+    private static function postTransfer(Workspace $ws, CashOp $op, CashDesk $desk, CashDesk $other): void
+    {
+        if (! $desk->project_id || $desk->project_id === $other->project_id || ! StateWriter::project($ws, $desk->project_id)) {
+            return;
+        }
+        $txId = StateWriter::addTx($ws->id, $desk->project_id, [
+            'date' => $op->date->toDateString(), 'type' => $op->type, 'cat' => $op->type === 'in' ? 'Перевод из другой кассы' : 'Перевод в другую кассу',
+            'amount' => $op->amount_base, 'who' => $other->name, 'desc' => (string) ($op->note ?? ''), 'link' => ['kind' => 'cash', 'id' => $op->id],
+        ]);
+        $op->forceFill(['project_id' => $desk->project_id, 'tx_id' => $txId])->saveQuietly();
+    }
+
     public static function delete(Workspace $ws, User $by, CashOp $op): void
     {
         $ops = $op->transfer_key ? CashOp::of($ws->id)->where('transfer_key', $op->transfer_key)->get() : collect([$op]);
@@ -202,6 +215,9 @@ class Cash
             $base = ['date' => $date, 'transfer_key' => $key, 'note' => $note];
             $o1 = self::add($ws, $by, $base + ['cash_desk_id' => $a->id, 'type' => 'out', 'amount' => $amount, 'rate' => $a->currency === 'USD' ? $usd : 1]);
             $o2 = self::add($ws, $by, $base + ['cash_desk_id' => $b->id, 'type' => 'in', 'amount' => round($received, 2), 'rate' => $b->currency === 'USD' ? $usd : 1]);
+            // касса объекта получила деньги (финансирование объекта) или отдала — это видно и в бухгалтерии объекта
+            self::postTransfer($ws, $o1, $a, $b);
+            self::postTransfer($ws, $o2, $b, $a);
             AuditLog::create(['workspace_id' => $ws->id, 'user_id' => $by->id, 'action' => 'cash.edit',
                 'summary' => 'Перевод: '.$a->name.' → '.$b->name.' · '.Money::fmt($amount, $a->currency).($a->currency !== $b->currency ? ' = '.Money::fmt($received, $b->currency).' (курс '.$usd.')' : '')]);
 

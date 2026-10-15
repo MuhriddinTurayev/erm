@@ -95,6 +95,12 @@ ACT.objGo = d => { DB.currentId = d.id; save(); go(d.page); };
 ACT.objCash = d => { go('cash', { obj: d.id }); };
 
 /* ---------- Касса компании: все объекты, сегодня / вчера / на что ---------- */
+/* Деньги компании на счету: что лежит в кассах и на счетах (ERP) + записи только в бухгалтерии объектов
+   (операции касс в бухгалтерии объектов помечены link.kind = 'cash' — их не считаем второй раз). Без ERP — по бухгалтерии объектов. */
+function companyMoney(projs) {
+  if (!SAAS || SAAS.cashDesks == null) return sum(projs, p => finance(p).bal);
+  return SAAS.cashDesks + sum(projs, p => sum(p.tx.filter(x => !(x.link && x.link.kind === 'cash')), x => x.type === 'in' ? x.amount : -x.amount));
+}
 PAGES.cash = {
   title: 'Касса компании',
   render(_, a) {
@@ -102,7 +108,7 @@ PAGES.cash = {
     const projs = DB.projects.filter(p => !obj || p.id === obj);
     const t = today(), y = yesterday();
     const all = []; projs.forEach(p => p.tx.forEach(x => all.push({ ...x, pid: p.id, pname: p.name })));
-    const bal = sum(projs, p => finance(p).bal), dT = sum(projs, p => moneyOn(p, t).out), dY = sum(projs, p => moneyOn(p, y).out), iT = sum(projs, p => moneyOn(p, t).inc);
+    const bal = obj ? sum(projs, p => finance(p).bal) : companyMoney(projs), dT = sum(projs, p => moneyOn(p, t).out), dY = sum(projs, p => moneyOn(p, y).out), iT = sum(projs, p => moneyOn(p, t).inc);
     const wk = sum(projs, p => moneyRange(p, addDays(t, -6), t).out), mo = sum(projs, p => moneyRange(p, monthNow() + '-01', t).out);
     const inPer = all.filter(x => x.date >= from && x.date <= to);
     const outPer = inPer.filter(x => x.type === 'out'), outSum = sum(outPer, x => x.amount), inSum = sum(inPer.filter(x => x.type === 'in'), x => x.amount);
@@ -120,7 +126,7 @@ PAGES.cash = {
       ${SAAS && SAAS.canEdit ? '<button class="btn-p btn-s" data-act="cashAdd">+ Расход / приход</button>' : ''}
     </div>
     <div class="kpis">
-      ${kpi('Деньги на счету (касса)', moneyS(bal), obj ? esc((DB.projects.find(p => p.id === obj) || {}).name || '') : 'по всем объектам', bal >= 0 ? 'ok' : 'bad')}
+      ${kpi(obj ? 'Приход − расход объекта' : 'Деньги на счету (касса)', moneyS(bal), obj ? esc((DB.projects.find(p => p.id === obj) || {}).name || '') : (SAAS && SAAS.cashDesks != null ? 'во всех кассах и на счетах' : 'по всем объектам'), bal >= 0 ? 'ok' : 'bad')}
       ${kpi('Потрачено сегодня', moneyS(dT), dY ? deltaHtml(dT, dY) + 'к вчера' : '', 'bad')}
       ${kpi('Потрачено вчера', moneyS(dY), fdate(y))}
       ${kpi('Поступило сегодня', moneyS(iT), '', 'ok')}

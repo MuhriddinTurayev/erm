@@ -4740,5 +4740,18 @@
     "Роль ключа не видит выбранные события": "Kalit roli tanlangan voqealarni ko'rmaydi",
     "свои права": "o'z huquqlari",
     "API: ключи компаниям и партнёрам": "API: kompaniyalar va hamkorlarga kalitlar",
-    "просят ключ": "kalit so'ramoqda"
+    "просят ключ": "kalit so'ramoqda",
+    "Откуда (списать)": "Qayerdan (yechiladi)",
+    "Куда (зачислить)": "Qayerga (tushadi)",
+    "Поменять местами": "O'rnini almashtirish",
+    "касса объекта": "obyekt kassasi",
+    "В бухгалтерии объекта «:o» — приход: деньги для объекта": "«:o» obyekti buxgalteriyasida — kirim: obyekt uchun pul",
+    "В бухгалтерии объекта «:o» — расход: деньги ушли с объекта": "«:o» obyekti buxgalteriyasida — chiqim: pul obyektdan ketdi",
+    "Общая сумма денег компании не меняется — деньги просто переходят из одной кассы в другую.": "Kompaniyaning umumiy puli o'zgarmaydi — pul shunchaki bir kassadan boshqasiga o'tadi.",
+    "во всех кассах и на счетах": "barcha kassa va hisoblarda",
+    "Поступило на объект минус потрачено на него — по бухгалтерии объекта": "Obyektga tushgan minus unga sarflangan — obyekt buxgalteriyasi bo'yicha",
+    "Приход − расход": "Kirim − chiqim",
+    "приход − расход": "kirim − chiqim",
+    "Перевод из другой кассы": "Boshqa kassadan o'tkazma",
+    "Перевод в другую кассу": "Boshqa kassaga o'tkazma"
 }
