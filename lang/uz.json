@@ -4374,5 +4374,7 @@
     "у каждой комнаты — свои 360° и фото": "har bir xonaning o‘z 360° va rasmlari",
     "Без комнаты": "Xonasi ko‘rsatilmagan",
     "Переименовать комнату": "Xona nomini o‘zgartirish",
-    "Новое название комнаты": "Xonaning yangi nomi"
+    "Новое название комнаты": "Xonaning yangi nomi",
+    "3ds Max (.max) — закрытый формат: его открывает только сам 3ds Max. Обычно вместе с моделью есть .fbx, .obj или .3ds (часто в том же архиве) — выберите его вместе с текстурами. Если нет — в 3ds Max: Файл → Экспорт → FBX (или OBJ) с текстурами и загрузите полученный файл или ZIP.": "3ds Max (.max) — yopiq format: uni faqat 3ds Max'ning o'zi ochadi. Odatda model bilan birga .fbx, .obj yoki .3ds ham bo'ladi (ko'pincha o'sha arxivning ichida) — o'shani teksturalari bilan birga tanlang. Bo'lmasa — 3ds Max'da: File → Export → FBX (yoki OBJ) teksturalar bilan, so'ng olingan fayl yoki ZIP ni yuklang.",
+    "Старый FBX (версия :v) прочитать не удалось. Откройте его в 3ds Max, Maya или Blender и сохраните заново в FBX 2013 или новее (или в OBJ / GLB).": "Eski FBX (versiya :v) ni o'qib bo'lmadi. Uni 3ds Max, Maya yoki Blender'da ochib, FBX 2013 yoki yangiroq formatda (yoki OBJ / GLB) qayta saqlang."
 }

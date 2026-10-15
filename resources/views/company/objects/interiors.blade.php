@@ -7,6 +7,8 @@
 <head>
 @include('partials.head')
 <title>{{ __('Интерьеры квартир') }} — {{ $p['name'] ?? '' }}</title>
+{{-- перевод 3D-интерьеров в GLB прямо в браузере (assets/model-convert.js) --}}
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}</script>
 <style>
   body{margin:0;background:var(--bg)}
   .ii{max-width:1200px;margin:0 auto;padding:22px 20px 40px;display:grid;gap:14px}

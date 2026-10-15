@@ -1,5 +1,5 @@
 /* Oftob — 3D-модель любого формата → GLB прямо в браузере (three.js, без установки программ).
-   Читает: GLB/GLTF (+bin, текстуры), FBX, OBJ (+MTL), DAE (SketchUp, ArchiCAD), 3DS, STL, PLY, 3MF, WRL/VRML, KMZ, USDZ,
+   Читает: GLB/GLTF (+bin, текстуры), FBX (и старый FBX 6 — assets/fbx6.js), OBJ (+MTL), DAE (SketchUp, ArchiCAD), 3DS, STL, PLY, 3MF, WRL/VRML, KMZ, USDZ,
    IFC (Revit, ArchiCAD, Tekla — через web-ifc), 3DM (Rhino), а также ZIP-архив с моделью и текстурами.
    Приводит к виду для сайта: метры, «верх» по оси Y, модель стоит на земле по центру, детали объединены по материалам,
    текстуры уменьшены (2048 px) — модель быстро открывается даже на телефоне.
@@ -100,7 +100,17 @@ async function load(list, main, step, T, missing, flags = {}) {
       root = (await new Promise((ok, bad) => l.parse(data, path, ok, bad))).scene;
       d.dispose(); break;
     }
-    case 'fbx': { const { FBXLoader } = await import(ADDONS + 'loaders/FBXLoader.js'); root = new FBXLoader(manager).parse(await buf(), path); break; }
+    case 'fbx': {
+      const data = await buf(), v = new URL(import.meta.url).search;
+      // старый FBX (6.x: 3ds Max 2006–2010 и т. п.) загрузчик three.js не читает — свой разбор (assets/fbx6.js)
+      const { fbxVersion, parseFbx6 } = await import(new URL('fbx6.js', import.meta.url).href + v);
+      const ver = fbxVersion(data);
+      if (ver && ver < 7000) {
+        try { root = await parseFbx6(data, manager); } catch (err) { console.warn(err); throw new Error((T.fbxOld || T.unknown).replace(':v', (ver / 1000).toFixed(1))); }
+        flags.fbxVer = ver; break;
+      }
+      const { FBXLoader } = await import(ADDONS + 'loaders/FBXLoader.js'); root = new FBXLoader(manager).parse(data, path); break;
+    }
     case 'obj': {
       const { OBJLoader } = await import(ADDONS + 'loaders/OBJLoader.js');
       const l = new OBJLoader(manager), text = await txt();
@@ -337,7 +347,7 @@ export async function convert(files, opt = {}, onStep = () => {}) {
   }
   const name = base(main.name).replace(/\.[^.]+$/, '') + '.glb';
   const file = new File([glb], name, { type: 'model/gltf-binary' });
-  return { file, scene: holder, info: Object.assign({ format: e.toUpperCase(), unit, size: { x: size.x, y: size.y, z: size.z }, bytes: file.size, source: main.name,
+  return { file, scene: holder, info: Object.assign({ format: e.toUpperCase() + (flags.fbxVer >= 5000 ? ' ' + (flags.fbxVer / 1000).toFixed(1) : ''), unit, size: { x: size.x, y: size.y, z: size.z }, bytes: file.size, source: main.name,
     missing: [...missing], dropped, stripped, noMtl: flags.noMtl || null }, stats(holder)) };
 }
 
