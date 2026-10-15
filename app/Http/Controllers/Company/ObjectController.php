@@ -196,6 +196,46 @@ class ObjectController extends ErpController
         abort_unless(auth()->user()->canMedia(), 403, __('Нет доступа к этому разделу'));
     }
 
+    /** Квартиры объекта из списка «id,id,…» (или массива): только существующие, без повторов */
+    public static function unitList(array $p, $raw): array
+    {
+        $want = array_filter(array_map(fn ($v) => trim((string) $v), is_array($raw) ? $raw : explode(',', (string) $raw)), 'strlen');
+        if (! $want) {
+            return [];
+        }
+        $ids = array_map(fn ($a) => (string) $a['id'], \App\Services\Apartments::list($p));
+
+        return array_values(array_unique(array_intersect($want, $ids)));
+    }
+
+    /**
+     * «Одинаковые квартиры»: интерьер, загруженный к квартире apt, показывается и у отмеченных same — вместе с ней, не трогая остальные.
+     * Убранные из списка квартиры снова показывают интерьер своей планировки.
+     */
+    public function interiorsSame(Request $request, string $pid)
+    {
+        $this->canMedia();
+        $p = $this->project($pid);
+        $d = $request->validate(['apt' => ['required', 'string', 'max:60'], 'same' => ['nullable', 'array', 'max:2000'], 'same.*' => ['string', 'max:60']]);
+        abort_unless(self::unitList($p, [$d['apt']]), 422, __('Квартира не найдена — обновите страницу'));
+        $group = array_values(array_unique(array_merge([(string) $d['apt']], self::unitList($p, $d['same'] ?? []))));
+        $files = ObjectMedia::of($this->ws()->id)->where('project_id', $pid)->whereIn('kind', ['interior', 'pano', 'photo', 'plan'])->get()
+            ->filter(fn (ObjectMedia $m) => in_array((string) $d['apt'], $m->unitIds(), true));
+        if (! $files->count()) {
+            return response()->json(['error' => __('Сначала загрузите интерьер этой квартиры — потом отметьте такие же.')], 422);
+        }
+        foreach ($files as $m) {
+            $meta = (array) $m->meta;
+            $meta['units'] = $group;
+            $m->meta = $meta;
+            $m->save();
+        }
+        \App\Models\AuditLog::create(['workspace_id' => $this->ws()->id, 'user_id' => $request->user()->id, 'project' => $p['name'] ?? $pid, 'action' => 'media.edit',
+            'summary' => __('Интерьер квартиры: такой же у :n кв.', ['n' => count($group) - 1])]);
+
+        return response()->json(['ok' => true, 'units' => $group, 'files' => $files->pluck('id')->values()]);
+    }
+
     /** Подписи перевода 3D-моделей в GLB (assets/model-convert.js): загрузка в «3D, панорамы» и интерьер прямо из привязки к 3D */
     public static function convertTexts(): array
     {
@@ -250,7 +290,9 @@ class ObjectController extends ErpController
             'layout' => ['nullable', 'string', 'max:40'],   // планировка из перечня помещений: её чертёж, 3D-интерьер, панорамы комнат
             'room' => ['nullable', 'string', 'max:60'],     // комната на панораме: «Кухня», «Спальня»…
             'src' => ['nullable', 'string', 'max:200'],     // исходный файл, если модель переведена в GLB в браузере
+            'units' => ['nullable', 'string', 'max:4000'],  // интерьер одной квартиры (и одинаковых с ней): id через запятую
         ]);
+        $units = self::unitList($p, $d['units'] ?? '');
         $layout = null;
         if (! empty($d['layout'])) {
             $types = self::layouts($p);
@@ -322,6 +364,9 @@ class ObjectController extends ErpController
         }
         if (! empty($d['src'])) {
             $meta['src'] = trim($d['src']);
+        }
+        if ($units && in_array($d['kind'], ['interior', 'pano', 'photo', 'plan'], true)) {
+            $meta['units'] = $units;
         }
         $title = ($d['title'] ?? '') ?: (! empty($d['room']) && $layout ? $layout['name'].' — '.trim($d['room']) : Str::limit(pathinfo($d['src'] ?? $d['name'], PATHINFO_FILENAME), 150, ''));
         $m = ObjectMedia::create([
@@ -454,8 +499,10 @@ class ObjectController extends ErpController
         $p = $this->project($pid);
         $data = \App\Services\Locate::data($p, false);
         $focus = null;
+        $apt = null;
         if ($request->query('u') && ($a = collect($data['units'])->firstWhere('id', (string) $request->query('u')))) {
-            $focus = ! empty($a['t']) ? 't:'.$a['t'] : 'r:'.($a['r'] ?? 0);
+            $apt = $a;   // квартира: её карточка первой — свой интерьер и «такие же квартиры»
+            $focus = 'apt:'.$a['id'];
         } elseif ($request->has('r')) {
             // по числу комнат: если у таких квартир своя планировка — выделяем её
             $r = (int) $request->query('r');
@@ -464,7 +511,7 @@ class ObjectController extends ErpController
         }
 
         return view('company.objects.interiors', ['p' => $p, 'pid' => $pid, 'units' => $data['units'], 'inner' => \App\Services\Locate::media($ws->id, $pid),
-            'canEdit' => auth()->user()->canMedia(), 'embed' => $request->boolean('embed'), 'focus' => $focus]);
+            'canEdit' => auth()->user()->canMedia(), 'embed' => $request->boolean('embed'), 'focus' => $focus, 'apt' => $apt]);
     }
 
     public function mediaDelete(ObjectMedia $media)
@@ -489,8 +536,9 @@ class ObjectController extends ErpController
         $this->checkProject($media->project_id);
         abort_unless(in_array($media->kind, ['interior', 'pano', 'photo', 'plan'], true), 422);   // модель здания правится на странице объекта
         $d = $request->validate(['title' => ['nullable', 'string', 'max:160'], 'room' => ['nullable', 'string', 'max:60'],
-            'layout' => ['nullable', 'string', 'max:40'], 'rooms' => ['nullable', 'integer', 'min:0', 'max:9']]);
-        $lays = self::layouts(StateWriter::project($this->ws(), (string) $media->project_id) ?? []);
+            'layout' => ['nullable', 'string', 'max:40'], 'rooms' => ['nullable', 'integer', 'min:0', 'max:9'], 'units' => ['nullable', 'array', 'max:2000'], 'units.*' => ['string', 'max:60']]);
+        $proj = StateWriter::project($this->ws(), (string) $media->project_id) ?? [];
+        $lays = self::layouts($proj);
         if (filled($d['layout'] ?? null) && ! isset($lays[(string) $d['layout']])) {
             return response()->json(['error' => __('Планировка не найдена — обновите страницу')], 422);
         }
@@ -512,9 +560,19 @@ class ObjectController extends ErpController
             $media->layout = $t ? (string) $t['id'] : null;
             $media->rooms = $t ? (int) ($t['rooms'] ?? 0) : ($request->has('rooms') ? ($d['rooms'] ?? null) : $media->rooms);
         }
+        if ($request->has('units')) {   // пусто — файл снова у всей планировки
+            $meta = (array) $media->meta;
+            $units = self::unitList($proj, $d['units'] ?? []);
+            if ($units) {
+                $meta['units'] = $units;
+            } else {
+                unset($meta['units']);
+            }
+            $media->meta = $meta ?: null;
+        }
         $media->save();
 
-        return response()->json(['ok' => true, 'm' => ['id' => $media->id, 'k' => $media->kind, 'l' => $media->layout, 'r' => $media->rooms, 'n' => $media->title, 'room' => $media->meta['room'] ?? null, 'ext' => $media->ext]]);
+        return response()->json(['ok' => true, 'm' => ['id' => $media->id, 'k' => $media->kind, 'l' => $media->layout, 'r' => $media->rooms, 'n' => $media->title, 'room' => $media->meta['room'] ?? null, 'ext' => $media->ext, 'u' => $media->unitIds() ?: null]]);
     }
 
     public function mediaFile(Request $request, ObjectMedia $media)
@@ -547,7 +605,7 @@ class ObjectController extends ErpController
         // u — квартира, t/r — планировка: всё о квартире изнутри — 3D-интерьер, комнаты (360° и рендеры каждой), чертёж
         $unit = null;
         if (request('u') && ($a = Apartments::find($p, (string) request('u')))) {
-            $media = ObjectMedia::forUnitAll($media, $a['type'] ?? null, (int) $a['rooms']);
+            $media = ObjectMedia::forApt($media, (string) $a['id'], $a['type'] ?? null, (int) $a['rooms']);
             $unit = trim(($a['rooms'] ? __('Кв.').' '.$a['num'].' · '.$a['rooms'].__('-комн.') : (string) $a['num']).(! empty($a['area']) ? ' · '.$a['area'].' '.__('м²') : ''));
         } elseif (request()->has('t') || request()->has('r')) {
             $t = self::layouts($p)[(string) request('t')] ?? null;

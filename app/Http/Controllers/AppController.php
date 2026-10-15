@@ -67,7 +67,7 @@ class AppController extends Controller
         foreach (\App\Models\ObjectMedia::of($wsId)->whereIn('kind', ['interior', 'pano', 'photo', 'plan'])->orderBy('kind')->orderBy('sort')->orderBy('id')
             ->get(['id', 'project_id', 'kind', 'layout', 'rooms', 'title', 'ext', 'meta']) as $m) {
             $out[(string) $m->project_id]['files'][] = array_filter(['id' => $m->id, 'k' => $m->kind, 'l' => $m->layout, 'r' => $m->rooms, 'n' => $m->title,
-                'room' => $m->meta['room'] ?? null, 'ext' => $m->ext], fn ($v) => $v !== null);
+                'room' => $m->meta['room'] ?? null, 'ext' => $m->ext, 'u' => $m->unitIds() ?: null], fn ($v) => $v !== null);
         }
 
         return $out;

@@ -140,6 +140,7 @@ Route::middleware(['auth', 'role:company'])->group(function () {
                 Route::get('/objects/{pid}', [Company\ObjectController::class, 'show']);
                 Route::get('/objects/{pid}/3d', [Company\ObjectController::class, 'viewer']);
                 Route::get('/objects/{pid}/interiors', [Company\ObjectController::class, 'interiors']);   // интерьеры по планировкам: загрузить, поправить, удалить
+                Route::post('/objects/{pid}/interiors/same', [Company\ObjectController::class, 'interiorsSame']);   // интерьер квартиры — такой же у отмеченных
                 // квартира на 3D-модели дома; привязка корпусов к модели
                 Route::get('/objects/{pid}/locate', [Company\LocateController::class, 'show']);
                 Route::post('/media/{media}/locate', [Company\LocateController::class, 'save']);

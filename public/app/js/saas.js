@@ -217,9 +217,12 @@ if (PAGES.site) {
 /* ---------- загруженные интерьеры квартиры: 3D, панорамы 360°, рендеры и план ----------
    Файлы привязаны к планировке (или к числу комнат). Правило то же, что у просмотра на сервере (ObjectMedia::forUnit):
    свои файлы планировки, иначе — общие для такого числа комнат, иначе — общие для всех. Загружено — показываем их, а не примеры программы. */
+// свой файл квартиры (загружен к ней или к такой же) — важнее файла планировки того же вида; файлы отдельных квартир другим не видны
 const innerPick = (files, apt, kinds) => {
-  const list = files.filter(m => kinds.includes(m.k)), own = apt.type ? list.filter(m => m.l === apt.type) : [];
-  return own.length ? own : list.filter(m => !m.l && (m.r == null || +m.r === +apt.rooms));
+  const list = files.filter(m => kinds.includes(m.k)), mine = list.filter(m => (m.u || []).map(String).includes(String(apt.id)));
+  if (mine.length) return mine;
+  const shared = list.filter(m => !(m.u || []).length), own = apt.type ? shared.filter(m => m.l === apt.type) : [];
+  return own.length ? own : shared.filter(m => !m.l && (m.r == null || +m.r === +apt.rooms));
 };
 function innerKinds(p, apt) {
   const files = (SAAS && SAAS.media && SAAS.media[p.id] && SAAS.media[p.id].files) || [], view = apt ? innerPick(files, apt, ['interior', 'pano']) : [];

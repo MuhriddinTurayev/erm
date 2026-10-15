@@ -412,18 +412,30 @@ export async function start(el, cfg) {
     if (mark.on) return drawMark(bid);
     clear(); pulse.length = 0;
     const B = blocks[bid], c = C(bid), F = floorsOf(bid), mats = {};
-    units.filter((u) => u.b === bid).forEach((u) => {
+    // в модели этажей может быть меньше, чем в объекте: на этаже модели рисуем квартиры одного (нижнего) его этажа — не стопкой
+    const lowest = new Map(), range = new Map();
+    unitsOf(bid).forEach((u) => {
+      const mf = floorOf(u, B, c).f;
+      if (!lowest.has(mf) || u.f < lowest.get(mf)) lowest.set(mf, u.f);
+      const r = range.get(mf) || [u.f, u.f]; range.set(mf, [Math.min(r[0], u.f), Math.max(r[1], u.f)]);
+    });
+    unitsOf(bid).filter((u) => lowest.get(floorOf(u, B, c).f) === u.f).forEach((u) => {
       const col = colors[u.e % 2], mat = (mats[col] ??= new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }));
-      // плитка на наружной стене каждой части квартиры, номер на ней
+      // плитка на наружной стене каждой части квартиры (номера квартир — на шаге 2: здесь важны рамка, этажи и подъезды)
       cellsOf(u, B, c).forEach((cl) => {
         const t = wallTile(cl, c.s, 0.01, 0.02);
         const tile = new THREE.Mesh(unitBox, mat); tile.scale.copy(t.size); tile.position.copy(t.center); layer.add(tile);
         layer.add(edges(cl.min, cl.max, col, 0.35));
-        wallLabel(u.num, 'lc-num', t.center, cl.normal);
       });
     });
     // лицевая сторона: подписи подъездов у земли, их границы — синие линии, верх 1-го этажа — оранжевая
     const facing = c.flipZ ? -1 : 1, sp = splitsOf(B, c);
+    // этажи — подписью слева от фасада; если в модели этажей меньше — какие этажи объекта на этом этаже модели
+    const { yAt } = floorOf({ f: 1 }, B, c);
+    for (let k = 1; k <= F; k++) {
+      const r = range.get(k), text = !r ? String(k) : r[0] === r[1] ? String(r[0]) : `${r[0]}–${r[1]}`;
+      wallLabel(text + ' ' + (T.fl || ''), 'lc-flr', new THREE.Vector3((-0.5 - 0.03) * facing, (yAt(k - 1) + yAt(k)) / 2 - 0.5, 0.5 * facing), normalOf(facing));
+    }
     for (let e = 0; e < B.entr.length; e++) entrLabel(B, c, e, facing, overlay);
     for (let k = 1; k < sp.length - 1; k++) { const x = (c.flipX ? 1 - sp[k] : sp[k]) - 0.5; thick(onWall([[x, -0.5], [x, 0.5]], facing), accent2, 3); }
     if (F > 1) { const y = groundOf(c, F) - 0.5; thick(onWall([[-0.5, y], [0.5, y]], facing), amber, 2.5); }
@@ -691,7 +703,7 @@ export async function start(el, cfg) {
     if (!drag) return;
     try { canvas.releasePointerCapture(drag.id); } catch (e) { /* уже отпущен */ }
     const before = drag.before, kind = drag.u.kind; drag = null; dirty = false;
-    controls.enabled = true; if (tc) tc.enabled = true;
+    controls.enabled = true; if (tc) tc.enabled = gizmoOn && !mark.on;
     canvas.style.cursor = hoverH ? 'grab' : '';
     if (kind === 'entr') relayout(curBlock);   // подъезд стал шире — его квартиры заново по окнам
     changed(); remember(before);
@@ -712,8 +724,39 @@ export async function start(el, cfg) {
       scene.add(tc.getHelper ? tc.getHelper() : tc);
       tc.attach(frame);
       mode('translate');
+      gizmo(gizmoOn);
       handles.visible = true;
     }
+  }
+  let gizmoOn = false;
+  /** Стрелки перемещения и поворота (для опытных); выключены — рамку двигают кнопки и точки на ней */
+  function gizmo(on) {
+    gizmoOn = !!on;
+    if (!tc) return;
+    const helper = tc.getHelper ? tc.getHelper() : tc;
+    helper.visible = gizmoOn && !mark.on;
+    tc.enabled = gizmoOn && !mark.on;
+  }
+  /** Сдвинуть рамку кнопкой: влево/вправо и вперёд/назад — как видно на экране, вверх/вниз; шаг — доля размера дома */
+  function nudge(dx, dz, dy = 0, big = false) {
+    if (curBlock == null) return C(curBlock);
+    const before = snap(), c = C(curBlock), stepXZ = Math.max(0.1, Math.max(c.s[0], c.s[2]) * (big ? 0.1 : 0.02)), stepY = Math.max(0.05, c.s[1] * (big ? 0.05 : 0.01));
+    const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y = 0;
+    if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+    fwd.normalize();
+    const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+    const d = right.multiplyScalar(dx * stepXZ).addScaledVector(fwd, dz * stepXZ);
+    c.c = [+(c.c[0] + d.x).toFixed(4), +(c.c[1] + dy * stepY).toFixed(4), +(c.c[2] + d.z).toFixed(4)];
+    changed(); remember(before);
+    return c;
+  }
+  /** Повернуть рамку вокруг вертикали на deg градусов */
+  function turn(deg) {
+    if (curBlock == null) return C(curBlock);
+    const before = snap(), c = C(curBlock);
+    c.r = +(c.r + (deg * Math.PI) / 180).toFixed(5);
+    changed(); remember(before);
+    return c;
   }
   function mode(m) {
     if (!tc) return;
@@ -837,7 +880,7 @@ export async function start(el, cfg) {
     overview, overviewModel, statusView, view,
     // настройка
     calibrate(bid) { cfg.calibrate = true; frameLines.visible = true; curBlock = bid; applyFrame(bid); setCalibrate(true); drawGrid(bid); overview(); return C(bid); },
-    mode,
+    mode, gizmo, nudge, turn,
     get: () => C(curBlock),
     set(patch) {
       const before = snap();
@@ -853,8 +896,8 @@ export async function start(el, cfg) {
     mark(on) {
       mark.on = !!on; mark.paint = null;
       const helper = tc && (tc.getHelper ? tc.getHelper() : tc);
-      if (helper) helper.visible = !mark.on;
-      if (tc) tc.enabled = !mark.on;
+      if (helper) helper.visible = !mark.on && gizmoOn;
+      if (tc) tc.enabled = !mark.on && gizmoOn;
       handles.visible = !mark.on && !!cfg.calibrate;
       if (curBlock != null) drawGrid(curBlock);
     },

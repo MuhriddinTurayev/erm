@@ -27,6 +27,7 @@ class ObjectMedia extends Model
      */
     public static function forUnit($list, ?string $layout, int $rooms)
     {
+        $list = $list->filter(fn ($m) => ! $m->unitIds());   // загруженное к отдельным квартирам — только им
         $own = $layout ? $list->where('layout', $layout) : collect();
 
         return $own->count() ? $own->values()
@@ -45,6 +46,24 @@ class ObjectMedia extends Model
         }
 
         return $out->values();
+    }
+
+    /** Квартиры, к которым файл загружен напрямую (и отмеченные одинаковыми с ней); пусто — файл планировки */
+    public function unitIds(): array
+    {
+        return array_values(array_map('strval', (array) ($this->meta['units'] ?? [])));
+    }
+
+    /**
+     * Файлы одной квартиры: свои (загружены к ней или к одинаковой с ней) — по каждому виду отдельно;
+     * чего своего нет — как у её планировки (иначе по числу комнат). Своё у одной квартиры не трогает остальные.
+     */
+    public static function forApt($list, string $aptId, ?string $layout, int $rooms)
+    {
+        $own = $list->filter(fn ($m) => in_array($aptId, $m->unitIds(), true));
+        $kinds = $own->pluck('kind')->unique()->all();
+
+        return $own->concat(self::forUnitAll($list->filter(fn ($m) => ! in_array($m->kind, $kinds, true)), $layout, $rooms))->values();
     }
 
     /** Комната файла (панорама, рендер): то, что вписали; у старых панорам без комнаты — название */

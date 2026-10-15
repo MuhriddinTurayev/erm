@@ -101,7 +101,7 @@ class PublicController extends Controller
     /* ---------- 3D для покупателей: только открытые файлы своего объекта ---------- */
 
     /** Открытые файлы объекта: здание целиком и — для квартиры — файлы её планировки (у старых файлов — по числу комнат) */
-    private function publicMedia(int $wsId, string $pid, ?int $rooms = null, ?string $layout = null)
+    private function publicMedia(int $wsId, string $pid, ?int $rooms = null, ?string $layout = null, ?string $apt = null)
     {
         $all = \App\Models\ObjectMedia::of($wsId)->where('project_id', $pid)->where('is_public', true)->whereIn('kind', ['exterior', 'interior', 'pano', 'photo', 'plan'])
             ->orderByDesc('is_main')->orderBy('kind')->orderBy('sort')->orderBy('id')->get();
@@ -110,7 +110,9 @@ class PublicController extends Controller
         }
 
         // квартира: дом целиком и всё о ней изнутри — 3D, комнаты (360° и рендеры), чертёж
-        return $all->where('kind', 'exterior')->concat(\App\Models\ObjectMedia::forUnitAll($all, $layout, (int) $rooms))->values();
+        $inner = $all->where('kind', '!=', 'exterior');
+
+        return $all->where('kind', 'exterior')->concat($apt !== null ? \App\Models\ObjectMedia::forApt($inner, $apt, $layout, (int) $rooms) : \App\Models\ObjectMedia::forUnitAll($inner, $layout, (int) $rooms))->values();
     }
 
     public function chess3d(Request $request, string $key)
@@ -120,9 +122,15 @@ class PublicController extends Controller
         $p = StateWriter::project($ws, $pid) ?? abort(404);
         abort_unless(Inventory::ready($p), 404);
         $layout = $request->query('t') && isset(\App\Http\Controllers\Company\ObjectController::layouts($p)[$request->query('t')]) ? (string) $request->query('t') : null;
-        $media = $this->publicMedia($ws->id, $pid, $request->has('r') ? (int) $request->query('r') : ($layout ? (int) (\App\Http\Controllers\Company\ObjectController::layouts($p)[$layout]['rooms'] ?? 0) : null), $layout);
-
-        $unit = $layout ? (string) (\App\Http\Controllers\Company\ObjectController::layouts($p)[$layout]['name'] ?? '') : ($request->has('r') ? (int) $request->query('r').__('-комн.') : null);
+        // u — квартира из 3D-дома на сайте: её собственный интерьер (и такой же у отмеченных одинаковых), иначе — её планировки
+        $apt = $request->query('u') ? Apartments::find($p, (string) $request->query('u')) : null;
+        if ($apt) {
+            $media = $this->publicMedia($ws->id, $pid, (int) $apt['rooms'], ($apt['type'] ?? null) ?: null, (string) $apt['id']);
+            $unit = trim(__('Кв.').' '.$apt['num'].($apt['rooms'] ? ' · '.$apt['rooms'].__('-комн.') : ''));
+        } else {
+            $media = $this->publicMedia($ws->id, $pid, $request->has('r') ? (int) $request->query('r') : ($layout ? (int) (\App\Http\Controllers\Company\ObjectController::layouts($p)[$layout]['rooms'] ?? 0) : null), $layout);
+            $unit = $layout ? (string) (\App\Http\Controllers\Company\ObjectController::layouts($p)[$layout]['name'] ?? '') : ($request->has('r') ? (int) $request->query('r').__('-комн.') : null);
+        }
 
         return view('company.objects.viewer', ['ws' => $ws, 'p' => $p, 'pid' => $pid, 'media' => $media, 'cur' => $media->firstWhere('id', (int) $request->query('m')) ?? $media->first(), 'unit' => $unit,
             'src' => fn ($m, bool $poster = false) => url("/s/{$key}/m/{$m->id}".($poster ? '?poster=1' : '')), 'public' => true, 'canEdit' => false, 'embed' => $request->boolean('embed')]);
@@ -139,7 +147,7 @@ class PublicController extends Controller
     public function cabinet3d(Request $request, string $token)
     {
         [$bl, $ws, $p, $a] = $this->buyer($token);
-        $media = $this->publicMedia($ws->id, $bl->project_id, (int) $a['rooms'], $a['type'] ?? null);
+        $media = $this->publicMedia($ws->id, $bl->project_id, (int) $a['rooms'], $a['type'] ?? null, (string) $a['id']);
 
         $unit = trim(__('Кв.').' '.$a['num'].($a['rooms'] ? ' · '.$a['rooms'].__('-комн.') : '').(! empty($a['area']) ? ' · '.$a['area'].' '.__('м²') : ''));
 
@@ -157,7 +165,7 @@ class PublicController extends Controller
         $model = \App\Services\Locate::model($ws->id, $pid, null, true);
 
         return $this->locateView($p, $pid, $model, (string) $request->query('u', ''), fn ($m) => url("/s/{$key}/m/{$m->id}"), url("/s/{$key}?o={$pid}"), $request->boolean('embed'),
-            $ws->id, ['view' => url("/s/{$key}/3d?o={$pid}&t={t}&r={r}&embed=1"), 'file' => url("/s/{$key}/m/{id}")]);
+            $ws->id, ['view' => url("/s/{$key}/3d?o={$pid}&t={t}&r={r}&u={u}&embed=1"), 'file' => url("/s/{$key}/m/{id}")]);
     }
 
     /** Квартира покупателя на 3D-модели дома — из его кабинета */

@@ -45,11 +45,11 @@
 import { innerManager, innerOf } from '{{ asset('assets/inner-media.js') }}?v={{ @filemtime(public_path('assets/inner-media.js')) }}';
 const T = {!! json_encode($T, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 const UNITS = {!! json_encode($units, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!}, INNER = {!! json_encode($inner, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
-const PID = {!! json_encode($pid) !!}, FOCUS = {!! json_encode($focus) !!}, CAN = {!! json_encode((bool) $canEdit) !!};
-const URLS = { up: CAN ? {!! json_encode(url('/company/objects/'.$pid.'/media')) !!} : null, file: {!! json_encode(url('/company/media/{id}/file')) !!},
+const PID = {!! json_encode($pid) !!}, FOCUS = {!! json_encode($focus) !!}, CAN = {!! json_encode((bool) $canEdit) !!}, APT = {!! json_encode($apt ?? null, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
+const URLS = { up: CAN ? {!! json_encode(url('/company/objects/'.$pid.'/media')) !!} : null, file: {!! json_encode(url('/company/media/{id}/file')) !!}, same: {!! json_encode(url('/company/objects/'.$pid.'/interiors/same')) !!},
   patch: {!! json_encode(url('/company/media/{id}/patch')) !!}, del: {!! json_encode(url('/company/media/{id}')) !!}, view: {!! json_encode(url('/company/objects/'.$pid.'/3d?embed=1&u={u}')) !!} };
 const CVT = {!! json_encode(\App\Http\Controllers\Company\ObjectController::convertTexts(), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!}, MC_URL = {!! json_encode(asset('assets/model-convert.js').'?v='.@filemtime(public_path('assets/model-convert.js'))) !!};
-const ICON = {!! json_encode(['interior' => ic('box', '', 22), 'pano' => ic('compass', '', 22), 'photo' => ic('image', '', 22), 'plan' => ic('ruler', '', 22), 'eye' => ic('eye', '', 15), 'box' => ic('box', '', 16), 'compass' => ic('compass', '', 16), 'image' => ic('image', '', 16), 'ruler' => ic('ruler', '', 16), 'edit' => ic('pencil', '', 13), 'del' => ic('trash-2', '', 13)], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
+const ICON = {!! json_encode(['interior' => ic('box', '', 22), 'pano' => ic('compass', '', 22), 'photo' => ic('image', '', 22), 'plan' => ic('ruler', '', 22), 'eye' => ic('eye', '', 15), 'box' => ic('box', '', 16), 'compass' => ic('compass', '', 16), 'image' => ic('image', '', 16), 'ruler' => ic('ruler', '', 16), 'edit' => ic('pencil', '', 13), 'del' => ic('trash-2', '', 13), 'copy' => ic('copy', '', 14)], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const prog = (k, text) => {
@@ -80,10 +80,10 @@ function tell() {
     const pr = [m.l || null, m.l ? null : (m.r ?? null)], k = JSON.stringify(pr);
     if (!seen.has(k)) { seen.add(k); pairs.push(pr); }
   });
-  const files = list.map((m) => ({ id: m.id, k: m.k, l: m.l || undefined, r: m.r ?? undefined, n: m.n, room: m.room || undefined, ext: m.ext }));
+  const files = list.map((m) => ({ id: m.id, k: m.k, l: m.l || undefined, r: m.r ?? undefined, n: m.n, room: m.room || undefined, ext: m.ext, u: m.u || undefined }));
   parent.postMessage({ type: 'oftob-inner-changed', pid: PID, in: pairs, n, files: JSON.parse(JSON.stringify(files)) }, location.origin);
 }
-const IM = innerManager($('#iList'), { T, ICON, inner: INNER, units: UNITS, csrf: document.querySelector('meta[name=csrf-token]').content, cvt: CVT, mcUrl: MC_URL,
+const IM = innerManager($('#iList'), { T, ICON, inner: INNER, units: UNITS, apt: APT, csrf: document.querySelector('meta[name=csrf-token]').content, cvt: CVT, mcUrl: MC_URL,
   canEdit: CAN, prog, urls: URLS, onView: view, onChange: tell });
 if (FOCUS) IM.setCur(FOCUS);
 IM.render();

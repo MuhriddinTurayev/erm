@@ -722,3 +722,22 @@ dialog.modal::backdrop{background:rgba(15,13,40,.5)}
 .mc-tools>.mc-edit{flex:1;min-width:0;padding:0}
 .mc-tools>form{flex:none}
 .mc-tools>form .btn{height:28px;padding:0 8px;font-size:12.5px}
+/* интерьер отдельной квартиры и «такие же квартиры» (assets/inner-media.js) */
+.im-lay.im-apt{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 5%,var(--surface))}
+.im-apt-st{display:flex;gap:6px 10px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:var(--text-2);background:var(--sunken);border-radius:9px;padding:7px 9px}
+.im-apt-st .btn{margin-left:auto}
+.im-same-list{font-weight:600;color:var(--accent-text)}
+.im-sec-h{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin:6px 2px -2px;grid-column:1/-1}.im-sec-h b{font:700 13px var(--font-head)}.im-sec-h small{color:var(--muted);font-size:12px}
+.im-th.shared{opacity:.72;border-style:dashed}
+.im-sh{position:absolute;right:3px;top:3px;font:700 9px var(--font);font-style:normal;background:rgba(255,255,255,.9);color:var(--text-2);border-radius:4px;padding:1px 4px}
+.im-dlg.im-same{width:min(760px,calc(100% - 24px))}
+.im-same-hint{margin:0;font-size:13px;color:var(--text-2)}
+.im-same-q{display:flex;gap:6px;flex-wrap:wrap}
+.im-same-grid{display:flex;gap:14px;overflow:auto;max-height:52vh;padding:2px}
+.im-ss{display:grid;gap:4px;align-content:start}
+.im-sr{display:flex;gap:4px;align-items:center}.im-sr>i{width:22px;font:600 11px var(--font);font-style:normal;color:var(--muted);text-align:right;flex:none}
+.im-sc{min-width:38px;height:30px;padding:0 6px;border:1px solid var(--border-2);border-radius:7px;background:var(--surface);font:600 12px var(--font);color:var(--text);cursor:pointer}
+.im-sc.other{opacity:.45}
+.im-sc.on{background:var(--accent);border-color:var(--accent);color:#fff;opacity:1}
+.im-sc.me{display:inline-grid;place-items:center;background:var(--accent-soft);border-color:var(--accent);color:var(--accent-text);cursor:default}
+.im-same-n{margin-right:auto;color:var(--muted);font-size:12.5px;align-self:center}
