@@ -20,6 +20,7 @@ CRM для строительства многоэтажных домов: от 
 - Rollar: rahbar, buxgalter, kassir, sotuv menejeri, prorab, faqat ko'rish. Prorab/menejerni alohida obyektlarga cheklash mumkin.
 - Tarif cheklovlari: obyektlar, foydalanuvchilar, oylik AI so'rovlari. Muddat tugasa — faqat tarif sahifasi ochiq.
 - Kunlik hisobotlar rejalashtiruvchi orqali ketadi: `php artisan schedule:work` (start.bat o'zi ishga tushiradi) yoki hostingda cron `* * * * * php artisan schedule:run`.
+- Telegram-bot vebhuksiz (kompyuterda) xabarlarni ham shu rejalashtiruvchi orqali oladi. Open Server'da sayt alohida ishlaydi — botga javob berish uchun loyiha papkasidagi **`bot.bat`** ni ishga tushiring va oynasini yopmang. Serverda (Docker) rejalashtiruvchi o'zi ishlaydi.
 - Super admin yaratish: `php artisan oftob:user email parol --role=superadmin`.
 
 ---

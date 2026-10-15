@@ -9,6 +9,13 @@
       <div class="alert alert-warn" style="margin:0">{!! ic('triangle-alert') !!}<div>{{ __('Telegram-бот ещё не настроен администратором платформы.') }}</div></div>
     @elseif ($u->telegram_chat_id)
       <p>{{ __('Ваш Telegram привязан. Бот :b принимает ваши расходы, фото чеков и записи журнала работ.', ['b' => '@'.$bot]) }}</p>
+      @if ($deaf)
+      <div class="alert alert-warn">{!! ic('triangle-alert') !!}<div>
+        <b>{{ __('Бот сейчас не получает сообщения — поэтому не отвечает.') }}</b>
+        {{ $u->isAdmin() || $u->role === 'superadmin' ? __('Не запущен планировщик. На компьютере (Open Server) запустите файл bot.bat из папки проекта и не закрывайте его окно; на сервере он работает сам.') : __('Сообщите руководителю компании: не запущен планировщик бота.') }}
+        <form method="post" action="/me/telegram/check" style="margin-top:8px">@csrf<input type="hidden" name="pull" value="1"><button class="btn btn-s">{!! ic('refresh-cw', '', 14) !!}{{ __('Получить сообщения сейчас') }}</button></form>
+      </div></div>
+      @endif
       <div class="flex">
         <a class="btn btn-p" href="https://t.me/{{ $bot }}" target="_blank" rel="noopener">{!! ic('external-link') !!}{{ __('Открыть бота') }}</a>
         <form method="post" action="/me/telegram/unlink" data-confirm="{{ __('Отвязать Telegram?') }}">@csrf<button class="btn">{!! ic('unlink') !!}{{ __('Отвязать') }}</button></form>

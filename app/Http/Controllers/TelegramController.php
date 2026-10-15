@@ -35,6 +35,8 @@ class TelegramController extends Controller
             'u' => $u,
             'bot' => \App\Models\PlatformSetting::get('telegram_bot'),
             'enabled' => Telegram::enabled(),
+            // бот без вебхука, а сообщения никто не забирает (не запущен планировщик) — он не отвечает
+            'deaf' => \App\Services\TelegramPoller::active() && ! \App\Services\TelegramPoller::listening(),
         ]);
     }
 
@@ -51,6 +53,10 @@ class TelegramController extends Controller
         try {
             $poller->once(0);
         } catch (\Throwable) {
+        }
+
+        if ($request->boolean('pull')) {   // «Получить сообщения сейчас» — бот ответит на то, что ему уже написали
+            return back()->with('ok', __('Сообщения боту получены — ответы уже в Telegram'));
         }
 
         return $request->user()->fresh()->telegram_chat_id

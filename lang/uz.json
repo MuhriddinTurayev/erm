@@ -4413,5 +4413,10 @@
     "Вся эта планировка": "Shu rejadagi hammasi",
     "Снять все": "Hammasini olib tashlash",
     "Отмечено: :n": "Belgilandi: :n",
-    "Выбранная квартира — сверху: её интерьер меняется только у неё (и у отмеченных такими же). Ниже — общий интерьер планировок: его видят все квартиры планировки без своего. Всё это покупатели видят в продажах, на сайте и в кабинете (кнопка «Внутри»).": "Tanlangan xonadon — tepada: uning interyeri faqat o'zida (va xuddi shunday deb belgilanganlarda) o'zgaradi. Pastda — rejalarning umumiy interyeri: uni o'z interyeri yo'q barcha xonadonlar ko'radi. Bularning hammasini xaridorlar sotuvda, saytda va kabinetda ko'radi («Ichkarisi» tugmasi)."
+    "Выбранная квартира — сверху: её интерьер меняется только у неё (и у отмеченных такими же). Ниже — общий интерьер планировок: его видят все квартиры планировки без своего. Всё это покупатели видят в продажах, на сайте и в кабинете (кнопка «Внутри»).": "Tanlangan xonadon — tepada: uning interyeri faqat o'zida (va xuddi shunday deb belgilanganlarda) o'zgaradi. Pastda — rejalarning umumiy interyeri: uni o'z interyeri yo'q barcha xonadonlar ko'radi. Bularning hammasini xaridorlar sotuvda, saytda va kabinetda ko'radi («Ichkarisi» tugmasi).",
+    "Бот сейчас не получает сообщения — поэтому не отвечает.": "Bot hozir xabarlarni qabul qilmayapti — shuning uchun javob bermayapti.",
+    "Не запущен планировщик. На компьютере (Open Server) запустите файл bot.bat из папки проекта и не закрывайте его окно; на сервере он работает сам.": "Rejalashtirgich ishga tushirilmagan. Kompyuterda (Open Server) loyiha papkasidagi bot.bat faylini ishga tushiring va uning oynasini yopmang; serverda u o'zi ishlaydi.",
+    "Сообщите руководителю компании: не запущен планировщик бота.": "Kompaniya rahbariga xabar bering: bot rejalashtirgichi ishga tushirilmagan.",
+    "Получить сообщения сейчас": "Xabarlarni hozir olish",
+    "Сообщения боту получены — ответы уже в Telegram": "Botga yozilgan xabarlar olindi — javoblar Telegram'da"
 }

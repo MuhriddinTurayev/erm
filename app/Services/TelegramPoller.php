@@ -50,6 +50,15 @@ class TelegramPoller
         }
     }
 
+    /**
+     * Сообщения боту сейчас кто-то получает: планировщик (schedule:work / cron) слушал в последние 3 минуты.
+     * Нет — бот молчит на всё, кроме кнопки «Проверить» на сайте (на компьютере без запущенного планировщика).
+     */
+    public static function listening(): bool
+    {
+        return (int) Cache::get('tg-listen-at', 0) > time() - 180;
+    }
+
     /** Слушать ~$seconds секунд (для запуска планировщиком каждую минуту) */
     public function listen(int $seconds = 55): int
     {
@@ -59,6 +68,7 @@ class TelegramPoller
         $end = time() + $seconds;
         $n = 0;
         while (time() < $end - 2) {
+            Cache::put('tg-listen-at', time(), 86400);   // «бот на связи» — для подсказки на странице «Мой Telegram»
             $t0 = microtime(true);
             try {
                 $n += $this->once(min(25, max(1, $end - time() - 2)));
