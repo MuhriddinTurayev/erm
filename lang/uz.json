@@ -4418,5 +4418,7 @@
     "Не запущен планировщик. На компьютере (Open Server) запустите файл bot.bat из папки проекта и не закрывайте его окно; на сервере он работает сам.": "Rejalashtirgich ishga tushirilmagan. Kompyuterda (Open Server) loyiha papkasidagi bot.bat faylini ishga tushiring va uning oynasini yopmang; serverda u o'zi ishlaydi.",
     "Сообщите руководителю компании: не запущен планировщик бота.": "Kompaniya rahbariga xabar bering: bot rejalashtirgichi ishga tushirilmagan.",
     "Получить сообщения сейчас": "Xabarlarni hozir olish",
-    "Сообщения боту получены — ответы уже в Telegram": "Botga yozilgan xabarlar olindi — javoblar Telegram'da"
+    "Сообщения боту получены — ответы уже в Telegram": "Botga yozilgan xabarlar olindi — javoblar Telegram'da",
+    "Язык бота": "Bot tili",
+    "язык бота: узбекский, русский, таджикский": "bot tili: o'zbek, rus, tojik"
 }

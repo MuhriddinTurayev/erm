@@ -185,12 +185,12 @@ class Payments
             $to = $find('admin');   // согласующего с такой ролью нет в Telegram — решает руководитель
         }
         foreach ($to as $u) {
-            self::inLocale($u->locale ?: $ws->locale, function () use ($u, $pr, &$msgs) {
+            self::inLocale($u->botLocale(), function () use ($u, $pr, &$msgs) {
                 try {
                     $r = Telegram::message($u->telegram_chat_id, '🔔 <b>'.__('Нужно согласовать оплату')."</b>\n\n".self::card($pr), [[
                         ['text' => '✅ '.__('Согласовать'), 'data' => 'pa:'.$pr->id], ['text' => '❌ '.__('Отклонить'), 'data' => 'pn:'.$pr->id],
                     ], [['text' => __('Открыть на сайте'), 'url' => url('/company/payments/'.$pr->id)]]]);
-                    $msgs[] = ['chat' => $u->telegram_chat_id, 'msg' => (int) ($r['message_id'] ?? 0), 'locale' => $u->locale];
+                    $msgs[] = ['chat' => $u->telegram_chat_id, 'msg' => (int) ($r['message_id'] ?? 0), 'locale' => $u->botLocale()];
                 } catch (\Throwable $e) {
                     Log::warning('Payment notify: '.$e->getMessage());
                 }
@@ -220,7 +220,7 @@ class Payments
         if (! Telegram::enabled() || ! $a?->telegram_chat_id) {
             return;
         }
-        self::inLocale($a->locale, function () use ($a, $pr) {
+        self::inLocale($a->botLocale(), function () use ($a, $pr) {
             try {
                 Telegram::message($a->telegram_chat_id, self::card($pr));
             } catch (\Throwable) {

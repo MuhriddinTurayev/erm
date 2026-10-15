@@ -69,10 +69,18 @@ class Sections
     public static function match(string $text): ?string
     {
         $t = trim($text);
-        foreach (self::labels() as $k => $label) {
-            if ($t === $label || $t === trim(Str::after($label, ' '))) {
-                return $k;
+        $prev = app()->getLocale();
+        try {
+            foreach (array_unique(array_merge([$prev], array_keys((array) config('oftob.locales')))) as $l) {
+                app()->setLocale($l);
+                foreach (self::labels() as $k => $label) {
+                    if ($t === $label || $t === trim(Str::after($label, ' '))) {
+                        return $k;
+                    }
+                }
             }
+        } finally {
+            app()->setLocale($prev);
         }
 
         return null;

@@ -85,7 +85,7 @@ class Reminders
             if (! $u?->telegram_chat_id || ! $u->is_active) {
                 continue;
             }
-            $this->inLocale($u->locale ?: $ws->locale, function () use ($u, $tasks, $today, &$n) {
+            $this->inLocale($u->botLocale(), function () use ($u, $tasks, $today, &$n) {
                 $lines = $tasks->take(10)->map(fn ($t) => ($t->due_date->toDateString() < $today ? '🔴 ' : '🟡 ').e($t->title).' — '.$t->due_date->format('d.m'))->implode("\n");
                 try {
                     Telegram::message($u->telegram_chat_id, '📌 <b>'.__('Задачи на сегодня и просроченные').'</b>'."\n\n".$lines, [[['text' => __('Открыть задачи'), 'url' => url('/company/tasks?who=me')]]]);
@@ -106,7 +106,7 @@ class Reminders
         }
         $n = 0;
         foreach ($ws->users()->whereIn('role', ['admin', 'accountant', 'cashier'])->where('is_active', true)->whereNotNull('telegram_chat_id')->get() as $u) {
-            $this->inLocale($u->locale ?: $ws->locale, function () use ($u, $due, &$n) {
+            $this->inLocale($u->botLocale(), function () use ($u, $due, &$n) {
                 $lines = $due->take(10)->map(fn ($r) => '№'.$r->number.' · '.e($r->purpose).' — <b>'.\App\Services\Erp\Money::fmt($r->amount, $r->currency).'</b>')->implode("\n");
                 try {
                     Telegram::message($u->telegram_chat_id, '💵 <b>'.__('Сегодня нужно оплатить').'</b>'."\n\n".$lines, [[['text' => __('Заявки к оплате'), 'url' => url('/company/payments?tab=approved')]]]);

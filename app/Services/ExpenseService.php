@@ -178,12 +178,12 @@ class ExpenseService
         }
         $msgs = [];
         foreach ($ws->users()->where('role', 'admin')->whereNotNull('telegram_chat_id')->get() as $admin) {
-            $this->inLocale($admin->locale ?: $ws->locale, function () use ($admin, $e, $ws, &$msgs) {
+            $this->inLocale($admin->botLocale(), function () use ($admin, $e, $ws, &$msgs) {
                 try {
                     $r = Telegram::message($admin->telegram_chat_id, "🔔 <b>".__('Нужно согласовать расход')."</b>\n\n".self::card($e, $ws), [[
                         ['text' => '✅ '.__('Согласовать'), 'data' => 'ap:'.$e->id], ['text' => '❌ '.__('Отклонить'), 'data' => 'rj:'.$e->id],
                     ], [['text' => __('Открыть на сайте'), 'url' => url('/company/approvals')]]]);
-                    $msgs[] = ['chat' => $admin->telegram_chat_id, 'msg' => (int) ($r['message_id'] ?? 0), 'locale' => $admin->locale ?: $ws->locale];
+                    $msgs[] = ['chat' => $admin->telegram_chat_id, 'msg' => (int) ($r['message_id'] ?? 0), 'locale' => $admin->botLocale()];
                 } catch (\Throwable $ex) {
                     Log::warning('Approval notify: '.$ex->getMessage());
                 }
@@ -204,7 +204,7 @@ class ExpenseService
         }
         $author = $e->user;
         if ($author && $author->telegram_chat_id && $author->id !== $by->id) {
-            $this->inLocale($author->locale ?: $ws->locale, function () use ($author, $e, $ws) {
+            $this->inLocale($author->botLocale(), function () use ($author, $e, $ws) {
                 try {
                     Telegram::message($author->telegram_chat_id, self::card($e, $ws));
                 } catch (\Throwable) {

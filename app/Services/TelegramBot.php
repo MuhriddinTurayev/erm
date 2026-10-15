@@ -65,7 +65,12 @@ class TelegramBot
         }
         $user = User::where('telegram_chat_id', $chat)->where('is_active', true)->whereNotNull('workspace_id')->first();
         if (! $user) {
-            $this->say($chat, "👋 ".__('Здравствуйте! Чтобы работать с ботом, привяжите Telegram на сайте: меню пользователя → «Telegram».')."\n".url('/me/telegram'));
+            if (preg_match('/^\/(start|til|lang|язык|забон)\b/u', $text)) {
+                $this->askLang($chat, 'hello');
+
+                return;
+            }
+            $this->as(null, fn () => $this->hello($chat), self::chatLang($chat));
 
             return;
         }
@@ -76,7 +81,12 @@ class TelegramBot
 
                 return;
             }
-            if (preg_match('/^\/(start|help|yordam)\b/u', $text)) {
+            if (preg_match('/^\/(start|til|lang|язык|забон)\b/u', $text)) {
+                $this->askLang($chat, 'help');
+
+                return;
+            }
+            if (preg_match('/^\/(help|yordam|помощь|ёрдам)\b/u', $text)) {
                 $this->help($chat, $user);
 
                 return;
@@ -260,9 +270,12 @@ class TelegramBot
         if ($user) {
             User::where('telegram_chat_id', $chat)->whereKeyNot($user->id)->update(['telegram_chat_id' => null]);
             $user->forceFill(['telegram_chat_id' => $chat, 'tg_link_code' => null, 'tg_state' => null])->save();
+            if (! $user->tg_locale && ($l = self::chatLang($chat))) {   // язык уже выбрали до привязки
+                $user->forceFill(['tg_locale' => $l])->save();
+            }
             $this->as($user, function () use ($user, $chat) {
                 $this->say($chat, '✅ '.__('Telegram привязан: :n', ['n' => e($user->name)]));
-                $this->help($chat, $user);
+                $this->askLang($chat, 'help');
             });
 
             return true;
@@ -280,6 +293,57 @@ class TelegramBot
         }
 
         return false;
+    }
+
+    /* ---------------- язык бота ---------------- */
+
+    private const LANGS = ['uz' => "🇺🇿 O'zbekcha", 'ru' => '🇷🇺 Русский', 'tg' => '🇹🇯 Тоҷикӣ'];
+
+    /** Язык, выбранный в чате до привязки к сотруднику */
+    private static function chatLang(string $chat): ?string
+    {
+        $l = \Illuminate\Support\Facades\Cache::get('tg-lang:'.$chat);
+
+        return isset(self::LANGS[$l]) ? $l : null;
+    }
+
+    /** Выбор языка: вопрос сразу на трёх языках — поймёт любой */
+    private function askLang(string $chat, string $then): void
+    {
+        $this->say($chat, "🌐 <b>Tilni tanlang · Выберите язык · Забонро интихоб кунед</b>",
+            [array_map(fn ($l, $name) => ['text' => $name, 'data' => 'lang:'.$l.':'.$then], array_keys(self::LANGS), self::LANGS)]);
+    }
+
+    /** Нажали язык: запомнить (у сотрудника — в профиле бота, у незнакомого чата — по чату) и продолжить на нём */
+    private function setLang(array $q, string $chat, string $data, ?User $user): void
+    {
+        [, $l, $then] = array_pad(explode(':', $data, 3), 3, '');
+        if (! isset(self::LANGS[$l])) {
+            Telegram::answer($q['id']);
+
+            return;
+        }
+        \Illuminate\Support\Facades\Cache::put('tg-lang:'.$chat, $l, now()->addYear());
+        if ($user) {
+            $user->forceFill(['tg_locale' => $l])->save();
+        }
+        $this->as($user, function () use ($q, $chat, $user, $l, $then) {
+            Telegram::answer($q['id'], '✅ '.self::LANGS[$l]);
+            if (! empty($q['message']['message_id'])) {
+                Telegram::edit($chat, (int) $q['message']['message_id'], '🌐 '.__('Язык бота').': <b>'.self::LANGS[$l].'</b>');
+            }
+            if ($user && $user->workspace?->hasAccess()) {
+                $this->help($chat, $user);
+            } elseif (! $user) {
+                $this->hello($chat);
+            }
+        }, $l);
+    }
+
+    /** Чат ещё не привязан к сотруднику */
+    private function hello(string $chat): void
+    {
+        $this->say($chat, '👋 '.__('Здравствуйте! Чтобы работать с ботом, привяжите Telegram на сайте: меню пользователя → «Telegram».')."\n".url('/me/telegram'));
     }
 
     private function help(string $chat, User $user): void
@@ -310,6 +374,7 @@ class TelegramBot
             $lines[] = '/kassa — '.__('деньги компании сейчас');
         }
         $lines[] = '/bekor — '.__('отменить');
+        $lines[] = '/til — '.__('язык бота: узбекский, русский, таджикский');
         $lines[] = '';
         $lines[] = '👇 '.__('Разделы — в меню внизу экрана.');
         $this->sendMenu($user, $chat, implode("\n", $lines));
@@ -472,6 +537,11 @@ class TelegramBot
         $chat = (string) ($q['message']['chat']['id'] ?? '');
         $data = (string) ($q['data'] ?? '');
         $user = User::where('telegram_chat_id', $chat)->where('is_active', true)->whereNotNull('workspace_id')->first();
+        if (str_starts_with($data, 'lang:')) {
+            $this->setLang($q, $chat, $data, $user);
+
+            return;
+        }
         if (! $user) {
             Telegram::answer($q['id'], __('Сначала привяжите Telegram на сайте'));
 
@@ -876,7 +946,7 @@ class TelegramBot
     private function as(?User $user, callable $fn, ?string $locale = null)
     {
         $prev = App::getLocale();
-        App::setLocale($user?->locale ?: $user?->workspace?->locale ?: $locale ?: 'ru');
+        App::setLocale($user ? $user->botLocale() : ($locale ?: 'ru'));
         try {
             return $fn();
         } finally {

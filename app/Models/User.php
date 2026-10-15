@@ -11,7 +11,7 @@ class User extends Authenticatable
     use Notifiable;
 
     protected $fillable = ['workspace_id', 'name', 'email', 'phone', 'password', 'role', 'locale', 'object_ids', 'is_active', 'last_login_at',
-        'telegram_chat_id', 'tg_link_code', 'tg_project', 'tg_state', 'tg_cart', 'admin_perms', 'google_id', 'login_alerts'];
+        'telegram_chat_id', 'tg_link_code', 'tg_project', 'tg_state', 'tg_cart', 'tg_locale', 'admin_perms', 'google_id', 'login_alerts'];
 
     protected $hidden = ['password', 'remember_token'];
 
@@ -81,6 +81,14 @@ class User extends Authenticatable
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
+    }
+
+    /** Язык Telegram-бота: выбранный в боте (/start, /til), иначе язык сайта, иначе компании */
+    public function botLocale(): string
+    {
+        $l = $this->tg_locale ?: $this->locale ?: $this->workspace?->locale ?: 'ru';
+
+        return array_key_exists($l, (array) config('oftob.locales')) ? $l : 'ru';
     }
 
     public function canEdit(): bool

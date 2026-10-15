@@ -346,7 +346,7 @@ class Supply
     private static function as(User $u, callable $fn): void
     {
         $prev = app()->getLocale();
-        app()->setLocale($u->locale ?: $u->workspace?->locale ?: 'ru');
+        app()->setLocale($u->botLocale());
         try {
             $fn();
         } finally {
