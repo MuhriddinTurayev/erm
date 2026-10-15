@@ -35,10 +35,15 @@
 <div class="grid g32 mt">
   <div class="card">
     <div class="card-h"><h3>{!! ic('history') !!}{{ __('История входов') }}</h3></div>
+    <p class="muted" style="font-size:13px;margin:-4px 0 10px">{{ __('Каждое устройство — одна строка. Повторный вход с того же устройства только обновляет время; новая строка появляется, когда входят с другого устройства.') }}</p>
     @if ($events->count())
-    <div class="tbl-wrap"><table class="tbl"><thead><tr><th>{{ __('Когда') }}</th><th>{{ __('Устройство') }}</th><th>IP</th><th>{{ __('Способ') }}</th></tr></thead><tbody>
+    <div class="tbl-wrap"><table class="tbl"><thead><tr><th>{{ __('Последний вход') }}</th><th>{{ __('Устройство') }}</th><th>IP</th><th>{{ __('Способ') }}</th></tr></thead><tbody>
     @foreach ($events as $e)
-      <tr><td class="nowrap">{{ $e->created_at?->format('d.m.Y H:i') }}</td><td>{{ $e->browser }} · {{ $e->os }} @if ($e->new_device)<span class="badge b-warn">{{ __('новое устройство') }}</span>@endif</td><td>{{ $e->ip }}</td><td>{{ $methods[$e->method] ?? $e->method }}</td></tr>
+      <tr><td class="nowrap">{{ ($e->last_at ?? $e->created_at)?->format('d.m.Y H:i') }}<br><small class="muted">{{ __('входов') }}: {{ $e->logins ?: 1 }}</small></td>
+        <td>{!! ic($e->kind, '', 15) !!} {{ $e->browser }} · {{ $e->os }}
+          @if ($thisDevice && $e->device === $thisDevice)<span class="badge b-ok">{{ __('это устройство') }}</span>@elseif ($e->new_device && $e->created_at?->gt(now()->subDays(14)))<span class="badge b-warn">{{ __('новое устройство') }}</span>@endif
+          <br><small class="muted">{{ __('впервые') }}: {{ $e->created_at?->format('d.m.Y H:i') }}</small></td>
+        <td>{{ $e->ip }}</td><td>{{ $methods[$e->method] ?? $e->method }}</td></tr>
     @endforeach
     </tbody></table></div>
     @else<div class="empty">{{ __('История появится после следующего входа') }}</div>@endif

@@ -65,6 +65,7 @@
                 $u->isAdmin() ? ['/company/users', 'users', __('Пользователи и роли')] : null,
                 $u->isAdmin() ? ['/company/settings', 'settings', __('Настройки')] : null,
                 $u->isAdmin() ? ['/company/audit', 'history', __('История изменений')] : null,
+                $u->isAdmin() ? ['/company/api', 'plug', __('API и интеграции')] : null,
                 $u->isAdmin() ? ['/company/billing', 'credit-card', __('Тариф и оплата')] : null,
             ]))],
         ];

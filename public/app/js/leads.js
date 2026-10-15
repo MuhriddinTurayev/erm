@@ -131,7 +131,7 @@ function leadsDemo(p) {
 }
 
 /* ===== Подключения: заявки из Facebook, Instagram, WhatsApp и с сайта ===== */
-const CH = { facebook: ['📘', 'Facebook'], messenger: ['💬', 'Facebook'], instagram: ['📸', 'Instagram'], whatsapp: ['🟢', 'WhatsApp'], site: ['🌐', 'Сайт'] };
+const CH = { facebook: ['📘', 'Facebook'], messenger: ['💬', 'Facebook'], instagram: ['📸', 'Instagram'], whatsapp: ['🟢', 'WhatsApp'], site: ['🌐', 'Сайт'], api: ['🔌', 'API'] };
 const viaServer = () => /^https?:$/.test(location.protocol);
 let CN = null, inboxBusy = false;
 async function cnApi(path, body) {
@@ -146,7 +146,7 @@ async function inboxPoll(manual) {
     do {   // заявок больше лимита — забираем следующими порциями (раньше лишние терялись)
     j = await cnApi('/api/inbox?since=' + (DB.settings.inboxSeq || 0));
     for (const it of j.items) {
-      const ch = CH[it.ch] || ['📥', it.ch], src = it.ch === 'site' ? (LEAD_SRC.includes(it.src) ? it.src : 'Сайт') : ch[1];
+      const ch = CH[it.ch] || ['📥', it.ch], src = it.ch === 'site' ? (LEAD_SRC.includes(it.src) ? it.src : 'Сайт') : it.ch === 'api' ? (LEAD_SRC.includes(it.src) ? it.src : (it.src || 'API')) : ch[1];
       const line = `${ch[0]} ${src}${it.kind === 'form' ? ' · форма' : ''}: ${it.text || ''}`.trim();
       const digits = String(it.phone || '').replace(/\D/g, '');
       let l = p.leads.find(x => x.extKey === it.key) || (digits && p.leads.find(x => x.phone && String(x.phone).replace(/\D/g, '') === digits));

@@ -58,11 +58,12 @@
 
 <div class="card mt">
   <div class="card-h"><h3>{!! ic('history') !!}{{ __('Последние движения') }}</h3></div>
+  <p class="muted" style="font-size:13px;margin:-4px 0 10px">{{ __('«+» — пришло на склад, «−» — ушло со склада (выдано на объект, перемещено или списано). Ниже числа — сколько осталось на этом складе после операции.') }}</p>
   @if ($moves->count())
   <div class="tbl-wrap"><table class="tbl"><thead><tr><th>{{ __('Дата') }}</th><th>{{ __('Операция') }}</th><th>{{ __('Товар') }}</th><th>{{ __('Склад') }}</th><th class="n">{{ __('Кол-во') }}</th><th>{{ __('Партия') }}</th><th>{{ __('Куда / от кого') }}</th></tr></thead><tbody>
   @foreach ($moves as $m)
     <tr><td class="nowrap">{{ $m->date->format('d.m.Y') }}<br><small>{{ $m->user?->name }}</small></td><td><span class="st st-{{ ['in' => 'done', 'out' => 'pending', 'transfer' => 'approved', 'adjust' => 'draft'][$m->type] }}">{{ $ops[$m->type] ?? $m->type }}</span></td>
-      <td>{{ $m->item?->name }}</td><td>{{ __($m->warehouse?->name ?? '') }}</td><td class="n"><b class="{{ $m->qty > 0 ? 'in-c' : 'out-c' }}">{{ $m->qty > 0 ? '+' : '' }}{{ $n($m->qty) }}</b> {{ __($m->item?->unit ?? '') }}</td>
+      <td>{{ $m->item?->name }}</td><td>{{ __($m->warehouse?->name ?? '') }}</td><td class="n nowrap"><b class="{{ $m->qty > 0 ? 'in-c' : 'out-c' }}">{{ $m->qty > 0 ? '+' : '−' }}{{ $n(abs($m->qty)) }}</b> {{ __($m->item?->unit ?? '') }}@isset($ml['after'][$m->id])<br><small class="muted">{{ __('осталось') }} {{ $n($ml['after'][$m->id]) }}</small>@endisset</td>
       <td>{{ $m->batch ?: ($ml['batch'][$m->id] ?? '—') }}</td><td>{{ $m->project_id ? ($projects[$m->project_id] ?? '') : ($m->counterparty?->name ?? ($ml['route'][$m->id] ?? '')) }} <small>{{ sys_tr($m->note) }}</small></td></tr>
   @endforeach
   </tbody></table></div>

@@ -263,6 +263,16 @@ Route::middleware(['auth', 'role:company'])->group(function () {
             Route::post('/company/telegram/link', [Company\SettingsController::class, 'telegramLink']);
             Route::post('/company/settings/ops', [Company\SettingsController::class, 'updateOps']);
             Route::get('/company/audit', [Company\OpsController::class, 'audit']);
+            // API и интеграции: ключи для других программ, вебхуки, документация
+            Route::get('/company/api', [Company\ApiController::class, 'index']);
+            Route::post('/company/api/tokens', [Company\ApiController::class, 'tokenStore']);
+            Route::post('/company/api/tokens/{id}/revoke', [Company\ApiController::class, 'tokenRevoke'])->whereNumber('id');
+            Route::post('/company/api/hooks', [Company\ApiController::class, 'hookStore']);
+            Route::post('/company/api/hooks/{id}/toggle', [Company\ApiController::class, 'hookToggle'])->whereNumber('id');
+            Route::post('/company/api/hooks/{id}/test', [Company\ApiController::class, 'hookTest'])->whereNumber('id')->middleware('throttle:20,1');
+            Route::post('/company/api/hooks/{id}/secret', [Company\ApiController::class, 'hookSecret'])->whereNumber('id');
+            Route::delete('/company/api/hooks/{id}', [Company\ApiController::class, 'hookDelete'])->whereNumber('id');
+            Route::post('/company/api/deliveries/{id}/retry', [Company\ApiController::class, 'deliveryRetry'])->whereNumber('id')->middleware('throttle:20,1');
             Route::get('/company/users', [Company\UserController::class, 'index']);
             Route::post('/company/users', [Company\UserController::class, 'store']);
             Route::put('/company/users/{user}', [Company\UserController::class, 'update']);

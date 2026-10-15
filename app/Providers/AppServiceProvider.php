@@ -23,6 +23,8 @@ class AppServiceProvider extends ServiceProvider
 
         Paginator::useBootstrapFive();
 
+        $this->webhooks();
+
         // даты по-узбекски — латиницей (у Carbon «uz» по умолчанию кириллица)
         \Illuminate\Support\Facades\Event::listen(\Illuminate\Foundation\Events\LocaleUpdated::class, function ($e) {
             \Illuminate\Support\Carbon::setLocale($e->locale === 'uz' ? 'uz_Latn' : $e->locale);
@@ -43,6 +45,32 @@ class AppServiceProvider extends ServiceProvider
                 ];
             })();
             $view->with($shared);
+        });
+    }
+
+    /** Вебхуки: о новых записях и изменениях сообщаем программам, которые на это подписаны (квартиры — в StateWriter / StateController) */
+    private function webhooks(): void
+    {
+        $emit = fn (int $ws, string $event, \Closure $data) => \App\Services\Api\Webhooks::emit($ws, $event, $data);
+        $P = \App\Services\Api\Present::class;
+
+        \App\Models\LeadInbox::created(fn ($m) => $emit($m->workspace_id, 'lead.created', fn () => $P::lead($m)));
+        \App\Models\StockMove::created(fn ($m) => $emit($m->workspace_id, 'stock.moved', fn () => $P::move($m->loadMissing(['item', 'warehouse']))));
+        \App\Models\CashOp::created(fn ($m) => $emit($m->workspace_id, 'cash.created', fn () => $P::cashOp($m->loadMissing(['desk', 'category']))));
+        \App\Models\Counterparty::created(fn ($m) => $emit($m->workspace_id, 'counterparty.created', fn () => $P::counterparty($m)));
+        \App\Models\PaymentRequest::created(fn ($m) => $emit($m->workspace_id, 'payment.updated', fn () => $P::paymentRequest($m->loadMissing(['counterparty', 'category'])) + ['previous_status' => null]));
+        \App\Models\PaymentRequest::updated(function ($m) use ($emit, $P) {
+            if ($m->wasChanged('status')) {
+                $prev = $m->getOriginal('status');
+                $emit($m->workspace_id, 'payment.updated', fn () => $P::paymentRequest($m->loadMissing(['counterparty', 'category'])) + ['previous_status' => $prev]);
+            }
+        });
+        \App\Models\Task::created(fn ($m) => $emit($m->workspace_id, 'task.created', fn () => $P::task($m->loadMissing('assignee'))));
+        \App\Models\Task::updated(function ($m) use ($emit, $P) {
+            if ($m->wasChanged(['title', 'status', 'progress', 'assignee_id', 'due_date', 'priority', 'project_id'])) {
+                $emit($m->workspace_id, 'task.updated', fn () => $P::task($m->loadMissing('assignee')) + ['changed' => array_values(array_intersect(array_keys($m->getChanges()),
+                    ['title', 'status', 'progress', 'assignee_id', 'due_date', 'priority', 'project_id']))]);
+            }
         });
     }
 }

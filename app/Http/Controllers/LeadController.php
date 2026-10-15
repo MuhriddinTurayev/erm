@@ -12,13 +12,14 @@ use Illuminate\Http\Request;
 class LeadController extends Controller
 {
     /* ---------- общее ---------- */
-    private function push(int $wsId, array $it): void
+    /** Заявка во «Входящие» компании (её же вызывает открытый API) */
+    public static function push(int $wsId, array $it): LeadInbox
     {
         $text = mb_substr((string) ($it['text'] ?? ''), 0, 1000);
         if (empty($it['phone']) && preg_match('/(\+?\d[\d\s\-()]{7,16}\d)/u', $text, $m)) {
             $it['phone'] = preg_replace('/[^\d+]/', '', $m[1]);
         }
-        LeadInbox::create([
+        return LeadInbox::create([
             'workspace_id' => $wsId,
             'ch' => $it['ch'],
             'kind' => $it['kind'] ?? 'msg',

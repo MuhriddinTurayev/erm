@@ -82,6 +82,8 @@ Artisan::command('oftob:remind', function (\App\Services\Reminders $r) {
 
 Schedule::command('oftob:telegram')->everyMinute()->withoutOverlapping(2)->runInBackground();
 Schedule::command('oftob:remind')->everyFifteenMinutes()->withoutOverlapping();
+// очередь (отправка вебхуков): там, где нет отдельного обработчика очереди (OSPanel + bot.bat), её разбирает планировщик
+Schedule::command('queue:work --stop-when-empty --max-time=50')->everyMinute()->withoutOverlapping(2)->runInBackground();
 
 /* Демо-компании для проверки: php artisan oftob:demo (пересоздаёт только демо-компании, ваши данные не трогает) */
 Artisan::command('oftob:demo', function () {

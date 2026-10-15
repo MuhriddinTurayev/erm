@@ -108,7 +108,31 @@ class Stock
             }
         }
 
-        return ['batch' => $batch, 'route' => $route];
+        return ['batch' => $batch, 'route' => $route, 'after' => self::afterEach($ws, $moves)];
+    }
+
+    /**
+     * Сколько осталось на складе после каждой операции: [move_id => остаток].
+     * Список — последние операции (от новых к старым), поэтому идём от нынешнего остатка назад.
+     */
+    private static function afterEach(Workspace $ws, $moves): array
+    {
+        if ($moves->isEmpty()) {
+            return [];
+        }
+        $cur = StockMove::of($ws->id)->whereIn('item_id', $moves->pluck('item_id')->unique()->values())->whereIn('warehouse_id', $moves->pluck('warehouse_id')->unique()->values())
+            ->selectRaw('item_id, warehouse_id, sum(qty) q')->groupBy('item_id', 'warehouse_id')->get()
+            ->mapWithKeys(fn ($r) => [$r->item_id.':'.$r->warehouse_id => (float) $r->q])->all();
+        $list = $moves->all();
+        usort($list, fn ($a, $b) => [$b->date->format('Y-m-d'), $b->id] <=> [$a->date->format('Y-m-d'), $a->id]);
+        $out = [];
+        foreach ($list as $m) {
+            $k = $m->item_id.':'.$m->warehouse_id;
+            $out[$m->id] = round($cur[$k] ?? 0, 3);
+            $cur[$k] = ($cur[$k] ?? 0) - (float) $m->qty;
+        }
+
+        return $out;
     }
 
     /** Сколько взять из каких партий: самые старые — первыми; [[партия|null, количество], …] */

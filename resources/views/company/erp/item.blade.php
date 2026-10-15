@@ -31,9 +31,10 @@
 </div>
 <div class="card mt">
   <div class="card-h"><h3>{!! ic('history') !!}{{ __('История движения') }}</h3></div>
+  <p class="muted" style="font-size:13px;margin:-4px 0 10px">{{ __('«+» — пришло на склад, «−» — ушло со склада (выдано на объект, перемещено или списано). Ниже числа — сколько осталось на этом складе после операции.') }}</p>
   <div class="tbl-wrap"><table class="tbl"><thead><tr><th>{{ __('Дата') }}</th><th>{{ __('Операция') }}</th><th>{{ __('Склад') }}</th><th class="n">{{ __('Кол-во') }}</th><th class="n">{{ __('Цена') }}</th><th>{{ __('Партия') }}</th><th>{{ __('Куда / от кого') }}</th><th>{{ __('Кто') }}</th></tr></thead><tbody>
   @foreach ($moves as $m)
-    <tr><td>{{ $m->date->format('d.m.Y') }}</td><td>{{ $ops[$m->type] ?? $m->type }}</td><td>{{ __($m->warehouse?->name ?? '') }}</td><td class="n"><b class="{{ $m->qty > 0 ? 'in-c' : 'out-c' }}">{{ $m->qty > 0 ? '+' : '' }}{{ $n($m->qty) }}</b></td>
+    <tr><td>{{ $m->date->format('d.m.Y') }}</td><td>{{ $ops[$m->type] ?? $m->type }}</td><td>{{ __($m->warehouse?->name ?? '') }}</td><td class="n nowrap"><b class="{{ $m->qty > 0 ? 'in-c' : 'out-c' }}">{{ $m->qty > 0 ? '+' : '−' }}{{ $n(abs($m->qty)) }}</b>@isset($ml['after'][$m->id])<br><small class="muted">{{ __('осталось') }} {{ $n($ml['after'][$m->id]) }}</small>@endisset</td>
       <td class="n">{{ $m->price ? money_s($m->price, $cur) : '' }}</td><td>{{ $m->batch ?: ($ml['batch'][$m->id] ?? '—') }}</td><td>{{ $m->project_id ? ($projects[$m->project_id] ?? '') : ($m->counterparty?->name ?? ($ml['route'][$m->id] ?? '')) }} <small>{{ sys_tr($m->note) }}</small></td><td>{{ $m->user?->name }}</td></tr>
   @endforeach
   </tbody></table></div>

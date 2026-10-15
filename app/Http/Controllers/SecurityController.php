@@ -24,7 +24,9 @@ class SecurityController extends Controller
 
         return view('security', [
             'u' => $u, 'sessions' => $sessions,
-            'events' => LoginEvent::where('user_id', $u->id)->latest('id')->limit(30)->get()->each(fn ($e) => [$e->browser, $e->os] = LoginGuard::device($e->agent)),
+            // устройства, с которых входили: одно устройство — одна строка, сверху — последние входы
+            'events' => LoginEvent::where('user_id', $u->id)->orderByRaw('coalesce(last_at, created_at) desc')->orderByDesc('id')->limit(30)->get()->each(fn ($e) => [$e->browser, $e->os, $e->kind] = LoginGuard::device($e->agent)),
+            'thisDevice' => LoginGuard::currentDevice($u, $request),
             'google' => (bool) \App\Models\PlatformSetting::get('google_client_id'),
         ]);
     }

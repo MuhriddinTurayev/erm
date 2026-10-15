@@ -68,6 +68,7 @@ class StateController extends Controller
             $ws->version = $base + 1;
             $ws->save();
             \App\Services\Deals::applyLinks($wsId, $events);
+            \App\Services\Api\Webhooks::stateChanged($wsId, is_array($old) ? $old : null, $next);   // квартиры: бронь, продажа, оплаты — в вебхуки
             try {
                 AuditDiff::record($wsId, $user->id, $stored, $ws->data);
             } catch (\Throwable $e) {

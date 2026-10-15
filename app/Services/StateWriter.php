@@ -30,6 +30,7 @@ class StateWriter
                 $ws->save();
             }
             Deals::applyLinks($workspaceId, $events);
+            Api\Webhooks::stateChanged($workspaceId, $before, $data);   // квартиры: бронь, продажа, оплаты — в вебхуки
 
             return $res;
         });
