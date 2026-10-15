@@ -13,7 +13,7 @@ class SubscriptionPayment extends Model
 
     protected function casts(): array
     {
-        return ['paid_at' => 'date', 'amount' => 'float'];
+        return ['paid_at' => \App\Casts\DateOnly::class, 'amount' => 'float'];
     }
 
     public function workspace(): BelongsTo

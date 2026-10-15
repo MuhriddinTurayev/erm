@@ -12,7 +12,7 @@ class Task extends Model
 
     protected function casts(): array
     {
-        return ['due_date' => 'date', 'done_at' => 'datetime'];
+        return ['due_date' => \App\Casts\DateOnly::class, 'done_at' => 'datetime'];
     }
 
     /** Записи компании */

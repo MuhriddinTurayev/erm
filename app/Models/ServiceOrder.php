@@ -12,7 +12,7 @@ class ServiceOrder extends Model
 
     protected function casts(): array
     {
-        return ['amount' => 'float', 'due_date' => 'date'];
+        return ['amount' => 'float', 'due_date' => \App\Casts\DateOnly::class];
     }
 
     /** Записи компании */

@@ -12,7 +12,7 @@ class StockMove extends Model
 
     protected function casts(): array
     {
-        return ['qty' => 'float', 'price' => 'float', 'date' => 'date'];
+        return ['qty' => 'float', 'price' => 'float', 'date' => \App\Casts\DateOnly::class];
     }
 
     /** Записи компании */

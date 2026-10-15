@@ -12,7 +12,7 @@ class BuyerLink extends Model
 
     protected function casts(): array
     {
-        return ['last_reminded' => 'date'];
+        return ['last_reminded' => \App\Casts\DateOnly::class];
     }
 
     public function workspace(): BelongsTo

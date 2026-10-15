@@ -13,7 +13,7 @@ class Expense extends Model
 
     protected function casts(): array
     {
-        return ['date' => 'date', 'amount' => 'float', 'decided_at' => 'datetime', 'tg' => 'array'];
+        return ['date' => \App\Casts\DateOnly::class, 'amount' => 'float', 'decided_at' => 'datetime', 'tg' => 'array'];
     }
 
     public function workspace(): BelongsTo

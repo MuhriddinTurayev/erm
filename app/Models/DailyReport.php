@@ -12,7 +12,7 @@ class DailyReport extends Model
     protected function casts(): array
     {
         return [
-            'date' => 'date',
+            'date' => \App\Casts\DateOnly::class,
             'stats' => 'array',
             'sent_telegram' => 'boolean',
             'sent_email' => 'boolean',

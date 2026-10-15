@@ -17,7 +17,7 @@
 <div class="desk-grid">
   <div class="desk total">
     <div class="d-t">{{ __('Всего во всех кассах') }}</div>
-    <div class="d-v">{{ money_s($total, $cur) }}</div>
+    <div class="d-v" title="{{ money_s($total, $cur) }}">{{ money_f($total, $cur) }}</div>
     <div class="d-s">1 USD = {{ number_format($rate, 2, '.', ' ') }} {{ __(['UZS' => 'сум', 'TJS' => 'смн', 'RUB' => '₽'][$base] ?? $base) }} @if ($ws->usd_rate > 0)({{ __('курс компании') }})@else({{ __('курс ЦБ') }})@endif</div>
   </div>
   @foreach ($desks as $d)

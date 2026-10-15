@@ -13,7 +13,7 @@ class Contract extends Model
 
     protected function casts(): array
     {
-        return ['date' => 'date', 'due_date' => 'date', 'amount' => 'float'];
+        return ['date' => \App\Casts\DateOnly::class, 'due_date' => \App\Casts\DateOnly::class, 'amount' => 'float'];
     }
 
     /** Записи компании */

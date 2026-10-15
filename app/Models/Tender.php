@@ -13,7 +13,7 @@ class Tender extends Model
 
     protected function casts(): array
     {
-        return ['deadline' => 'date'];
+        return ['deadline' => \App\Casts\DateOnly::class];
     }
 
     /** Записи компании */

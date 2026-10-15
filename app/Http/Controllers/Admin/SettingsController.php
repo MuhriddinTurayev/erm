@@ -61,8 +61,8 @@ class SettingsController extends Controller
     {
         return view('admin.payments', [
             'payments' => SubscriptionPayment::with(['workspace', 'plan'])->latest('paid_at')->latest('id')->paginate(50),
-            'total' => SubscriptionPayment::where('paid_at', '>=', now()->startOfMonth())->sum('amount'),
-            'year' => SubscriptionPayment::where('paid_at', '>=', now()->startOfYear())->sum('amount'),
+            'total' => SubscriptionPayment::where('paid_at', '>=', now()->startOfMonth()->toDateString())->sum('amount'),
+            'year' => SubscriptionPayment::where('paid_at', '>=', now()->startOfYear()->toDateString())->sum('amount'),
         ]);
     }
 }

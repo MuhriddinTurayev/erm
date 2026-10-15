@@ -13,7 +13,7 @@ class PaymentRequest extends Model
 
     protected function casts(): array
     {
-        return ['amount' => 'float', 'due_date' => 'date', 'chain' => 'array', 'tg' => 'array'];
+        return ['amount' => 'float', 'due_date' => \App\Casts\DateOnly::class, 'chain' => 'array', 'tg' => 'array'];
     }
 
     /** Записи компании */

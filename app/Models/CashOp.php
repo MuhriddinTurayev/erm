@@ -12,7 +12,7 @@ class CashOp extends Model
 
     protected function casts(): array
     {
-        return ['date' => 'date', 'amount' => 'float', 'rate' => 'float', 'amount_base' => 'float'];
+        return ['date' => \App\Casts\DateOnly::class, 'amount' => 'float', 'rate' => 'float', 'amount_base' => 'float'];
     }
 
     /** Записи компании */

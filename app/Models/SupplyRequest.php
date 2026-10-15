@@ -13,7 +13,7 @@ class SupplyRequest extends Model
 
     protected function casts(): array
     {
-        return ['need_by' => 'date', 'urgent' => 'boolean', 'photos' => 'array'];
+        return ['need_by' => \App\Casts\DateOnly::class, 'urgent' => 'boolean', 'photos' => 'array'];
     }
 
     /** Записи компании */

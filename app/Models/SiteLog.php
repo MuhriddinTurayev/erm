@@ -12,7 +12,7 @@ class SiteLog extends Model
 
     protected function casts(): array
     {
-        return ['date' => 'date', 'photos' => 'array', 'taken_at' => 'datetime'];
+        return ['date' => \App\Casts\DateOnly::class, 'photos' => 'array', 'taken_at' => 'datetime'];
     }
 
     public function user(): BelongsTo
