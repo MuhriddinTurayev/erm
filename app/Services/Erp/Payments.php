@@ -115,6 +115,21 @@ class Payments
     }
 
     /** Оплатить одобренную заявку из кассы */
+    /** Оплачивать утверждённые заявки могут руководитель, бухгалтер и кассир (как на сайте) */
+    public static function canPay(User $u): bool
+    {
+        return $u->canEdit() && $u->canModule('payments') && ($u->isAdmin() || in_array($u->role, ['accountant', 'cashier'], true));
+    }
+
+    /** Кассы, из которых этот сотрудник может платить: общие и кассы своих объектов */
+    public static function desksFor(User $u)
+    {
+        $allowed = $u->allowedObjects();
+
+        return \App\Models\CashDesk::of($u->workspace_id)->where('is_active', true)
+            ->when($allowed !== null, fn ($q) => $q->where(fn ($w) => $w->whereNull('project_id')->orWhereIn('project_id', $allowed)))->orderBy('id')->get();
+    }
+
     public static function pay(Workspace $ws, User $by, PaymentRequest $pr, int $deskId, ?string $date = null): void
     {
         abort_unless((int) $pr->workspace_id === (int) $ws->id, 404);

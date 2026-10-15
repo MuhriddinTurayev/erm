@@ -389,6 +389,14 @@ class TelegramBot
         }
         $s = CompanyStats::build($user->workspace, null, $user->allowedObjects());
         $T = $s['totals'];
+        if ($user->allowedObjects() === null) {   // оплаты компании без объекта (офис, налоги…) в бухгалтерию объектов не попадают — добавляем
+            $loc = $user->workspace->localNow();
+            $extra = fn (string $type, string $date) => (float) \App\Models\CashOp::of($user->workspace_id)->whereNull('transfer_key')->whereNull('project_id')
+                ->where('type', $type)->where('date', $date)->sum('amount_base');
+            $T['out_day'] += $extra('out', $loc->toDateString());
+            $T['in_day'] += $extra('in', $loc->toDateString());
+            $T['out_yest'] += $extra('out', $loc->copy()->subDay()->toDateString());
+        }
         $c = ' '.__($s['currency']);
         $m = fn ($v) => CompanyStats::short((float) $v).$c;
         $L = ['💰 <b>'.__('Деньги на счету (касса)').': '.$m($T['balance']).'</b>',
@@ -401,18 +409,22 @@ class TelegramBot
             $L[] = '';
             $L[] = '⏳ '.__('Ждут согласования').': '.$pending;
         }
-        // заявки на оплату утверждены, но кассир ещё не оплатил: деньги ещё на счету, в «Потрачено» их нет
+        // заявки на оплату утверждены, но ещё не оплачены: деньги ещё на счету, в «Потрачено» их нет
         $ws = $user->workspace;
         $allowed = $user->allowedObjects();
         $toPay = \App\Models\PaymentRequest::of($ws->id)->where('status', 'approved')->when($allowed !== null, fn ($q) => $q->whereIn('project_id', $allowed))->get();
+        $buttons = [];
         if ($toPay->count()) {
             $sum = $toPay->sum(fn ($pr) => \App\Services\Erp\Money::toBase($ws, (float) $pr->amount, (string) $pr->currency));
             $next = $toPay->whereNotNull('due_date')->sortBy('due_date')->first();
             $L[] = '';
             $L[] = '💳 '.__('Утверждено к оплате, ещё не оплачено').': '.$toPay->count().' · <b>'.$m($sum).'</b>'.($next ? ' · '.__('ближайший срок').' '.$next->due_date->format('d.m') : '');
-            $L[] = '<i>'.__('В «Потрачено сегодня» попадёт, когда кассир оплатит.').'</i>';
+            $L[] = '<i>'.(\App\Services\Erp\Payments::canPay($user) ?__('В «Потрачено сегодня» попадёт, когда оплатите — кнопкой ниже или на сайте.') : __('В «Потрачено сегодня» попадёт, когда кассир оплатит.')).'</i>';
+            if (\App\Services\Erp\Payments::canPay($user)) {
+                $buttons[] = [['text' => '💵 '.__('Оплатить').' ('.$toPay->count().')', 'data' => 'pl:0']];
+            }
         }
-        $this->say($chat, implode("\n", $L));
+        $this->say($chat, implode("\n", $L), $buttons);
     }
 
     /* ---------------- заявка на материалы ---------------- */
@@ -702,6 +714,14 @@ class TelegramBot
                 }
                 $ok = \App\Services\Erp\Payments::decide($pr, $user, $cmd === 'pa');
                 Telegram::answer($q['id'], $ok ? ($cmd === 'pa' ? '✅ '.__('Согласовано') : '❌ '.__('Отклонено')) : __('Сейчас решение по заявке принимает другой сотрудник'));
+                if ($ok && $pr->fresh()->status === 'approved' && \App\Services\Erp\Payments::canPay($user)) {
+                    $this->say($chat, '✅ '.__('Заявка №:n утверждена. Деньги уйдут из кассы, когда её оплатят.', ['n' => $pr->number]), [[['text' => '💵 '.__('Оплатить сейчас'), 'data' => 'pp:'.$pr->id]]]);
+                }
+
+                return;
+            }
+            if (in_array($cmd, ['pl', 'pp', 'pd', 'pc', 'px'], true)) {   // оплата утверждённой заявки: список → касса → подтверждение
+                $this->payCallback($user, $chat, $cmd, $arg, $q);
 
                 return;
             }
@@ -762,6 +782,82 @@ class TelegramBot
     }
 
     /** Нажата кнопка меню */
+    /** Оплата утверждённой заявки из Telegram: та же проверка и та же операция, что «Оплатить» на сайте */
+    private function payCallback(User $user, string $chat, string $cmd, string $arg, array $q): void
+    {
+        $ws = $user->workspace;
+        $mid = (int) ($q['message']['message_id'] ?? 0);
+        if (! \App\Services\Erp\Payments::canPay($user)) {
+            Telegram::answer($q['id'], __('Оплачивают руководитель, бухгалтер или кассир'));
+
+            return;
+        }
+        if ($cmd === 'pl') {
+            Telegram::answer($q['id']);
+            (new \App\Services\Bot\Sections($user, $chat))->payToday();
+
+            return;
+        }
+        if ($cmd === 'px') {
+            Telegram::answer($q['id'], __('Отменено'));
+            if ($mid) {
+                Telegram::edit($chat, $mid, '✖ '.__('Оплата отменена'));
+            }
+
+            return;
+        }
+        [$id, $deskId] = array_map('intval', array_pad(explode(':', $arg), 2, 0));
+        $pr = \App\Models\PaymentRequest::of($ws->id)->find($id);
+        if (! $pr || $pr->status !== 'approved') {
+            Telegram::answer($q['id'], __('Заявка уже оплачена или ещё не утверждена'));
+
+            return;
+        }
+        $desks = \App\Services\Erp\Payments::desksFor($user);
+        $money = fn ($v, $c) => \App\Services\Erp\Money::fmt((float) $v, (string) $c);
+        if ($cmd === 'pp') {
+            Telegram::answer($q['id']);
+            if (! $desks->count()) {
+                $this->say($chat, __('Нет кассы, из которой вы можете платить.'));
+
+                return;
+            }
+            $bal = \App\Services\Erp\Cash::balances($ws);
+            $rows = $desks->map(fn ($d) => [['text' => '🏦 '.__($d->name).' · '.$money($bal[$d->id] ?? 0, $d->currency), 'data' => 'pd:'.$pr->id.':'.$d->id]])->values()->all();
+            $rows[] = [['text' => '✖ '.__('Отмена'), 'data' => 'px:'.$pr->id]];
+            $this->say($chat, '💵 <b>'.__('Оплата').'</b>'."\n\n".\App\Services\Erp\Payments::card($pr)."\n\n".__('Из какой кассы платим?'), $rows);
+
+            return;
+        }
+        $desk = $desks->firstWhere('id', $deskId);
+        if (! $desk) {
+            Telegram::answer($q['id'], __('Нет доступа к этому разделу'));
+
+            return;
+        }
+        if ($cmd === 'pd') {
+            Telegram::answer($q['id']);
+            Telegram::edit($chat, $mid, '💵 <b>'.__('Оплатить заявку №:n?', ['n' => $pr->number]).'</b>'."\n".$money($pr->amount, $pr->currency).' · '.e(__($desk->name))."\n".e($pr->purpose),
+                [[['text' => '✅ '.__('Да, оплатить'), 'data' => 'pc:'.$pr->id.':'.$desk->id], ['text' => '✖ '.__('Отмена'), 'data' => 'px:'.$pr->id]]]);
+
+            return;
+        }
+        try {
+            \App\Services\Erp\Payments::pay($ws, $user, $pr, (int) $desk->id, $ws->localNow()->toDateString());
+        } catch (\DomainException $e) {
+            Telegram::answer($q['id'], $e->getMessage());
+            $this->say($chat, '⚠️ '.e($e->getMessage()));
+
+            return;
+        }
+        Telegram::answer($q['id'], '💵 '.__('Оплачено'));
+        if ($mid) {
+            Telegram::edit($chat, $mid, '💵 <b>'.__('Оплачено').'</b>: '.__('заявка').' №'.$pr->number.' · '.$money($pr->amount, $pr->currency).' · '.e(__($desk->name)));
+        }
+        $user->unsetRelation('workspace');   // данные компании изменились (оплата записана в бухгалтерию объекта) — читаем заново
+        $this->cash($user, $chat);   // касса после оплаты — сумма уже в «Потрачено сегодня»
+    }
+
     private function section(User $user, string $chat, string $key): void
     {
         $M = $this->materials($user, $chat);

@@ -204,7 +204,11 @@ class Sections
         $out = (float) \App\Models\CashOp::of($this->ws->id)->whereNull('transfer_key')->where('type', 'out')->where('date', $today)->sum('amount_base');
         $L[] = '';
         $L[] = '📥 '.__('Сегодня пришло').': '.$this->m($in).' · 📤 '.__('ушло').': '.$this->m($out);
-        $this->out(implode("\n", $L), [[['text' => __('Оплатить на сайте'), 'url' => url('/company/payments?tab=approved')]]]);
+        $rows = Payments::canPay($this->u)
+            ? $list->take(10)->map(fn ($pr) => [['text' => '💵 №'.$pr->number.' · '.Money::fmt($pr->amount, $pr->currency).($pr->due_date ? ' · '.$pr->due_date->format('d.m') : ''), 'data' => 'pp:'.$pr->id]])->values()->all()
+            : [];
+        $rows[] = [['text' => __('Оплатить на сайте'), 'url' => url('/company/payments?tab=approved')]];
+        $this->out(implode("\n", $L), $rows);
     }
 
     /** 🔑 Менеджеру: свободные квартиры по объектам (по комнатам и цена от) */

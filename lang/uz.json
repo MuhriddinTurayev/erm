@@ -4424,5 +4424,14 @@
     "Утверждено к оплате, ещё не оплачено": "Tasdiqlangan, hali to'lanmagan",
     "ближайший срок": "eng yaqin muddat",
     "В «Потрачено сегодня» попадёт, когда кассир оплатит.": "Kassir to'laganda «Bugun sarflandi»ga tushadi.",
-    "без партии (старый остаток)": "partiyasiz (eski qoldiq)"
+    "без партии (старый остаток)": "partiyasiz (eski qoldiq)",
+    "В «Потрачено сегодня» попадёт, когда оплатите — кнопкой ниже или на сайте.": "To'laganingizda «Bugun sarflandi»ga tushadi — pastdagi tugma yoki sayt orqali.",
+    "Заявка №:n утверждена. Деньги уйдут из кассы, когда её оплатят.": "№:n so'rov tasdiqlandi. Pul uni to'laganda kassadan chiqadi.",
+    "Оплатить сейчас": "Hozir to'lash",
+    "Оплачивают руководитель, бухгалтер или кассир": "Rahbar, buxgalter yoki kassir to'laydi",
+    "Оплата отменена": "To'lov bekor qilindi",
+    "Нет кассы, из которой вы можете платить.": "Siz to'lay oladigan kassa yo'q.",
+    "Из какой кассы платим?": "Qaysi kassadan to'laymiz?",
+    "Оплатить заявку №:n?": "№:n so'rov to'lansinmi?",
+    "Да, оплатить": "Ha, to'lash"
 }
