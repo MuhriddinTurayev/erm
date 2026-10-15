@@ -312,7 +312,7 @@ const RH = @json($roleHelp); document.getElementById('acc-role')?.addEventListen
   const sync = () => {
     file.accept = ACC[kind.value];
     $('up-hint').textContent = (is3d() ? 'GLB, FBX, OBJ, DAE, IFC, 3DS, STL, ZIP…' : ACC[kind.value].replace(/\./g, '').toUpperCase()) + ' · ' + @json(__('до 400 МБ'));
-    $('up-layout-f').style.display = ['interior', 'pano', 'plan'].includes(kind.value) ? '' : 'none';
+    $('up-layout-f').style.display = ['interior', 'pano', 'plan', 'photo'].includes(kind.value) ? '' : 'none';
     $('up-room-f').style.display = kind.value === 'pano' ? '' : 'none';
     $('up-attach-f').style.display = kind.value === 'exterior' && $('up-attach').options.length > 1 ? '' : 'none';
   };
@@ -326,7 +326,14 @@ const RH = @json($roleHelp); document.getElementById('acc-role')?.addEventListen
 
   /* выбор файлов: 3D — через перевод в GLB (кроме готового GLB), картинки и видео — по одному */
   let cvFiles = null, cvRes = null, cvView = null, mod = null;
+  const ratio = async f => { try { const b = await createImageBitmap(f); const k = b.width / b.height; b.close && b.close(); return k; } catch (e) { return 0; } };
   async function pick(files) {
+    if (kind.value === 'interior' && files.every(f => /\.(jpe?g|png|webp)$/i.test(f.name))) {
+      if (!await ui.confirm(@json(__('Вы выбрали картинки, а не 3D-модель. Загрузить их как рендеры и фото интерьера (снимки 2:1 — как панорамы 360°)?')))) return;
+      const items = [];
+      for (const f of files) { const k = await ratio(f), pano = k >= 1.9 && k <= 2.1; items.push([f, pano ? { kind: 'pano', room: f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() } : { kind: 'photo' }]); }
+      return upload(items);
+    }
     if (is3d()) {
       if (files.length === 1 && /\.glb$/i.test(files[0].name)) return upload([[files[0], {}]]);
       cvFiles = files; return convert();
@@ -366,9 +373,10 @@ const RH = @json($roleHelp); document.getElementById('acc-role')?.addEventListen
       for (let i = 0; i < total; i++) {
         const fd = new FormData(); fd.append('_token', document.querySelector('meta[name=csrf-token]').content);
         fd.append('upload', id); fd.append('index', i); fd.append('total', total); fd.append('name', f.name); fd.append('chunk', f.slice(i * CH, (i + 1) * CH), 'part');
-        fd.append('kind', kind.value); fd.append('rooms', $('up-rooms').value); fd.append('title', items.length > 1 ? '' : $('up-title').value);
-        if ($('up-layout') && ['interior', 'pano', 'plan'].includes(kind.value)) fd.append('layout', $('up-layout').value);
-        if (kind.value === 'pano') fd.append('room', extra.room || $('up-room').value.trim());
+        const kd = extra.kind || kind.value;
+        fd.append('kind', kd); fd.append('rooms', $('up-rooms').value); fd.append('title', items.length > 1 ? '' : $('up-title').value);
+        if ($('up-layout') && ['interior', 'pano', 'plan', 'photo'].includes(kd)) fd.append('layout', $('up-layout').value);
+        if (kd === 'pano') fd.append('room', extra.room || $('up-room').value.trim());
         if (extra.src) fd.append('src', extra.src);
         if (kind.value === 'exterior' && $('up-attach').value) fd.append('attach', $('up-attach').value);
         let r, tries = 0;

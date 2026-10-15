@@ -91,7 +91,8 @@ function tell() {
     const pr = [m.l || null, m.l ? null : (m.r ?? null)], k = JSON.stringify(pr);
     if (!seen.has(k)) { seen.add(k); pairs.push(pr); }
   });
-  parent.postMessage({ type: 'oftob-inner-changed', pid: PID, in: pairs, n }, location.origin);
+  const files = list.map((m) => ({ id: m.id, k: m.k, l: m.l || undefined, r: m.r ?? undefined, n: m.n, room: m.room || undefined, ext: m.ext }));
+  parent.postMessage({ type: 'oftob-inner-changed', pid: PID, in: pairs, n, files: JSON.parse(JSON.stringify(files)) }, location.origin);
 }
 const IM = innerManager($('#iList'), { T, ICON, inner: INNER, units: UNITS, csrf: document.querySelector('meta[name=csrf-token]').content, cvt: CVT, mcUrl: MC_URL,
   canEdit: CAN, roomInput: $('#iRoom'), prog, urls: URLS, onView: view, onChange: tell });

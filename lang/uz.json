@@ -4360,5 +4360,6 @@
     "движение материалов": "materiallar harakati",
     "Объект нельзя удалить — по нему уже есть история: :w. Её нельзя терять: отчёты и деньги компании разойдутся.": "Obyektni o‘chirib bo‘lmaydi — u bo‘yicha tarix bor: :w. Uni yo‘qotib bo‘lmaydi: kompaniya hisobotlari va pullari mos kelmay qoladi.",
     "Объект удалён: :n": "Obyekt o‘chirildi: :n",
-    "Для всех планировок": "Barcha rejalar uchun"
+    "Для всех планировок": "Barcha rejalar uchun",
+    "Вы выбрали картинки, а не 3D-модель. Загрузить их как рендеры и фото интерьера (снимки 2:1 — как панорамы 360°)?": "Siz 3D-model emas, rasmlar tanladingiz. Ularni interyer renderlari va rasmlari sifatida yuklaymizmi (2:1 rasmlar — 360° panorama sifatida)?"
 }

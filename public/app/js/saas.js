@@ -214,24 +214,102 @@ if (PAGES.site) {
   };
   PAGES.site.mounted = function (p, a) { if (!hasReal3d(p) && m) m.call(this, p, a); };
 }
+/* ---------- загруженные интерьеры квартиры: 3D, панорамы 360°, рендеры и план ----------
+   Файлы привязаны к планировке (или к числу комнат). Правило то же, что у просмотра на сервере (ObjectMedia::forUnit):
+   свои файлы планировки, иначе — общие для такого числа комнат, иначе — общие для всех. Загружено — показываем их, а не примеры программы. */
+const innerPick = (files, apt, kinds) => {
+  const list = files.filter(m => kinds.includes(m.k)), own = apt.type ? list.filter(m => m.l === apt.type) : [];
+  return own.length ? own : list.filter(m => !m.l && (m.r == null || +m.r === +apt.rooms));
+};
+function innerKinds(p, apt) {
+  const files = (SAAS && SAAS.media && SAAS.media[p.id] && SAAS.media[p.id].files) || [], view = apt ? innerPick(files, apt, ['interior', 'pano']) : [];
+  return { view, panos: view.filter(m => m.k === 'pano'), photos: apt ? innerPick(files, apt, ['photo']) : [], plans: apt ? innerPick(files, apt, ['plan']) : [] };
+}
+const mediaUrl = m => `/company/media/${m.id}/file`;
+const innerFrame = (p, apt, mid) => `<div class="real3d-frame big"><iframe src="/company/objects/${encodeURIComponent(p.id)}/3d?embed=1&u=${encodeURIComponent(apt.id)}${mid ? '&m=' + mid : ''}" title="3D" allow="fullscreen; xr-spatial-tracking"></iframe></div>`;
+const innerUpBtn = (apt, primary, label) => SAAS && SAAS.canMedia ? `<button class="btn btn-s${primary ? ' btn-p' : ''}" data-act="innerManage" data-apt="${apt ? apt.id : ''}">⬆ ${label || 'Загрузить / изменить интерьер'}</button>` : '';
+// плашка над вкладкой: что показано и кнопка загрузки
+const innerBar = (title, text, btns) => `<div class="card real3d"><div class="real3d-t"><b>${title}</b><span class="small muted">${text}</span></div><div class="flex">${btns}</div></div>`;
+let innerPhotos = [];
+/** Рендеры и фото квартиры, загруженные дизайнером; панорамы 360° — кнопками */
+function realGallery(p, apt, f) {
+  innerPhotos = f.photos;
+  const main = f.photos[0];
+  return `<div class="card ph-card"><h3>📸 Рендеры и фото квартиры <span class="tools">${f.panos.length ? `<button class="btn-p btn-s" data-act="innerView" data-apt="${apt.id}" data-m="${f.panos[0].id}">🌐 Панорамы 360° <span class="notr">(${f.panos.length})</span></button>` : ''}${innerUpBtn(apt, false, 'Загрузить / изменить')}</span></h3>
+    ${main ? `<div class="ph-wrap"><button class="ph-main" data-act="innerPhoto" data-i="0"><img src="${mediaUrl(main)}" alt="" loading="lazy"><span class="ph-tag notr">${esc(main.n || '')}</span><span class="ph-zoom">🔍</span></button>
+      <div class="ph-thumbs">${f.photos.map((m, i) => `<button class="ph-th${i ? '' : ' on'}" data-act="innerPhoto" data-i="${i}"><img src="${mediaUrl(m)}" alt="" loading="lazy"><span class="notr"><b>${esc(m.n || '')}</b></span></button>`).join('')}</div></div>`
+      : `<div class="pano-list">${f.panos.map(m => `<button class="btn" data-act="innerView" data-apt="${apt.id}" data-m="${m.id}">🌐 <span class="notr">${esc(m.room || m.n || '')}</span></button>`).join('')}</div>`}
+  </div>`;
+}
+ACT.innerPhoto = d => {
+  const i = +d.i, n = innerPhotos.length, m = innerPhotos[i]; if (!m) return;
+  openModal(`<div class="ph-big"><img src="${mediaUrl(m)}" alt=""><div class="flex mt"><b class="notr">${esc(m.n || '')}</b><span class="right"></span>
+    ${n > 1 ? `<button data-act="innerPhoto" data-i="${(i - 1 + n) % n}">←</button><button data-act="innerPhoto" data-i="${(i + 1) % n}">→</button>` : ''}
+    <a class="btn btn-p" href="${mediaUrl(m)}" target="_blank" rel="noopener">⬇ Открыть в полном размере</a></div></div>`);
+  $('.modal-box').classList.add('wide');
+};
+/** Окно поверх программы: просмотр 3D / 360° или страница «Интерьеры» */
+let innerDirty = false;
+function innerOverlay(src, title) {
+  innerDirty = false;
+  const ov = document.createElement('div'); ov.className = 'inner-ov';
+  ov.innerHTML = `<div class="inner-ov-in"><button type="button" class="inner-ov-x" aria-label="Закрыть">✕</button><iframe src="${esc(src)}" title="${esc(title)}" allow="fullscreen; xr-spatial-tracking"></iframe></div>`;
+  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); if (innerDirty && ['design', 'apt'].includes(curPage)) rerender(); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  ov.querySelector('.inner-ov-x').onclick = close;
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  document.addEventListener('keydown', onKey);
+  document.body.append(ov);
+}
+ACT.innerView = d => innerOverlay(`/company/objects/${encodeURIComponent(P().id)}/3d?embed=1&u=${encodeURIComponent(d.apt)}${d.m ? '&m=' + d.m : ''}`, '3D');
+// «Интерьеры»: по планировкам загрузить 3D, 360°, рендеры и план; ошибочный файл переименовать, перенести, удалить
+ACT.innerManage = d => {
+  const p = P(), a = pageArgs || {}, apt = (d && d.apt) || a.apt || (curPage === 'apt' ? a.id : '');
+  innerOverlay(`/company/objects/${encodeURIComponent(p.id)}/interiors?embed=1&${apt ? 'u=' + encodeURIComponent(apt) : 'r=' + (+p.design.rooms || 0)}`, 'Интерьеры');
+};
+window.addEventListener('message', e => {
+  if (e.origin !== location.origin || !e.data || e.data.type !== 'oftob-inner-changed' || !SAAS) return;
+  const m = (SAAS.media = SAAS.media || {})[e.data.pid] = SAAS.media[e.data.pid] || {}, n = e.data.n || {};
+  m.in = e.data.in || []; m.interior = n.interior || 0; m.pano = n.pano || 0;
+  if (Array.isArray(e.data.files)) m.files = e.data.files;
+  innerDirty = true;
+});
+// после вкладок квартиры — сюда встаёт плашка «что показано»
+const afterTabs = (html, extra) => { const k = '▦ Шахматка</button></div>', i = html.indexOf(k); return i < 0 ? extra + html : html.slice(0, i + k.length) + extra + html.slice(i + k.length); };
+
 if (PAGES.apt) {
   const r = PAGES.apt.render, m = PAGES.apt.mounted;
   // вкладки «В доме» и «Как пройти»: вместо нарисованного дома — загруженная модель с подсвеченной квартирой и подъездом;
   // шаги «как пройти» и схема участка остаются
   const real = (p, a) => !!(a && a.id && ['house', 'route'].includes(a.tab || 'house') && hasReal3d(p));
-  // вкладка «3D-интерьер»: загружен интерьер этой квартиры (своей планировки или по числу комнат) — показываем его, а не нарисованный
-  const ownInner = (p, a) => {
-    if (!a || !a.id || a.tab !== 'interior') return false;
-    const apt = genApts(p).find((x) => x.id === a.id), pairs = (SAAS && SAAS.media && SAAS.media[p.id] && SAAS.media[p.id].in) || [];
-    if (!apt) return false;
-    return apt.type && pairs.some(([l]) => l === apt.type) ? true : pairs.some(([l, rr]) => !l && (rr == null || +rr === +apt.rooms));
-  };
+  const aptOf = (p, a) => a && a.id ? genApts(p).find(x => x.id === a.id) : null;
+  // вкладка «3D-интерьер»: загружен 3D-интерьер или панорамы этой квартиры — показываем их, а не нарисованный
+  const ownInner = (p, a) => { const apt = aptOf(p, a); return !!(SAAS && apt && a.tab === 'interior' && innerKinds(p, apt).view.length); };
   PAGES.apt.render = function (p, a) {
-    const html = r.call(this, p, a);
-    if (ownInner(p, a)) {
-      const k = html.indexOf('data-act="aptStyle"'), s = html.lastIndexOf('<div class="flex mb">', k), v = html.indexOf('<div class="v-move">', k), e = v < 0 ? -1 : html.indexOf('</div></div>', v);
-      if (k < 0 || s < 0 || e < 0) return html;
-      return html.slice(0, s) + `<div class="real3d-frame big"><iframe src="/company/objects/${encodeURIComponent(p.id)}/3d?embed=1&u=${encodeURIComponent(a.id)}" title="3D" allow="fullscreen; xr-spatial-tracking"></iframe></div>` + html.slice(e + 12);
+    let html = r.call(this, p, a);
+    const apt = aptOf(p, a);
+    if (SAAS && apt && apt.rooms) {
+      const f = innerKinds(p, apt);
+      if (a.tab === 'interior') {
+        if (f.view.length) {
+          const k = html.indexOf('data-act="aptStyle"'), s = html.lastIndexOf('<div class="flex mb">', k), v = html.indexOf('<div class="v-move">', k), e = v < 0 ? -1 : html.indexOf('</div></div>', v);
+          if (k >= 0 && s >= 0 && e >= 0) html = html.slice(0, s) + innerFrame(p, apt) + html.slice(e + 12);
+          if (SAAS.canMedia) html = afterTabs(html, `<div class="flex mb inner-tools"><span class="small muted">Загруженный интерьер этой планировки — его видят покупатели.</span><span class="right"></span>${innerUpBtn(apt)}</div>`);
+        } else {
+          html = afterTabs(html, innerBar('🛋 3D-интерьер этой квартиры ещё не загружен', `<span>Ниже — примерный интерьер, нарисованный программой.</span> ${f.photos.length ? '<span>Рендеры этой планировки — во вкладке «Фото».</span> ' : ''}<span>Загрузите 3D-модель от дизайнера (GLB, FBX, OBJ, SketchUp, 3ds Max…) или панорамы 360° комнат.</span>`, innerUpBtn(apt, true, 'Загрузить 3D или 360°')));
+        }
+      }
+      if (a.tab === 'photo') {
+        const stock = photoGallery(apt.o.style || 'modern');
+        if (f.photos.length || f.panos.length) html = html.replace(stock, realGallery(p, apt, f));
+        else html = afterTabs(html, innerBar('📸 Своих рендеров этой планировки ещё нет', 'Ниже — примеры дизайна, которые показывает программа. Загрузите рендеры и фото от дизайнера (JPG, PNG) — покупатели увидят их вместо примеров.', innerUpBtn(apt, true, 'Загрузить рендеры')));
+      }
+      if (a.tab === 'plan') {
+        const pl = f.plans[0];
+        html = afterTabs(html, pl ? `<div class="card real-plan"><h3>📐 Планировка квартиры от архитектора <span class="tools">${f.plans.length > 1 ? f.plans.map((x, i) => `<a class="btn btn-s" href="${mediaUrl(x)}" target="_blank" rel="noopener">${i + 1}</a>`).join('') : ''}<a class="btn btn-s" href="${mediaUrl(pl)}" target="_blank" rel="noopener">⬇ Открыть</a>${innerUpBtn(apt, false, 'Изменить')}</span></h3>
+          ${pl.ext === 'pdf' ? `<iframe src="${mediaUrl(pl)}" title="PDF"></iframe>` : `<img src="${mediaUrl(pl)}" alt="" loading="lazy">`}</div>`
+          : SAAS.canMedia ? innerBar('📐 Чертёж планировки не загружен', 'Ниже — схема, которую рисует программа. Загрузите план квартиры от архитектора (PDF или картинка).', innerUpBtn(apt, true, 'Загрузить план')) : '');
+      }
     }
     if (!real(p, a)) return html;
     return html.replace(/<div class="site-viewer" id="aptSite"><div class="v-tools" id="s3Tools"><\/div>(<div class="v-help">[^<]*<\/div>)?<\/div>/, real3dFrame(p, a.id))
@@ -243,44 +321,32 @@ if (PAGES.apt) {
   };
 }
 /* ---------- «Дизайн квартиры 3D»: настоящий интерьер выбранной квартиры (или планировки по числу комнат) ----------
-   Есть загруженный 3D-интерьер или панорамы 360° — показываем их сверху; ниже остаётся примерный дизайн программы.
-   «Загрузить / изменить» открывает страницу «Интерьеры» (/company/objects/{id}/interiors) в окне: там по планировкам
-   загружают 3D, 360°, рендеры и план, а ошибочный файл переименовывают, переносят к другой планировке или удаляют. */
-const innerPairs = p => (SAAS && SAAS.media && SAAS.media[p.id] && SAAS.media[p.id].in) || [];
-const aptHasInner = (p, apt) => {
-  const pairs = innerPairs(p);
-  return apt.type && pairs.some(([l]) => l === apt.type) ? true : pairs.some(([l, rr]) => !l && (rr == null || +rr === +apt.rooms));
-};
+   Есть загруженный 3D-интерьер или 360° — показываем сверху; есть рендеры — они вместо примеров программы;
+   ниже остаётся примерный дизайн программы (стили, ремонт «под ключ»). */
 function designInner(p, a) {
-  if (!SAAS) return '';
+  if (!SAAS) return { html: '', photos: false };
   const A = genApts(p).filter(x => x.rooms > 0), apt = a.apt ? A.find(x => x.id === a.apt) : null, rooms = apt ? apt.rooms : p.design.rooms;
-  // квартира не выбрана: любая квартира с таким числом комнат, у которой интерьер уже загружен
-  const show = apt ? (aptHasInner(p, apt) ? apt : null) : A.find(x => +x.rooms === +rooms && aptHasInner(p, x)), id = encodeURIComponent(p.id);
+  // квартира не выбрана: квартира с таким числом комнат, у которой что-то загружено (иначе — первая такая)
+  const has = x => { const f = innerKinds(p, x); return f.view.length || f.photos.length; };
+  const rep = apt || A.find(x => +x.rooms === +rooms && has(x)) || A.find(x => +x.rooms === +rooms);
+  const f = innerKinds(p, rep), any = f.view.length || f.photos.length;
   const what = apt ? `№${apt.num} · ${apt.rooms}-комн.${apt.typeName ? ' · ' + esc(apt.typeName) : ''}` : `${rooms}-комн.`;
-  return `<div class="card real3d"><div class="real3d-t"><b>📦 Настоящий интерьер квартиры</b><span class="real3d-for">${what}</span>
-    <span class="small muted">${show ? 'Загружен интерьер этой планировки — смотрите ниже. Его видят покупатели в кабинете и на сайте. Под ним — примерный дизайн программы.'
+  const html = `<div class="card real3d"><div class="real3d-t"><b>📦 Настоящий интерьер квартиры</b><span class="real3d-for">${what}</span>
+    <span class="small muted">${any ? 'Загружен интерьер этой планировки — смотрите ниже. Его видят покупатели в кабинете и на сайте. Под ним — примерный дизайн программы.'
       : 'Здесь — примерная квартира, нарисованная программой. Загрузите интерьер от дизайнера (GLB, FBX, OBJ, SketchUp, 3ds Max…) и панорамы 360° каждой комнаты.'}</span></div>
-    <div class="flex">${SAAS.canMedia ? `<button class="btn${show ? '' : ' btn-p'}" data-act="innerManage">⬆ Загрузить / изменить интерьер</button>` : ''}</div></div>
-    ${show ? `<div class="real3d-frame big"><iframe src="/company/objects/${id}/3d?embed=1&u=${encodeURIComponent(show.id)}" title="3D" allow="fullscreen; xr-spatial-tracking"></iframe></div>` : ''}`;
+    <div class="flex">${innerUpBtn(apt || rep, !any)}</div></div>
+    ${f.view.length ? innerFrame(p, rep) : ''}${f.photos.length ? realGallery(p, rep, f) : ''}`;
+  return { html, photos: f.photos.length > 0 };
 }
-if (PAGES.design) { const r = PAGES.design.render; PAGES.design.render = function (p, a) { return designInner(p, a) + r.call(this, p, a); }; }
-// окно «Интерьеры»: загрузка, переименование, удаление файлов интерьера по планировкам
-let innerDirty = false;
-ACT.innerManage = () => {
-  const p = P(), a = pageArgs || {}, q = a.apt ? 'u=' + encodeURIComponent(a.apt) : 'r=' + (+p.design.rooms || 0);
-  innerDirty = false;
-  const ov = document.createElement('div'); ov.className = 'inner-ov';
-  ov.innerHTML = `<div class="inner-ov-in"><button type="button" class="inner-ov-x" aria-label="Закрыть">✕</button><iframe src="/company/objects/${encodeURIComponent(p.id)}/interiors?embed=1&${q}" title="Интерьеры"></iframe></div>`;
-  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); if (innerDirty && curPage === 'design') rerender(); };
-  const onKey = e => { if (e.key === 'Escape') close(); };
-  ov.querySelector('.inner-ov-x').onclick = close;
-  ov.addEventListener('click', e => { if (e.target === ov) close(); });
-  document.addEventListener('keydown', onKey);
-  document.body.append(ov);
-};
-window.addEventListener('message', e => {
-  if (e.origin !== location.origin || !e.data || e.data.type !== 'oftob-inner-changed' || !SAAS) return;
-  const m = (SAAS.media = SAAS.media || {})[e.data.pid] = SAAS.media[e.data.pid] || {}, n = e.data.n || {};
-  m.in = e.data.in || []; m.interior = n.interior || 0; m.pano = n.pano || 0;
-  innerDirty = true;
-});
+if (PAGES.design) {
+  const r = PAGES.design.render;
+  PAGES.design.render = function (p, a) {
+    let html = r.call(this, p, a);
+    const d = designInner(p, a);
+    if (d.photos) {   // свои рендеры уже показаны сверху — примеры программы убираем
+      const A = genApts(p).filter(x => x.rooms > 0), apt = a.apt ? A.find(x => x.id === a.apt) : null;
+      html = html.replace(photoGallery((apt && apt.o.style) || p.design.style), '');
+    }
+    return d.html + html;
+  };
+}

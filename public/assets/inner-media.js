@@ -81,7 +81,14 @@ export function innerManager(box, o) {
     const u = lay.u, items = [];
     cur = lay.key;
     try {
-      if (kind === 'interior') {
+      // в «3D» выбрали только картинки — это не модель: рендеры загрузим как фото, снимки 2:1 — как панорамы 360°
+      if (kind === 'interior' && files.every((f) => /\.(jpe?g|png|webp)$/i.test(f.name))) {
+        if (!confirm(T.imgsNot3d)) return;
+        for (const f of files) {
+          const r = await ratioOf(f), pano = r >= 1.9 && r <= 2.1;
+          items.push([f, pano ? 'pano' : 'photo', pano ? { room: f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() } : {}]);
+        }
+      } else if (kind === 'interior') {
         if (files.length === 1 && /\.glb$/i.test(files[0].name)) items.push([files[0], 'interior', {}]);
         else {
           prog(0, o.cvt.p_read);

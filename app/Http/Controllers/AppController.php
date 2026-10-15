@@ -63,6 +63,12 @@ class AppController extends Controller
         foreach (\App\Models\ObjectMedia::of($wsId)->whereIn('kind', ['interior', 'pano'])->select('project_id', 'layout', 'rooms')->distinct()->get() as $r) {
             $out[(string) $r->project_id]['in'][] = [$r->layout, $r->rooms];
         }
+        // сами файлы интерьеров (3D, 360°, рендеры, планы) — «Фото», «Планировка» и «3D-интерьер» квартиры показывают загруженное, а не примеры программы
+        foreach (\App\Models\ObjectMedia::of($wsId)->whereIn('kind', ['interior', 'pano', 'photo', 'plan'])->orderBy('kind')->orderBy('sort')->orderBy('id')
+            ->get(['id', 'project_id', 'kind', 'layout', 'rooms', 'title', 'ext', 'meta']) as $m) {
+            $out[(string) $m->project_id]['files'][] = array_filter(['id' => $m->id, 'k' => $m->kind, 'l' => $m->layout, 'r' => $m->rooms, 'n' => $m->title,
+                'room' => $m->meta['room'] ?? null, 'ext' => $m->ext], fn ($v) => $v !== null);
+        }
 
         return $out;
     }
