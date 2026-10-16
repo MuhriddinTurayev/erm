@@ -804,3 +804,16 @@ dialog.modal::backdrop{background:rgba(15,13,40,.5)}
 .chip-in{border:0;outline:0;background:none;flex:1;min-width:160px;font:inherit;color:var(--text);padding:4px}
 /* «Деньги на счету» полной суммой — шрифт чуть меньше, чтобы не ломать карточку */
 .kpi .k-v.k-full{font-size:clamp(20px,2.1vw,28px);line-height:1.15;word-break:break-word}
+/* Заявки с сайта: статус + заметка + сохранить в одну строку */
+.lead-st-td{min-width:300px;width:36%}
+.lead-st{display:flex;gap:6px;align-items:center}
+.lead-st .input{height:36px;padding:0 11px;font-size:13.5px;border-radius:9px}
+.lead-st select.input{width:auto;flex:none;min-width:150px;max-width:210px;font-weight:600;cursor:pointer;padding-right:8px}
+.lead-st input.input{flex:1;min-width:120px}
+.lead-st .btn{width:36px;height:36px;padding:0;flex:none;justify-content:center}
+.lead-st .st-new{background:var(--accent-soft);color:var(--accent-text);border-color:color-mix(in srgb,var(--accent) 30%,var(--border))}
+.lead-st .st-called{background:var(--warn-soft);color:var(--warn-text);border-color:color-mix(in srgb,var(--warn) 30%,var(--border))}
+.lead-st .st-done{background:var(--ok-soft);color:var(--ok-text);border-color:color-mix(in srgb,var(--ok) 30%,var(--border))}
+.lead-st .st-spam{background:var(--sunken);color:var(--muted)}
+.lead-st select.input option{background:var(--surface);color:var(--text);font-weight:400}
+@media (max-width:760px){.lead-st-td{min-width:240px}.lead-st{flex-wrap:wrap}.lead-st select.input{flex:1;max-width:none}.lead-st input.input{flex-basis:100%;order:3}}
