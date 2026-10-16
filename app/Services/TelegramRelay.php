@@ -174,12 +174,14 @@ class TelegramRelay
         $body = $r->getContent();
         abort_unless(ctype_digit($ts) && abs(time() - (int) $ts) < 300 && hash_equals(self::sign($ts, $body), (string) $r->header('X-Relay-Sig')), 403);
         $in = json_decode($body, true) ?: [];
-        Cache::put('tg-relay-peer', time(), 86400);
-        $s = self::state();
+        if ((int) Cache::get('tg-relay-peer', 0) < time() - 20) {
+            Cache::put('tg-relay-peer', time(), 86400);   // запрос каждые 2 секунды — отметку обновляем реже
+        }
+        $s = $before = self::state();
         if (! empty($in['site'])) {
             $s['site'] = mb_substr(strip_tags((string) $in['site']), 0, 200);
         }
-        if ($ack = (int) ($in['ack'] ?? 0)) {
+        if (($ack = (int) ($in['ack'] ?? 0)) && DB::table('tg_relay_queue')->where('id', '<=', $ack)->exists()) {
             DB::table('tg_relay_queue')->where('id', '<=', $ack)->delete();   // второй сайт обработал
         }
         $s['released'] = array_values(array_diff($s['released'], array_map('strval', (array) ($in['released_ack'] ?? []))));
@@ -196,8 +198,12 @@ class TelegramRelay
             unset($s['claimed'][(string) $chat]);
             $took[] = (string) $chat;
         }
-        self::save($s);
-        DB::table('tg_relay_queue')->where('created_at', '<', now()->subHours(self::KEEP_HOURS))->delete();
+        if ($s !== $before) {
+            self::save($s);   // настройки (и их кэш) трогаем, только если что-то изменилось
+        }
+        if (Cache::add('tg-relay-gc', 1, 3600)) {
+            DB::table('tg_relay_queue')->where('created_at', '<', now()->subHours(self::KEEP_HOURS))->delete();
+        }
         $rows = DB::table('tg_relay_queue')->orderBy('id')->limit(50)->get();
 
         return response()->json([
@@ -240,17 +246,22 @@ class TelegramRelay
             if (! $r->successful()) {
                 throw new \RuntimeException(__('Основной сайт бота не принял запрос (:c): проверьте адрес и что там тот же бот.', ['c' => $r->status()]));
             }
-            Cache::put('tg-relay-ok', time(), 86400);
+            if ((int) Cache::get('tg-relay-ok', 0) < time() - 10) {
+                Cache::put('tg-relay-ok', time(), 86400);   // запрос каждые 2 секунды — отметку обновляем реже
+            }
             // доставленные привязки и отвязки больше не отправляем (новые, появившиеся за это время, остаются)
-            $took = array_map('strval', (array) $r->json('took'));
-            Cache::put('tg-relay-claims', array_diff_key((array) Cache::get('tg-relay-claims', []), array_flip($took)), 86400 * 7);
-            Cache::put('tg-relay-unclaims', array_values(array_diff((array) Cache::get('tg-relay-unclaims', []), $took)), 86400 * 7);
+            if ($took = array_map('strval', (array) $r->json('took'))) {
+                Cache::put('tg-relay-claims', array_diff_key((array) Cache::get('tg-relay-claims', []), array_flip($took)), 86400 * 7);
+                Cache::put('tg-relay-unclaims', array_values(array_diff((array) Cache::get('tg-relay-unclaims', []), $took)), 86400 * 7);
+            }
             // основной сайт забрал Telegram себе (там нажали «Start» с его кодом) — здесь отвязываем
             $rel = array_map('strval', (array) $r->json('release'));
             if ($rel) {
                 User::whereIn('telegram_chat_id', $rel)->update(['telegram_chat_id' => null, 'tg_state' => null]);
             }
-            Cache::put('tg-relay-rel-ack', $rel, 86400);
+            if ($rel !== (array) Cache::get('tg-relay-rel-ack', [])) {
+                Cache::put('tg-relay-rel-ack', $rel, 86400);
+            }
             $n = 0;
             foreach ((array) $r->json('updates') as $x) {
                 Cache::put('tg-relay-ack', max((int) Cache::get('tg-relay-ack', 0), (int) ($x['id'] ?? 0)), 86400 * 7);

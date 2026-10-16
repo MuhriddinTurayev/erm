@@ -105,7 +105,9 @@ class TelegramPoller
         $n = 0;
         $conflicts = 0;
         while (time() < $end - 2) {
-            Cache::put('tg-listen-at', time(), 86400);   // «бот на связи» — для подсказки на странице «Мой Telegram»
+            if ((int) Cache::get('tg-listen-at', 0) < time() - 20) {
+                Cache::put('tg-listen-at', time(), 86400);   // «бот на связи» — для подсказки на странице «Мой Telegram»
+            }
             $t0 = microtime(true);
             try {
                 $n += $this->once(min(25, max(1, $end - time() - 2)));
