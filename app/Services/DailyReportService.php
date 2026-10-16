@@ -91,14 +91,14 @@ class DailyReportService
                 $L[] = '';
                 $L[] = '🔝 <b>'.__('Крупные расходы').':</b>';
                 foreach (array_slice($s['top'], 0, 5) as $t) {
-                    $L[] = '• '.$m($t['amount']).' — '.$e($t['desc'] ?: __($t['cat'])).($t['who'] ? ', '.$e($t['who']) : '').' <i>('.$e($t['obj']).')</i>';
+                    $L[] = '• '.$m($t['amount']).' — '.$e($t['desc'] ? self::shown($t['desc']) : __($t['cat'])).($t['who'] ? ', '.$e($t['who']) : '').' <i>('.$e(self::shown((string) $t['obj'])).')</i>';
                 }
             }
             if ($s['objects']) {
                 $L[] = '';
                 $L[] = '🏗 <b>'.__('Объекты').':</b>';
                 foreach (array_slice($s['objects'], 0, 10) as $o) {
-                    $L[] = '• <b>'.$e($o['name']).'</b> — '.__('приход − расход').' '.$m($o['balance']).', '.__('сегодня').' −'.$m($o['out_day']).', '.__('готовность').' '.$o['progress'].'%'
+                    $L[] = '• <b>'.$e(self::shown((string) $o['name'])).'</b> — '.__('приход − расход').' '.$m($o['balance']).', '.__('сегодня').' −'.$m($o['out_day']).', '.__('готовность').' '.$o['progress'].'%'
                         .($o['overdue'] ? ' ⚠️ '.__('просрочено этапов').': '.$o['overdue'] : '');
                 }
             }
@@ -130,6 +130,32 @@ class DailyReportService
     }
 
     /**
+     * Подписи, которые система сохранила по-русски («Заявка №3 · …», «Зарплата за Октябрь 2026», «… (копия)»), — на языке отчёта.
+     * Вызывать внутри inLocale.
+     */
+    public static function shown(string $s): string
+    {
+        if ($s === '' || App::getLocale() === 'ru') {
+            return $s;
+        }
+        if (($t = __($s)) !== $s) {
+            return $t;
+        }
+        $s = (string) preg_replace_callback('/^Заявка №\s*(\S+)/u', fn ($m) => __('Заявка №:n', ['n' => $m[1]]), $s);
+        $s = (string) preg_replace_callback('/^Зарплата за (\p{L}+)(?= |$)/u', function ($m) {
+            $i = array_search(mb_strtolower($m[1]), ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'], true);
+            if ($i === false) {
+                return $m[0];
+            }
+            $mon = Carbon::create(2000, $i + 1, 1)->locale(App::getLocale() === 'uz' ? 'uz_Latn' : App::getLocale())->translatedFormat('F');
+
+            return __('Зарплата за').' '.mb_convert_case($mon, MB_CASE_TITLE);
+        }, $s);
+
+        return str_replace('(копия)', __('(копия)'), $s);
+    }
+
+    /**
      * Материалы, которые заканчиваются на складах объектов: [['obj', 'item', 'qty', 'unit', 'days'], …]
      *
      * @return array<int, array{obj: string, item: string, qty: string, unit: string, days: ?int}>
@@ -141,7 +167,7 @@ class DailyReportService
             if (\App\Services\Bot\Catalog::warehouse($ws, (string) $pid)) {
                 foreach (\App\Services\Bot\Catalog::stock($ws, (string) $pid) as $row) {
                     if ($row['low']) {
-                        $low[] = ['obj' => (string) $pn, 'item' => (string) $row['item']->name, 'qty' => \App\Services\Bot\Catalog::n($row['qty']),
+                        $low[] = ['obj' => self::shown((string) $pn), 'item' => (string) $row['item']->name, 'qty' => \App\Services\Bot\Catalog::n($row['qty']),
                             'unit' => (string) \App\Services\Erp\Supply::unit($row['item']->unit), 'days' => $row['days']];
                     }
                 }
@@ -160,7 +186,7 @@ class DailyReportService
     {
         return \App\Models\SupplyRequest::of($ws->id)->whereIn('status', \App\Services\Erp\Supply::RECEIVABLE)->whereNotNull('need_by')
             ->whereDate('need_by', '<', $date)->with('counterparty')->orderBy('need_by')->limit(6)->get()
-            ->map(fn ($sr) => ['number' => (string) $sr->number, 'obj' => (string) (StateWriter::projects($ws)[$sr->project_id] ?? ''), 'need' => $sr->need_by->format('d.m'),
+            ->map(fn ($sr) => ['number' => (string) $sr->number, 'obj' => self::shown((string) (StateWriter::projects($ws)[$sr->project_id] ?? '')), 'need' => $sr->need_by->format('d.m'),
                 'status' => __(\App\Services\Erp\Supply::STATUS[$sr->status] ?? $sr->status), 'who' => (string) ($sr->counterparty?->name ?? '')])->all();
     }
 

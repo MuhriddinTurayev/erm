@@ -67,10 +67,10 @@ class ReportDocs
                 'days' => $days,
                 'cats' => array_map(fn ($cat, $v) => ['n' => __((string) $cat), 'v' => $money($v), 'p' => (int) round($v / $outDay * 100)],
                     array_keys(array_slice($s['cats_day'], 0, 8, true)), array_slice($s['cats_day'], 0, 8, true)),
-                'top' => array_map(fn ($t) => ['v' => $money($t['amount']), 'desc' => $t['desc'] ?: __((string) $t['cat']), 'who' => (string) ($t['who'] ?? ''), 'obj' => (string) ($t['obj'] ?? '')],
+                'top' => array_map(fn ($t) => ['v' => $money($t['amount']), 'desc' => $t['desc'] ? DailyReportService::shown((string) $t['desc']) : __((string) $t['cat']), 'who' => (string) ($t['who'] ?? ''), 'obj' => DailyReportService::shown((string) ($t['obj'] ?? ''))],
                     array_slice((array) $s['top'], 0, 6)),
                 // объекты с движением денег или стройки; пустые (черновики, тестовые) — одной строкой «ещё N без движения»
-                'objects' => array_map(fn ($o) => ['n' => (string) $o['name'], 'bal' => $money($o['balance']), 'day' => $money($o['out_day']), 'month' => $money($o['out_month']),
+                'objects' => array_map(fn ($o) => ['n' => DailyReportService::shown((string) $o['name']), 'bal' => $money($o['balance']), 'day' => $money($o['out_day']), 'month' => $money($o['out_month']),
                     'p' => (int) ($o['progress'] ?? 0), 'late' => (int) ($o['overdue'] ?? 0)], array_slice($active = array_values(array_filter((array) $s['objects'], fn ($o) => self::moving($o))), 0, 12)),
                 'objectsIdle' => count((array) $s['objects']) - min(12, count($active)),
                 'low' => array_slice(DailyReportService::lowStock($ws), 0, 8),

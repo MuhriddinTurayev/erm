@@ -4852,5 +4852,7 @@
     "Не удалось собрать файлы отчёта (PDF/Word) — отправлен только текст": "Hisobot fayllarini (PDF/Word) tayyorlab bo‘lmadi — faqat matn yuborildi",
     "Файлы отчёта": "Hisobot fayllari",
     "Отчёт файлом PDF — для печати": "Hisobot PDF faylda — chop etish uchun",
-    "Отчёт файлом Word — можно править": "Hisobot Word faylda — tahrirlash mumkin"
+    "Отчёт файлом Word — можно править": "Hisobot Word faylda — tahrirlash mumkin",
+    "Заявка №:n": "So‘rov №:n",
+    "Зарплата за прошлый месяц": "O‘tgan oy uchun maosh"
 }
