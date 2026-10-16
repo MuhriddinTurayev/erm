@@ -4854,5 +4854,11 @@
     "Отчёт файлом PDF — для печати": "Hisobot PDF faylda — chop etish uchun",
     "Отчёт файлом Word — можно править": "Hisobot Word faylda — tahrirlash mumkin",
     "Заявка №:n": "So‘rov №:n",
-    "Зарплата за прошлый месяц": "O‘tgan oy uchun maosh"
+    "Зарплата за прошлый месяц": "O‘tgan oy uchun maosh",
+    "Это местоположение не принято: выбранное на карте место или пересланная точка не подходят.": "Bu joylashuv qabul qilinmadi: xaritadan tanlangan joy yoki boshqa joydan yuborilgan nuqta yaramaydi.",
+    "Трансляция геопозиции не начинает смену.": "Jonli joylashuv smenani boshlamaydi.",
+    "Уходя, нажмите кнопку «Ушёл» внизу.": "Ketayotganda pastdagi «Ketdim» tugmasini bosing.",
+    "Смена идёт. Уходя, нажмите кнопку «Ушёл» внизу.": "Smena davom etmoqda. Ketayotganda pastdagi «Ketdim» tugmasini bosing.",
+    "Придя на объект, нажмите кнопку «Пришёл» внизу — телефон сам отправит, где вы сейчас.": "Obyektga kelganingizda pastdagi «Keldim» tugmasini bosing — telefon qayerdaligingizni o‘zi yuboradi.",
+    "Местоположение принимается только этой кнопкой.": "Joylashuv faqat shu tugma orqali qabul qilinadi."
 }

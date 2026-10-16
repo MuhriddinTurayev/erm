@@ -31,12 +31,12 @@ class Telegram
 
     /**
      * Сообщение с постоянным меню внизу экрана (кнопки-разделы бота). $rows — [['🧱 Материалы', '🛒 Корзина'], …].
-     * Нажатие кнопки приходит обычным текстом.
+     * Нажатие кнопки приходит обычным текстом. Кнопка-массив — как есть: ['text' => …, 'request_location' => true] пришлёт местоположение.
      */
     public static function menu(string $chatId, string $html, array $rows, string $placeholder = ''): array
     {
         $p = ['chat_id' => $chatId, 'text' => mb_substr($html, 0, 4000), 'parse_mode' => 'HTML', 'disable_web_page_preview' => true,
-            'reply_markup' => array_filter(['keyboard' => array_map(fn ($r) => array_map(fn ($t) => ['text' => $t], $r), $rows), 'resize_keyboard' => true, 'is_persistent' => true,
+            'reply_markup' => array_filter(['keyboard' => array_map(fn ($r) => array_map(fn ($t) => is_array($t) ? $t : ['text' => $t], $r), $rows), 'resize_keyboard' => true, 'is_persistent' => true,
                 'input_field_placeholder' => mb_substr($placeholder, 0, 64) ?: null])];
 
         return self::call('sendMessage', $p);
@@ -90,13 +90,6 @@ class Telegram
     public static function setWebhook(string $url, string $secret): void
     {
         self::call('setWebhook', ['url' => $url, 'secret_token' => $secret, 'allowed_updates' => self::ALLOWED]);
-    }
-
-    /** Сообщение с одной кнопкой внизу, которая отправляет боту местоположение телефона (GPS берёт сам Telegram) */
-    public static function askLocation(string $chatId, string $html, string $label): void
-    {
-        self::call('sendMessage', ['chat_id' => $chatId, 'text' => mb_substr($html, 0, 4000), 'parse_mode' => 'HTML', 'disable_web_page_preview' => true,
-            'reply_markup' => ['keyboard' => [[['text' => $label, 'request_location' => true]]], 'resize_keyboard' => true, 'is_persistent' => true]]);
     }
 
     public static function deleteWebhook(): void

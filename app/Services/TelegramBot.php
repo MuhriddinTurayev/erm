@@ -76,8 +76,8 @@ class TelegramBot
         }
         // сотрудник по личной ссылке (приход на объект): местоположение — отметка «Пришёл / Ушёл»
         $worker = WorkerToken::where('tg_chat_id', $chat)->first();
-        if ($worker && isset($m['location'])) {
-            $this->workerLocation($chat, $worker, $m['location'], false);
+        if ($worker && (isset($m['location']) || isset($m['venue']))) {
+            $this->workerLocation($chat, $worker, $m, false);
 
             return;
         }
@@ -286,61 +286,74 @@ class TelegramBot
         }
         $chat = (string) $m['chat']['id'];
         if ($w = WorkerToken::where('tg_chat_id', $chat)->first()) {
-            $this->workerLocation($chat, $w, $m['location'], true);
+            $this->workerLocation($chat, $w, $m, true);
         }
     }
 
     /**
-     * Местоположение сотрудника. Смены нет — «Пришёл». Смена идёт: трансляция — отметка «я здесь» (молча),
-     * обычная точка (кнопка «Ушёл» или 📎 → Геопозиция) — «Ушёл».
+     * Местоположение сотрудника. «Пришёл / Ушёл» — только обычной точкой от кнопки внизу: кнопка берёт GPS телефона.
+     * Не принимаются: место из списка (venue), пересланная точка. Трансляция (📎 → «Транслировать») смену не открывает
+     * и не закрывает — во время смены она только отмечает «я здесь» (молча).
      */
-    private function workerLocation(string $chat, WorkerToken $w, array $loc, bool $edited): void
+    private function workerLocation(string $chat, WorkerToken $w, array $m, bool $edited): void
     {
-        $live = $edited || isset($loc['live_period']);
+        $loc = $m['location'] ?? $m['venue']['location'] ?? [];
         $open = (bool) WorkerGeo::state($w)['open'];
-        if ($edited && ! $open) {
-            return;   // трансляция ещё идёт после «Ушёл» — это не новая смена
+        if (isset($m['venue']) || isset($m['forward_origin']) || isset($m['forward_date']) || ! isset($loc['latitude'], $loc['longitude'])) {
+            if (! $edited) {
+                $this->workerHelp($chat, $w, fn () => '⚠️ '.__('Это местоположение не принято: выбранное на карте место или пересланная точка не подходят.'));
+            }
+
+            return;
         }
-        $type = ! $open ? 'in' : ($live ? 'ping' : 'out');
+        if ($edited || isset($loc['live_period'])) {
+            if ($open) {
+                WorkerGeo::record($w, 'ping', (float) $loc['latitude'], (float) $loc['longitude'], $loc['horizontal_accuracy'] ?? null);
+            } elseif (! $edited) {
+                $this->workerHelp($chat, $w, fn () => 'ℹ️ '.__('Трансляция геопозиции не начинает смену.'));
+            }
+
+            return;
+        }
+        $type = $open ? 'out' : 'in';
         $r = WorkerGeo::record($w, $type, (float) $loc['latitude'], (float) $loc['longitude'], $loc['horizontal_accuracy'] ?? null);
-        if ($type === 'ping' || ! $r['saved']) {
+        if (! $r['saved']) {
             return;
         }
         $at = Workspace::find($w->workspace_id)?->localNow()->format('H:i') ?? now()->format('H:i');
-        $this->as(null, function () use ($chat, $r, $type, $live, $at) {
+        $this->as(null, function () use ($chat, $w, $r, $type, $at) {
             $where = $r['dist'] === null ? '' : "\n📍 ".($r['on'] ? __('Вы на объекте') : '⚠️ '.__('Вы НЕ на объекте')).' · '.__('до объекта').' '.self::meters($r['dist']);
-            if ($type === 'in') {
-                $this->workerKeyboard($chat, '✅ <b>'.__('Смена начата').'</b> · '.$at.$where."\n\n".($live
-                    ? __('Трансляция геопозиции включена: местоположение передаётся само, даже при выключенном экране.')
-                    : __('Чтобы местоположение передавалось весь день, даже при выключенном экране: 📎 → Геопозиция → «Транслировать геопозицию» на 8 часов.')), true);
-            } else {
-                $this->workerKeyboard($chat, '🏁 <b>'.__('Смена закончена').'</b> · '.$at.' · '.__('отработано сегодня').': '.self::hm((int) $r['todayMs']).$where
-                    ."\n\n".__('Трансляцию геопозиции теперь можно остановить.'), false);
-            }
+            $this->workerKeyboard($chat, $w, $type === 'in'
+                ? '✅ <b>'.__('Смена начата').'</b> · '.$at.$where."\n\n".__('Уходя, нажмите кнопку «Ушёл» внизу.')
+                : '🏁 <b>'.__('Смена закончена').'</b> · '.$at.' · '.__('отработано сегодня').': '.self::hm((int) $r['todayMs']).$where);
         }, WorkerGeo::lang($w));
     }
 
-    /** Подсказка сотруднику и кнопка внизу экрана: «Пришёл» или «Ушёл» (кнопка сама отправит местоположение) */
-    private function workerHelp(string $chat, WorkerToken $w): void
+    /** Подсказка сотруднику и кнопка внизу экрана: «Пришёл» или «Ушёл» (кнопка сама отправит местоположение). $lead — строка над ней, на языке сотрудника */
+    private function workerHelp(string $chat, WorkerToken $w, ?\Closure $lead = null): void
     {
         $open = (bool) WorkerGeo::state($w)['open'];
-        $this->as(null, fn () => $this->workerKeyboard($chat, '👷 <b>'.e($w->name).'</b>'."\n"
-            .($open ? __('Смена идёт. Закончить — кнопкой внизу.') : __('Начать смену — кнопкой внизу: она отправит ваше местоположение.'))
-            ."\n\n".__('Чтобы местоположение передавалось весь день, даже при выключенном экране: 📎 → Геопозиция → «Транслировать геопозицию» на 8 часов.'), $open), WorkerGeo::lang($w));
+        $this->as(null, fn () => $this->workerKeyboard($chat, $w, ($lead ? $lead()."\n\n" : '').'👷 <b>'.e($w->name).'</b>'."\n"
+            .($open ? __('Смена идёт. Уходя, нажмите кнопку «Ушёл» внизу.') : __('Придя на объект, нажмите кнопку «Пришёл» внизу — телефон сам отправит, где вы сейчас.'))
+            ."\n\n📍 ".__('Местоположение принимается только этой кнопкой.')), WorkerGeo::lang($w));
     }
 
-    private function workerKeyboard(string $chat, string $html, bool $open): void
+    /** Кнопка «Пришёл / Ушёл» внизу экрана: отправляет местоположение телефона — точку на карте ею не выбрать */
+    private static function workerButton(WorkerToken $w): array
     {
-        // у руководителя или прораба в этом же Telegram своё меню — его не подменяем, только сообщение
-        if (User::where('telegram_chat_id', $chat)->exists()) {
-            $this->say($chat, $html);
+        return ['text' => WorkerGeo::state($w)['open'] ? '🏁 '.__('Ушёл — отправить местоположение') : '▶️ '.__('Пришёл — отправить местоположение'), 'request_location' => true];
+    }
 
-            return;
-        }
+    private function workerKeyboard(string $chat, WorkerToken $w, string $html): void
+    {
+        // у руководителя или прораба в этом же Telegram своё меню — кнопка «Пришёл / Ушёл» встаёт над ним
+        $user = User::where('telegram_chat_id', $chat)->where('is_active', true)->whereNotNull('workspace_id')->first();
         try {
-            Telegram::askLocation($chat, $html, $open ? '🏁 '.__('Ушёл — отправить местоположение') : '▶️ '.__('Пришёл — отправить местоположение'));
+            Telegram::menu($chat, $html, $user ? array_merge([[self::workerButton($w)]], \App\Services\Bot\Sections::menu($user)) : [[self::workerButton($w)]],
+                $user ? __('Напишите или выберите раздел') : '');
         } catch (\Throwable $e) {
             Log::warning('Telegram send: '.$e->getMessage());
+            $this->say($chat, $html);
         }
     }
 
@@ -905,7 +918,11 @@ class TelegramBot
     private function sendMenu(User $user, string $chat, string $html): void
     {
         try {
-            Telegram::menu($chat, $html, \App\Services\Bot\Sections::menu($user), __('Напишите или выберите раздел'));
+            $rows = \App\Services\Bot\Sections::menu($user);
+            if ($w = WorkerToken::where('tg_chat_id', $chat)->first()) {
+                array_unshift($rows, [self::workerButton($w)]);   // этот же человек отмечает и свой приход на объект
+            }
+            Telegram::menu($chat, $html, $rows, __('Напишите или выберите раздел'));
         } catch (\Throwable $e) {
             Log::warning('Telegram menu: '.$e->getMessage());
             $this->say($chat, $html);
