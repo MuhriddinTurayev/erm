@@ -45,6 +45,9 @@ function save() {
 
 /* ===== UI-хелперы ===== */
 function srcOf(path) { return path.startsWith('S:') ? [DB.settings, path.slice(2)] : [P(), path]; }
+/* текст в поле ввода — на языке интерфейса, как и в таблицах и диаграммах (стандартные названия хранятся по-русски).
+   В данных ничего не меняется, пока человек сам не исправит поле — тогда сохранится то, что он написал */
+const shownText = (t, v) => (t === 'text' && typeof v === 'string' && typeof T === 'function' ? T(v) : v);
 function field(path, label, o = {}) {
   const [src, key] = srcOf(path); const v = getPath(src, key);
   const re = o.re ? ' data-re' : '';
@@ -56,12 +59,12 @@ function field(path, label, o = {}) {
   }
   if (o.type === 'checkbox') return `<label class="fld chk"><input type="checkbox" data-bind="${path}"${v ? ' checked' : ''}${re}> <span>${label}</span></label>`;
   const t = o.type || 'number';
-  return `<label class="fld"><span>${label}</span><div class="inp"><input type="${t}"${t === 'number' ? ` step="${o.step || 'any'}"` : ''} data-bind="${path}" value="${esc(v ?? '')}"${re}${o.ph ? ` placeholder="${esc(o.ph)}"` : ''}>${o.unit ? `<em>${o.unit}</em>` : ''}</div>${o.hint ? `<small>${o.hint}</small>` : ''}</label>`;
+  return `<label class="fld"><span>${label}</span><div class="inp"><input type="${t}"${t === 'number' ? ` step="${o.step || 'any'}"` : ''} data-bind="${path}" value="${esc(shownText(t, v) ?? '')}"${re}${o.ph ? ` placeholder="${esc(o.ph)}"` : ''}>${o.unit ? `<em>${o.unit}</em>` : ''}</div>${o.hint ? `<small>${o.hint}</small>` : ''}</label>`;
 }
 function cell(path, v, o = {}) {
   const t = o.type || 'number';
   if (v === undefined) v = getPath(P(), path);
-  return `<input class="cell${t === 'number' ? ' n' : ''}" type="${t}"${t === 'number' ? ' step="any"' : ''} data-bind="${path}" value="${esc(v ?? '')}"${o.re ? ' data-re' : ''} ${o.attr || ''}>`;
+  return `<input class="cell${t === 'number' ? ' n' : ''}" type="${t}"${t === 'number' ? ' step="any"' : ''} data-bind="${path}" value="${esc(shownText(t, v) ?? '')}"${o.re ? ' data-re' : ''} ${o.attr || ''}>`;
 }
 function cellSel(path, v, options) {
   return `<select class="cell" data-bind="${path}">${options.map(op => { const [val, t] = Array.isArray(op) ? op : [op, op]; return `<option value="${esc(val)}"${String(val) === String(v) ? ' selected' : ''}>${esc(t)}</option>`; }).join('')}</select>`;

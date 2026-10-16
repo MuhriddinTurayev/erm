@@ -181,7 +181,11 @@ PAGES.schedule = {
       ${kpi('Просрочено этапов', late.length, late.map(s => esc(s.name)).slice(0, 2).join(', '), late.length ? 'bad' : 'ok')}
     </div>
     <div class="card"><h3>Диаграмма Ганта</h3><div class="gantt"><div class="gantt-in">
-      <div class="g-row g-head"><div class="g-name">Этап</div><div class="g-track">${months.map(m => { const l = pos(m < span.start ? span.start : m); return `<div class="g-m" style="left:${l}%">${MONTHS_S[+m.slice(5, 7) - 1]} ${m.slice(2, 4)}</div>`; }).join('')}</div></div>
+      <div class="g-row g-head"><div class="g-name">Этап</div><div class="g-track">${months.map((m, i) => {
+        const l = pos(m < span.start ? span.start : m);
+        // проект начался в конце месяца: подпись этого месяца налезала бы на следующую — не пишем её
+        if (i === 0 && months[1] && pos(months[1]) - l < 4) return '';
+        return `<div class="g-m" style="left:${l}%">${MONTHS_S[+m.slice(5, 7) - 1]} ${m.slice(2, 4)}</div>`; }).join('')}</div></div>
       ${st.map(s => { const end = addDays(s.start, s.dur), cls = s.progress >= 100 ? 'done' : end < t ? 'late' : ''; return `<div class="g-row"><div class="g-name" title="${esc(s.name)}">${esc(s.name)}</div><div class="g-track">
         ${t >= span.start && t <= span.end ? `<div class="g-today" style="left:${pos(t)}%"></div>` : ''}
         <div class="g-bar ${cls}" style="left:${pos(s.start)}%;width:${Math.max(0.6, s.dur / total * 100)}%" title="${fdate(s.start)} — ${fdate(end)}, ${s.progress}%"><i style="width:${s.progress}%"></i><span>${s.progress}%</span></div></div></div>`; }).join('')}
