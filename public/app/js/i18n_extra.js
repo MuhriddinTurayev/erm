@@ -145,3 +145,8 @@ _W2.forEach(([r, u, t]) => { L10W.uz[r] = u; L10W.tg[r] = t; });
   ['Браузер даёт GPS только сайтам с https — на этом адресе (http) местоположение недоступно.', 'Brauzer GPS’ni faqat https saytlarga beradi — bu manzilda (http) joylashuv olinmaydi.', 'Браузер GPS-ро танҳо ба сайтҳои https медиҳад — дар ин суроға (http) ҷойгиршавӣ дастрас нест.'],
   ['Вы здесь', 'Siz shu yerdasiz', 'Шумо дар ин ҷо'],
 ].forEach(([r, u, t]) => { L10N.uz[r] = u; L10N.tg[r] = t; });
+/* место под набор: «Бетонщик — новый 3» → «Betonchi — yangi 3» */
+L10P.push([/^(.+?) — новый (\d+)$/, { uz: (r, n) => (tWhole('uz', r) || r) + ' — yangi ' + n, tg: (r, n) => (tWhole('tg', r) || r) + ' — нав ' + n }]);
+[
+  ['Принят(а) на работу', 'Ishga qabul qilindi', 'Ба кор қабул шуд'],
+].forEach(([r, u, t]) => { L10N.uz[r] = u; L10N.tg[r] = t; });

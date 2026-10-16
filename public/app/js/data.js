@@ -57,7 +57,12 @@ function migrate(p) {
     if (p[k] === undefined) p[k] = d[k];
     else if (d[k] && typeof d[k] === 'object' && !Array.isArray(d[k]) && p[k] && typeof p[k] === 'object') for (const kk in d[k]) if (p[k][kk] === undefined) p[k][kk] = d[k][kk];
   }
-  (p.staff || []).forEach(s => { s.role = canonRole(s.role); });
+  (p.staff || []).forEach(s => {
+    s.role = canonRole(s.role);
+    // место под набор называется «Бетонщик — новый 3» (на экране переводится); демо записывало его латиницей «Betonshik — noviy 3»
+    const m = s.isNew && /—\s*(?:новый|noviy|yangi|нав)\s+(\d+)\s*$/i.exec(String(s.name || ''));
+    if (m) s.name = `${s.role} — новый ${m[1]}`;
+  });
 }
 /*
  * Должность хранится по-русски (как в списке ROLES) — по ней считаются ИТР, ставки, бригады; на экране она переводится.

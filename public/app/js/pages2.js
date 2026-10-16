@@ -56,6 +56,12 @@ PAGES.staff = {
       </tbody></table></div></div>
     </div>`;
   },
+  // в строке вакансии вписали настоящее ФИО — человек принят: метка «вакансия» снимается, дата приёма — сегодня
+  onChange(el) {
+    const m = /^staff\.(\d+)\.name$/.exec(el.dataset.bind || ''), s = m && P().staff[+m[1]];
+    if (!s || !s.isNew || !String(s.name || '').trim() || /—\s*(?:новый|yangi|нав|noviy)\s+\d+\s*$/i.test(s.name)) return;
+    s.isNew = false; s.hired = today(); save(); rerender(); toast(`${s.name}: ${T('Принят(а) на работу')}`);
+  },
   onInput(el) {
     const b = el.dataset.bind; if (!b.startsWith('ts.')) return;
     const p = P(), sid = b.split('.')[1], s = p.staff.find(x => x.id === sid), e = earned(p, s, pageArgs.month || monthNow());

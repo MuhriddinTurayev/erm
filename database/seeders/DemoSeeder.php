@@ -159,7 +159,10 @@ class DemoSeeder extends Seeder
         $name = fn ($s) => $l === 'uz' ? self::latin((string) $s) : (string) $s;
         $p += ['staff' => [], 'apts' => [], 'tx' => [], 'fleet' => [], 'stages' => []];
         foreach ($p['staff'] as &$x) {
-            $x['name'] = $name($x['name']);
+            // место под набор («Бетонщик — новый 3») не транслитерируем: программа покажет его на языке компании
+            if (empty($x['isNew'])) {
+                $x['name'] = $name($x['name']);
+            }
             // должность не переводим: это ключ (список должностей, ИТР, ставки); на экране программа переводит её сама
         }
         foreach ($p['apts'] as &$o) {
