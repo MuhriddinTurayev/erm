@@ -23,6 +23,10 @@ class SettingsController extends Controller
             'tgPoll' => \App\Services\TelegramPoller::active(),
             'tgListening' => \App\Services\TelegramPoller::listening(),
             'tgShared' => \App\Services\TelegramPoller::shared(),
+            // один бот на двух сайтах: этот — второй (берёт сообщения с основного) или к этому подключён второй
+            'tgRelay' => \App\Services\TelegramRelay::secondary(),
+            'tgRelayOk' => \App\Services\TelegramRelay::ok(),
+            'tgPeer' => \App\Services\TelegramRelay::peerOnline() ? \App\Services\TelegramRelay::peerSite() : null,
             'plans' => Plan::orderBy('sort')->get(),
         ]);
     }
@@ -36,6 +40,7 @@ class SettingsController extends Controller
             'support_email' => ['nullable', 'email', 'max:120'],
             'default_plan' => ['nullable', 'string', 'max:40'],
             'telegram_token' => ['nullable', 'string', 'max:120'],
+            'telegram_hub' => ['nullable', 'url', 'max:200'],
             'google_client_id' => ['nullable', 'string', 'max:200', 'regex:/^[\w\-.]*$/'],
             'google_client_secret' => ['nullable', 'string', 'max:200'],
         ]);
@@ -61,6 +66,17 @@ class SettingsController extends Controller
             $d['telegram_offset'] = '0';
             \Illuminate\Support\Facades\Cache::forget('tg-conflict-at');
             \Illuminate\Support\Facades\Cache::forget('tg-yield');   // свой бот — уступать больше некому
+        }
+        // основной сайт бота (этот же бот работает на сервере): сообщения этого сайта берём оттуда
+        $hub = rtrim(trim((string) ($d['telegram_hub'] ?? '')), '/');
+        if ($hub !== '' && rtrim((string) config('app.url'), '/') === $hub) {
+            return back()->withErrors(['telegram_hub' => __('Это адрес этого же сайта. Укажите адрес основного сайта, где работает бот (например, сервера).')])->withInput();
+        }
+        $d['telegram_hub'] = $hub;
+        if ($hub !== \App\Services\TelegramRelay::hub()) {
+            foreach (['tg-relay-ack', 'tg-relay-claims', 'tg-relay-unclaims', 'tg-relay-rel-ack', 'tg-relay-ok', 'tg-yield', 'tg-conflict-at'] as $k) {
+                \Illuminate\Support\Facades\Cache::forget($k);
+            }
         }
         foreach ($d as $k => $v) {
             PlatformSetting::put($k, $v === null ? '' : (string) $v);

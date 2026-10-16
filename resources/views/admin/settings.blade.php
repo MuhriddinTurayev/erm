@@ -25,12 +25,22 @@
     <div class="form">
       <label class="field wide"><span>{{ __('Токен бота') }}</span><input type="password" name="telegram_token" autocomplete="off" placeholder="{{ $hasToken ? __('сохранён — оставьте пустым, чтобы не менять') : '123456:ABC-DEF…' }}"></label>
       @if ($hasToken)<label class="check wide"><input type="checkbox" name="telegram_clear" value="1"> {{ __('Отключить бота') }}</label>@endif
+      <label class="field wide"><span>{{ __('Основной сайт бота (если этот же бот работает на сервере)') }}</span>
+        <input name="telegram_hub" value="{{ old('telegram_hub', $v('telegram_hub')) }}" placeholder="http://37.60.224.174:8200" autocomplete="off">
+        <small>{{ __('Только для копии на компьютере с тем же ботом. Сообщения получает основной сайт и передаёт сюда сообщения этого сайта: где нажали «Start» с кодом — с тем аккаунтом бот и работает. Пусто — бот работает только здесь.') }}</small></label>
     </div>
     @if ($hasToken && $tgPoll)
-      @if ($tgShared)
+      @if ($tgRelay)
+      <div class="alert {{ $tgRelayOk ? 'alert-ok' : 'alert-warn' }} mt" style="margin-bottom:0">{!! ic($tgRelayOk ? 'circle-check' : 'triangle-alert') !!}<div>{{ $tgRelayOk
+        ? __('Бот работает через основной сайт :h. Где нажали «Start» с кодом — с тем аккаунтом бот и работает.', ['h' => $v('telegram_hub')])
+        : __('Нет связи с основным сайтом бота :h. Проверьте адрес в настройках платформы и интернет.', ['h' => $v('telegram_hub')]) }}</div></div>
+      @elseif ($tgPeer !== null)
+      <div class="alert alert-ok mt" style="margin-bottom:0">{!! ic('circle-check') !!}<div>{{ __('Бот на связи. Этот же бот работает и на сайте :s: сообщения его сотрудников передаются туда.', ['s' => $tgPeer ?: '—']) }}</div></div>
+      @elseif ($tgShared)
       <div class="alert alert-warn mt" style="margin-bottom:0">{!! ic('triangle-alert') !!}<div>
         <b>{{ __('Этот бот работает ещё на одном сайте.') }}</b>
         {{ __('Telegram отдаёт каждое сообщение только одному сайту, поэтому коды привязки и сообщения сотрудников теряются между ними. Каждому сайту нужен свой бот: для копии на компьютере создайте отдельного тестового бота у @BotFather и вставьте его токен здесь, на компьютере.') }}
+        <b>{{ __('Или укажите в настройках платформы адрес основного сайта бота — тогда один бот будет работать на обоих сайтах.') }}</b>
       </div></div>
       @elseif ($tgListening)
       <div class="alert alert-ok mt" style="margin-bottom:0">{!! ic('circle-check') !!}<div>{{ __('Бот на связи: этот сайт получает сообщения боту.') }}</div></div>

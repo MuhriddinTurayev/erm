@@ -65,6 +65,8 @@ Route::middleware('throttle:public')->group(function () {
     // Телефон сотрудника: страница и отметки «Пришёл / Ушёл»
     // Telegram-бот (вебхук на хостинге)
     Route::post('/webhook/telegram/{secret}', [TelegramController::class, 'webhook']);
+    // один бот на двух сайтах: второй сайт (копия на компьютере) забирает здесь свои сообщения (запрос подписан ключом бота)
+    Route::post('/webhook/tg-relay', [TelegramController::class, 'relay']);
     // Шахматка для сайта застройщика и кабинет покупателя
     Route::get('/s/{key}', [PublicController::class, 'chess']);
     Route::post('/s/{key}', [PublicController::class, 'chessLead'])->middleware('throttle:10,1');

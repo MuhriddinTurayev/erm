@@ -27,7 +27,13 @@ class TelegramPoller
      */
     public function once(int $timeout = 25, bool $force = false): int
     {
-        if (! self::active() || (! $force && self::yielded())) {
+        if (! self::active()) {
+            return 0;
+        }
+        if (TelegramRelay::secondary()) {
+            return TelegramRelay::pull($this->bot);   // второй сайт: свои сообщения забирает с основного
+        }
+        if (! $force && self::yielded()) {
             return 0;
         }
         $lock = Cache::lock('tg-poll', $timeout + 30);
@@ -49,6 +55,9 @@ class TelegramPoller
             foreach ($updates as $u) {
                 $offset = max($offset, (int) $u['update_id'] + 1);
                 PlatformSetting::put('telegram_offset', (string) $offset);   // сразу, чтобы не обработать дважды
+                if (TelegramRelay::forward($u)) {
+                    continue;   // относится ко второму сайту (его код или его сотрудник) — он заберёт сам
+                }
                 if (TelegramBot::firstTime($u)) {
                     $this->bot->handle($u);
                     $n++;
@@ -88,7 +97,8 @@ class TelegramPoller
     /** Слушать ~$seconds секунд (для запуска планировщиком каждую минуту) */
     public function listen(int $seconds = 55): int
     {
-        if (! self::active() || self::yielded()) {
+        $relay = TelegramRelay::secondary();
+        if (! self::active() || (self::yielded() && ! $relay)) {
             return 0;   // бот не настроен, работает через вебхук или его обслуживает другой сайт — слушать нечего
         }
         $end = time() + $seconds;
@@ -101,7 +111,9 @@ class TelegramPoller
                 $n += $this->once(min(25, max(1, $end - time() - 2)));
                 $conflicts = 0;
             } catch (\Throwable $e) {
-                Log::warning('Telegram poll: '.$e->getMessage());
+                if (Cache::add('tg-warn:'.md5($e->getMessage()), 1, 300)) {   // одна и та же ошибка — в журнал раз в 5 минут
+                    Log::warning('Telegram poll: '.$e->getMessage());
+                }
                 // два сайта с одним ботом перехватывают сообщения друг у друга, и часть теряется.
                 // Копия на компьютере уступает: бот остаётся у основного сайта (сервера), здесь — предупреждение
                 if (str_contains($e->getMessage(), 'Conflict') && app()->environment('local') && ++$conflicts >= 2) {
@@ -110,9 +122,10 @@ class TelegramPoller
                     break;
                 }
             }
-            // нет связи, ошибка или опрос занят другим процессом — подождать, а не крутить процессор
+            // нет связи, ошибка или опрос занят другим процессом — подождать, а не крутить процессор;
+            // второй сайт забирает сообщения с основного каждые 2 секунды
             if (microtime(true) - $t0 < 1) {
-                sleep(3);
+                sleep($relay ? 2 : 3);
             }
             if (! self::active()) {
                 break;

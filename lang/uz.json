@@ -4796,5 +4796,16 @@
     "Бот на связи: этот сайт получает сообщения боту.": "Bot aloqada: bu sayt botga yozilgan xabarlarni qabul qilyapti.",
     "Бот сейчас не получает сообщения: не запущен планировщик. На сервере он работает сам; на компьютере (Open Server) запустите bot.bat из папки проекта.": "Bot hozir xabarlarni qabul qilmayapti: rejalashtiruvchi ishga tushmagan. Serverda u o‘zi ishlaydi; kompyuterda (Open Server) loyiha papkasidagi bot.bat faylini ishga tushiring.",
     "Бот запускается.": "Bot ishga tushyapti.",
-    "Через несколько секунд он начнёт отвечать в Telegram — ничего запускать вручную не нужно.": "Bir necha soniyadan keyin u Telegramda javob bera boshlaydi — qo‘lda hech narsa ishga tushirish shart emas."
+    "Через несколько секунд он начнёт отвечать в Telegram — ничего запускать вручную не нужно.": "Bir necha soniyadan keyin u Telegramda javob bera boshlaydi — qo‘lda hech narsa ishga tushirish shart emas.",
+    "Ваш Telegram подключён к сайту :s, а он сейчас не на связи. Сообщение выполнится, когда сайт снова откроют (ждёт сутки).": "Telegramingiz :s saytiga ulangan, u hozir aloqada emas. Xabaringiz sayt qayta ochilganda bajariladi (bir sutka kutadi).",
+    "Нет связи с основным сайтом бота: :s": "Botning asosiy sayti bilan aloqa yo‘q: :s",
+    "Основной сайт бота не принял запрос (:c): проверьте адрес и что там тот же бот.": "Botning asosiy sayti so‘rovni qabul qilmadi (:c): manzilni va u yerda aynan shu bot ulanganini tekshiring.",
+    "Код :c не найден. Возьмите свежий код на странице «Мой Telegram» на своём сайте.": ":c kodi topilmadi. Yangi kodni saytingizdagi «Mening Telegramim» sahifasidan oling.",
+    "Бот работает через основной сайт :h. Где нажали «Start» с кодом — с тем аккаунтом бот и работает.": "Bot :h asosiy sayti orqali ishlayapti. «Start» qaysi saytning kodi bilan bosilsa, bot o‘sha akkaunt bilan ishlaydi.",
+    "Нет связи с основным сайтом бота :h. Проверьте адрес в настройках платформы и интернет.": "Botning :h asosiy sayti bilan aloqa yo‘q. Platforma sozlamalaridagi manzilni va internetni tekshiring.",
+    "Это адрес этого же сайта. Укажите адрес основного сайта, где работает бот (например, сервера).": "Bu shu saytning o‘z manzili. Bot ishlayotgan asosiy sayt (masalan, server) manzilini kiriting.",
+    "Основной сайт бота (если этот же бот работает на сервере)": "Botning asosiy sayti (agar shu bot serverda ham ishlasa)",
+    "Только для копии на компьютере с тем же ботом. Сообщения получает основной сайт и передаёт сюда сообщения этого сайта: где нажали «Start» с кодом — с тем аккаунтом бот и работает. Пусто — бот работает только здесь.": "Faqat shu bot ulangan kompyuterdagi nusxa uchun. Xabarlarni asosiy sayt oladi va bu saytga tegishlilarini shu yerga uzatadi: «Start» qaysi saytning kodi bilan bosilsa, bot o‘sha akkaunt bilan ishlaydi. Bo‘sh qolsa — bot faqat shu yerda ishlaydi.",
+    "Бот на связи. Этот же бот работает и на сайте :s: сообщения его сотрудников передаются туда.": "Bot aloqada. Shu bot :s saytida ham ishlayapti: o‘sha sayt xodimlarining xabarlari unga uzatiladi.",
+    "Или укажите в настройках платформы адрес основного сайта бота — тогда один бот будет работать на обоих сайтах.": "Yoki platforma sozlamalarida botning asosiy sayti manzilini kiriting — shunda bitta bot ikkala saytda ham ishlaydi."
 }

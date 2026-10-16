@@ -106,7 +106,8 @@ Artisan::command('oftob:worker {--hours=4}', function (\App\Services\TelegramPol
             $quarter = time();
             $run('oftob:remind');
         }
-        if (\App\Services\TelegramPoller::active() && ! \App\Services\TelegramPoller::yielded()) {
+        // свой бот — слушаем Telegram; бот основного сайта (сервера) — забираем свои сообщения оттуда
+        if (\App\Services\TelegramPoller::active() && (! \App\Services\TelegramPoller::yielded() || \App\Services\TelegramRelay::secondary())) {
             $poller->listen(50);
         } else {
             sleep(30);

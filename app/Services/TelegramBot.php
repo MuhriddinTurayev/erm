@@ -281,6 +281,7 @@ class TelegramBot
             if (! $user->tg_locale && ($l = self::chatLang($chat))) {   // язык уже выбрали до привязки
                 $user->forceFill(['tg_locale' => $l])->save();
             }
+            TelegramRelay::linked($chat, $user->botLocale());   // бот на двух сайтах: Telegram работает с сайтом, где нажали «Start»
             $this->as($user, function () use ($user, $chat) {
                 $this->say($chat, '✅ '.__('Telegram привязан: :n', ['n' => e($user->name)]));
                 $this->askLang($chat, 'help');
@@ -353,8 +354,12 @@ class TelegramBot
     private function badCode(string $chat, string $code): void
     {
         $u = User::where('telegram_chat_id', $chat)->where('is_active', true)->first();
-        $this->as($u, fn () => $this->say($chat, '❌ '.__('Код :c не найден. Возьмите свежий код на странице «Мой Telegram» на сайте :s — этот бот работает с ним.',
-            ['c' => '<code>'.e(mb_substr($code, 0, 40)).'</code>', 's' => url('/me/telegram')])), $u ? null : self::chatLang($chat));
+        $c = '<code>'.e(mb_substr($code, 0, 40)).'</code>';
+        // второй сайт получает только коды, которых нет на основном — значит, кода нет нигде: адрес сайта не подскажешь
+        $this->as($u, fn () => $this->say($chat, '❌ '.(TelegramRelay::secondary()
+            ? __('Код :c не найден. Возьмите свежий код на странице «Мой Telegram» на своём сайте.', ['c' => $c])
+            : __('Код :c не найден. Возьмите свежий код на странице «Мой Telegram» на сайте :s — этот бот работает с ним.', ['c' => $c, 's' => url('/me/telegram')]))),
+            $u ? null : self::chatLang($chat));
     }
 
     private function hello(string $chat): void
