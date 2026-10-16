@@ -9,6 +9,7 @@
 @if ($u->canEdit())<button class="btn btn-p btn-s" data-open="dlg-sr">{!! ic('plus') !!}{{ __('Заявка на материалы') }}</button>@endif
 @endsection
 @section('content')
+@include('partials.tg-connect', ['roles' => ['admin', 'accountant']])
 <div class="chips" style="margin-bottom:14px">
   <a class="chip {{ ! $st ? 'on' : '' }}" href="/company/supply">{{ __('Все') }}</a>
   @foreach ($stl as $k => $v)<a class="chip {{ $st === $k ? 'on' : '' }}" href="?status={{ $k }}">{{ __($v) }}<span class="n">{{ $counts[$k] ?? 0 }}</span></a>@endforeach

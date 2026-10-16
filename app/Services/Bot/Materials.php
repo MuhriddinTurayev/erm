@@ -477,7 +477,7 @@ class Materials
         $need = $c['need'] !== null ? $this->ws->localNow()->addDays((int) $c['need'])->toDateString() : null;
         $this->cartPut(['pid' => $pid, 'items' => [], 'need' => null, 'urgent' => false, 'note' => '', 'photos' => []]);   // повторное нажатие не создаст вторую заявку
         $sr = Supply::create($this->ws, $this->u, $pid, $lines, $need, $c['note'] ?: null, 'telegram', ['urgent' => $c['urgent'], 'photos' => $photos]);
-        $this->out(Supply::card($sr)."\n\n".($sr->status === 'new' ? '⏳ '.__('Отправлено на согласование. Каждый шаг придёт сюда.') : '✅ '.__('Заявка согласована — снабжение получит её сразу.')),
+        $this->out(Supply::card($sr)."\n\n".Supply::sentNote($sr),
             [[['text' => '📦 '.__('Мои заявки'), 'data' => 'm:o'], ['text' => '🧱 '.__('Материалы'), 'data' => 'm:h']]], $mid);
     }
 

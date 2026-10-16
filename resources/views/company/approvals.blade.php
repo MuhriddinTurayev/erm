@@ -1,6 +1,7 @@
 @extends('layouts.panel')
 @section('title', __('Согласование расходов'))
 @section('content')
+@include('partials.tg-connect', ['roles' => ['admin']])
 @php $cur = \App\Services\CompanyStats::currency($ws); $admin = auth()->user()->isAdmin(); @endphp
 <div class="alert alert-info">{!! ic('shield-check') !!}<div>
   @if ($ws->approval_limit > 0)

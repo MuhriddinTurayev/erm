@@ -543,7 +543,10 @@ class TelegramBot
                 $receipt = $this->move($receipt, "receipts/{$ws->id}");
             }
             $e = $this->expenses->create($ws, $user, $pid, ['amount' => $d['amount'], 'desc' => $d['desc'] ?? '', 'who' => $d['who'] ?? '', 'date' => $d['date'] ?? null], 'telegram', $receipt);
-            $note = $e->status === 'pending' ? "\n\n⏳ ".__('Сумма больше :l — отправлено руководителю на согласование.', ['l' => CompanyStats::money($ws->approval_limit)]) : '';
+            $note = $e->status === 'pending' ? "\n\n⏳ ".__('Сумма больше :l — отправлено руководителю на согласование.', ['l' => CompanyStats::money($ws->approval_limit)])
+                // у руководителя нет Telegram — кнопки согласования ему не придут, он увидит расход на сайте
+                .($ws->users()->where('role', 'admin')->where('is_active', true)->whereNotNull('telegram_chat_id')->exists() ? ''
+                    : ' '.__('У руководителя не подключён Telegram — он увидит расход на сайте, в разделе «Согласование расходов».')) : '';
             $this->say($chat, ExpenseService::card($e, $ws).$note, [[['text' => '🏷 '.__('Изменить статью'), 'data' => 'cat:'.$e->id]]]);
 
             return;
@@ -551,7 +554,7 @@ class TelegramBot
         if ($action['do'] === 'supply') {
             $d = (array) $action['draft'];
             $sr = Supply::create($ws, $user, $pid, (array) $d['lines'], $d['need_by'] ?? null, ($d['note'] ?? '') ?: null, 'telegram');
-            $this->say($chat, Supply::card($sr)."\n\n".($sr->status === 'new' ? '⏳ '.__('Отправлено на согласование. Ответ придёт сюда.') : '✅ '.__('Заявка согласована — снабжение получит её сразу.')));
+            $this->say($chat, Supply::card($sr)."\n\n".Supply::sentNote($sr));
 
             return;
         }

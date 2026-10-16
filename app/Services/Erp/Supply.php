@@ -308,6 +308,21 @@ class Supply
         return $ws->users()->whereIn('role', ['admin', 'accountant'])->where('is_active', true)->whereNotNull('telegram_chat_id')->get();
     }
 
+    /**
+     * Ответ автору заявки после отправки. Если ни у руководителя, ни у бухгалтера не подключён Telegram,
+     * так и говорим: заявку увидят на сайте — а не молча ждём согласования, которое в Telegram не придёт.
+     */
+    public static function sentNote(SupplyRequest $sr): string
+    {
+        if ($sr->status !== 'new') {
+            return '✅ '.__('Заявка согласована — снабжение получит её сразу.');
+        }
+
+        return self::deciders(Workspace::find($sr->workspace_id))->isNotEmpty()
+            ? '⏳ '.__('Отправлено на согласование руководителю в Telegram. Каждый шаг придёт сюда.')
+            : '⏳ '.__('Отправлено на согласование. У руководителя не подключён Telegram — он увидит заявку на сайте, в разделе «Заявки на материалы». Ответ придёт сюда.');
+    }
+
     /** Руководителю и бухгалтеру: новая заявка — кнопки «Согласовать / Отклонить» прямо в Telegram */
     private static function askApproval(SupplyRequest $sr): void
     {
