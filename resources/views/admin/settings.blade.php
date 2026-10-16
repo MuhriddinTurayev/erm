@@ -26,6 +26,18 @@
       <label class="field wide"><span>{{ __('Токен бота') }}</span><input type="password" name="telegram_token" autocomplete="off" placeholder="{{ $hasToken ? __('сохранён — оставьте пустым, чтобы не менять') : '123456:ABC-DEF…' }}"></label>
       @if ($hasToken)<label class="check wide"><input type="checkbox" name="telegram_clear" value="1"> {{ __('Отключить бота') }}</label>@endif
     </div>
+    @if ($hasToken && $tgPoll)
+      @if ($tgShared)
+      <div class="alert alert-warn mt" style="margin-bottom:0">{!! ic('triangle-alert') !!}<div>
+        <b>{{ __('Этот бот работает ещё на одном сайте.') }}</b>
+        {{ __('Telegram отдаёт каждое сообщение только одному сайту, поэтому коды привязки и сообщения сотрудников теряются между ними. Каждому сайту нужен свой бот: для копии на компьютере создайте отдельного тестового бота у @BotFather и вставьте его токен здесь, на компьютере.') }}
+      </div></div>
+      @elseif ($tgListening)
+      <div class="alert alert-ok mt" style="margin-bottom:0">{!! ic('circle-check') !!}<div>{{ __('Бот на связи: этот сайт получает сообщения боту.') }}</div></div>
+      @else
+      <div class="alert alert-warn mt" style="margin-bottom:0">{!! ic('triangle-alert') !!}<div>{{ __('Бот сейчас не получает сообщения: не запущен планировщик. На сервере он работает сам; на компьютере (Open Server) запустите bot.bat из папки проекта.') }}</div></div>
+      @endif
+    @endif
   </div>
 </div>
 <div class="card mt">

@@ -35,7 +35,16 @@ class TelegramPoller
         try {
             $offset = (int) PlatformSetting::get('telegram_offset', '0');
             $n = 0;
-            foreach (Telegram::updates($offset, $timeout) as $u) {
+            try {
+                $updates = Telegram::updates($offset, $timeout);
+            } catch (\RuntimeException $e) {
+                // «Conflict: terminated by other getUpdates request» — тот же бот опрашивает другой сайт (сервер или компьютер)
+                if (str_contains($e->getMessage(), 'Conflict')) {
+                    Cache::put('tg-conflict-at', time(), 86400);
+                }
+                throw $e;
+            }
+            foreach ($updates as $u) {
                 $offset = max($offset, (int) $u['update_id'] + 1);
                 PlatformSetting::put('telegram_offset', (string) $offset);   // сразу, чтобы не обработать дважды
                 if (TelegramBot::firstTime($u)) {
@@ -57,6 +66,15 @@ class TelegramPoller
     public static function listening(): bool
     {
         return (int) Cache::get('tg-listen-at', 0) > time() - 180;
+    }
+
+    /**
+     * Тот же бот недавно получал сообщения ещё и на другом сайте. Telegram отдаёт каждое сообщение только одному
+     * получателю, поэтому часть сообщений (и коды привязки) уходит туда.
+     */
+    public static function shared(): bool
+    {
+        return (int) Cache::get('tg-conflict-at', 0) > time() - 900;
     }
 
     /** Слушать ~$seconds секунд (для запуска планировщиком каждую минуту) */

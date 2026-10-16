@@ -60,7 +60,15 @@ class TelegramBot
         $chat = (string) $m['chat']['id'];
         $text = trim((string) (($m['text'] ?? '') !== '' ? $m['text'] : ($m['caption'] ?? '')));
 
-        if (preg_match('/^\/start(?:\s+(\S+))?/u', $text, $mm) && ! empty($mm[1]) && $this->link($chat, $mm[1], $m)) {
+        // код привязки: «/start КОД» по ссылке или сам код текстом (как на странице «Мой Telegram» — 8 заглавных букв и цифр).
+        // Уже привязанный Telegram тоже можно перепривязать кодом; код — не запись в журнал работ.
+        $code = preg_match('/^\/start\s+(\S+)/u', $text, $mm) ? $mm[1] : (preg_match('/^[A-Z0-9]{8}$/', $text) ? $text : null);
+        if ($code !== null) {
+            if ($this->link($chat, $code, $m)) {
+                return;
+            }
+            $this->badCode($chat, $code);
+
             return;
         }
         $user = User::where('telegram_chat_id', $chat)->where('is_active', true)->whereNotNull('workspace_id')->first();
@@ -341,6 +349,14 @@ class TelegramBot
     }
 
     /** Чат ещё не привязан к сотруднику */
+    /** Код не найден: устарел или взят на другом сайте (бот работает только с одним сайтом) */
+    private function badCode(string $chat, string $code): void
+    {
+        $u = User::where('telegram_chat_id', $chat)->where('is_active', true)->first();
+        $this->as($u, fn () => $this->say($chat, '❌ '.__('Код :c не найден. Возьмите свежий код на странице «Мой Telegram» на сайте :s — этот бот работает с ним.',
+            ['c' => '<code>'.e(mb_substr($code, 0, 40)).'</code>', 's' => url('/me/telegram')])), $u ? null : self::chatLang($chat));
+    }
+
     private function hello(string $chat): void
     {
         $this->say($chat, '👋 '.__('Здравствуйте! Чтобы работать с ботом, привяжите Telegram на сайте: меню пользователя → «Telegram».')."\n".url('/me/telegram'));

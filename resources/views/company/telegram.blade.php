@@ -5,6 +5,13 @@
   <div class="card">
     <div class="card-h"><h3>{!! ic('send') !!}{{ __('Подключение') }}</h3>
       @if ($u->telegram_chat_id)<span class="badge b-ok">{{ __('подключён') }}</span>@else<span class="badge b-warn">{{ __('не подключён') }}</span>@endif</div>
+    @if ($shared && $enabled && $bot)
+      <div class="alert alert-warn">{!! ic('triangle-alert') !!}<div>
+        <b>{{ __('Этот бот работает ещё на одном сайте.') }}</b>
+        {{ __('Telegram отдаёт каждое сообщение только одному сайту, поэтому код привязки и сообщения могут уходить туда (например, на сервер), а не сюда.') }}
+        {{ $u->role === 'superadmin' ? __('Каждому сайту нужен свой бот: для копии на компьютере создайте отдельного бота у @BotFather и укажите его токен в настройках платформы.') : __('Подключайте Telegram на основном сайте компании или сообщите администратору платформы.') }}
+      </div></div>
+    @endif
     @if (! $enabled || ! $bot)
       <div class="alert alert-warn" style="margin:0">{!! ic('triangle-alert') !!}<div>{{ __('Telegram-бот ещё не настроен администратором платформы.') }}</div></div>
     @elseif ($u->telegram_chat_id)

@@ -17,6 +17,10 @@ class SettingsController extends Controller
         return view('admin.settings', [
             'v' => fn ($k) => PlatformSetting::get($k),
             'hasToken' => Telegram::enabled(),
+            // получает ли этот сайт сообщения бота и не забирает ли их другой сайт с тем же ботом
+            'tgPoll' => \App\Services\TelegramPoller::active(),
+            'tgListening' => \App\Services\TelegramPoller::listening(),
+            'tgShared' => \App\Services\TelegramPoller::shared(),
             'plans' => Plan::orderBy('sort')->get(),
         ]);
     }
@@ -49,6 +53,11 @@ class SettingsController extends Controller
         if ($request->boolean('telegram_clear')) {
             $d['telegram_token'] = '';
             $d['telegram_bot'] = '';
+        }
+        // другой бот — свой счёт сообщений: старое смещение у нового бота пропустило бы (и удалило) его сообщения
+        if (array_key_exists('telegram_token', $d) && $d['telegram_token'] !== Telegram::token()) {
+            $d['telegram_offset'] = '0';
+            \Illuminate\Support\Facades\Cache::forget('tg-conflict-at');
         }
         foreach ($d as $k => $v) {
             PlatformSetting::put($k, $v === null ? '' : (string) $v);

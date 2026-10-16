@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\Telegram;
 use App\Services\TelegramBot;
+use App\Services\TelegramPoller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -36,7 +37,9 @@ class TelegramController extends Controller
             'bot' => \App\Models\PlatformSetting::get('telegram_bot'),
             'enabled' => Telegram::enabled(),
             // бот без вебхука, а сообщения никто не забирает (не запущен планировщик) — он не отвечает
-            'deaf' => \App\Services\TelegramPoller::active() && ! \App\Services\TelegramPoller::listening(),
+            'deaf' => TelegramPoller::active() && ! TelegramPoller::listening(),
+            // тот же бот получает сообщения ещё и на другом сайте — коды и сообщения могут уходить туда
+            'shared' => TelegramPoller::active() && TelegramPoller::shared(),
         ]);
     }
 
@@ -48,19 +51,25 @@ class TelegramController extends Controller
     }
 
     /** Проверить привязку сразу (если бот работает без вебхука) */
-    public function check(Request $request, \App\Services\TelegramPoller $poller)
+    public function check(Request $request, TelegramPoller $poller)
     {
+        $conflict = false;
         try {
-            $poller->once(0);
-        } catch (\Throwable) {
+            // несколько секунд слушаем: если тот же бот опрашивает другой сайт, Telegram сразу ответит «Conflict»
+            $poller->once($request->boolean('pull') ? 0 : 3);
+        } catch (\Throwable $e) {
+            $conflict = str_contains($e->getMessage(), 'Conflict');
         }
 
         if ($request->boolean('pull')) {   // «Получить сообщения сейчас» — бот ответит на то, что ему уже написали
             return back()->with('ok', __('Сообщения боту получены — ответы уже в Telegram'));
         }
+        if ($request->user()->fresh()->telegram_chat_id) {
+            return back()->with('ok', __('Telegram привязан'));
+        }
 
-        return $request->user()->fresh()->telegram_chat_id
-            ? back()->with('ok', __('Telegram привязан'))
-            : back()->withErrors(['tg' => __('Бот ещё не получил код. Откройте бота по ссылке, нажмите «Start» и проверьте снова.')]);
+        return back()->withErrors(['tg' => $conflict || TelegramPoller::shared()
+            ? __('Код сюда не дошёл: этот бот сейчас работает и на другом сайте (например, на сервере), и Telegram отдаёт сообщения ему. Подключите Telegram на том сайте или дайте этому сайту отдельного бота.')
+            : __('Бот ещё не получил код. Откройте бота по ссылке, нажмите «Start» и проверьте снова.')]);
     }
 }
