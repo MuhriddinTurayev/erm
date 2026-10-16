@@ -269,7 +269,8 @@ document.addEventListener('click', e => {
   }
   if (e.target.closest('[data-close]')) { e.target.closest('dialog').close(); return; }
   if (e.target.tagName === 'DIALOG') e.target.close();
-  const r = e.target.closest('tr[data-href]'); if (r && !e.target.closest('a,button,input,form,label')) location.href = r.dataset.href;
+  // строка таблицы — ссылка; кроме кнопок, галочек и полей в ней (таблица может стоять внутри формы — как «Заявки на оплату»)
+  const r = e.target.closest('tr[data-href]'); if (r && !e.target.closest('a,button,input,select,textarea,label,summary')) location.href = r.dataset.href;
 });
 // отметить все
 document.addEventListener('change', e => { if (e.target.matches('[data-all]')) document.querySelectorAll(e.target.dataset.all).forEach(c => c.checked = e.target.checked); });
