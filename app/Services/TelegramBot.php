@@ -65,7 +65,7 @@ class TelegramBot
 
         // код привязки: «/start КОД» по ссылке или сам код текстом (как на странице «Мой Telegram» — 8 заглавных букв и цифр).
         // Уже привязанный Telegram тоже можно перепривязать кодом; код — не запись в журнал работ.
-        $code = preg_match('/^\/start\s+(\S+)/u', $text, $mm) ? $mm[1] : (preg_match('/^[A-Z0-9]{8}$/', $text) ? $text : null);
+        $code = TelegramRelay::textCode($text);
         if ($code !== null) {
             if ($this->link($chat, $code, $m)) {
                 return;
@@ -404,6 +404,7 @@ class TelegramBot
                 $chats[] = $chat;
             }
             $ws->forceFill(['report_chats' => implode(',', $chats), 'report_link_code' => strtoupper(Str::random(6))])->save();
+            $ws->putSetting('report_linked_at', now()->toIso8601String());   // кнопка «Проверить» на сайте увидит, что только что подключили
             $this->as(null, fn () => $this->say($chat, '✅ '.__('Telegram подключён. Ежедневный отчёт компании «:c» будет приходить сюда.', ['c' => e($ws->name)])), $ws->locale);
 
             return true;
@@ -462,6 +463,12 @@ class TelegramBot
     private function badCode(string $chat, string $code): void
     {
         $u = User::where('telegram_chat_id', $chat)->where('is_active', true)->first();
+        // старый код отчёта (после подключения код меняется), а этот Telegram уже получает отчёт — так и скажем
+        if (strlen($code) === 6 && ($ws = Workspace::where('report_chats', 'like', '%'.$chat.'%')->get()->first(fn ($w) => in_array($chat, explode(',', (string) $w->report_chats), true)))) {
+            $this->as($u, fn () => $this->say($chat, '✅ '.__('Этот Telegram уже подключён к ежедневному отчёту компании «:c». Код больше не нужен.', ['c' => e($ws->name)])), $u ? null : ($ws->locale ?: self::chatLang($chat)));
+
+            return;
+        }
         $c = '<code>'.e(mb_substr($code, 0, 40)).'</code>';
         // второй сайт получает только коды, которых нет на основном — значит, кода нет нигде: адрес сайта не подскажешь
         $this->as($u, fn () => $this->say($chat, '❌ '.(TelegramRelay::secondary()

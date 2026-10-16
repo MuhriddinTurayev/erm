@@ -62,12 +62,18 @@ class SettingsController extends Controller
         } catch (\Throwable $e) {
             return back()->withErrors(['tg' => $e->getMessage()]);
         }
-        $after = (string) $this->ws()->fresh()->report_chats;
-        if ($after === $before) {
-            return back()->withErrors(['tg' => __('Сообщение с кодом не найдено. Отправьте боту код и нажмите ещё раз.')]);
+        $ws = $this->ws()->fresh();
+        $after = (string) $ws->report_chats;
+        // бот привязывает чат сам, как только получил «/start КОД» — часто ещё до нажатия этой кнопки
+        $recent = ($at = $ws->setting('report_linked_at')) && \Illuminate\Support\Carbon::parse($at)->gt(now()->subMinutes(15));
+        if ($after !== $before || ($after !== '' && $recent)) {
+            return back()->with('ok', __('Telegram подключён.'));
+        }
+        if ($after !== '') {
+            return back()->with('ok', __('Подключено чатов: :n. Чтобы добавить ещё один Telegram, откройте бота по ссылке с его телефона.', ['n' => count(array_filter(explode(',', $after)))]));
         }
 
-        return back()->with('ok', __('Telegram подключён.'));
+        return back()->withErrors(['tg' => __('Сообщение с кодом не найдено. Отправьте боту код и нажмите ещё раз.')]);
     }
 
     /** Права ролей на разделы ERP */

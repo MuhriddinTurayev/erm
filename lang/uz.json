@@ -4830,5 +4830,7 @@
     "Начать смену — кнопкой внизу: она отправит ваше местоположение.": "Smenani boshlash — pastdagi tugma bilan: u joylashuvingizni yuboradi.",
     "Ушёл — отправить местоположение": "Ketdim — joylashuvni yuborish",
     "Пришёл — отправить местоположение": "Keldim — joylashuvni yuborish",
-    "Указать, куда отправлять": "Qayerga yuborishni ko‘rsatish"
+    "Указать, куда отправлять": "Qayerga yuborishni ko‘rsatish",
+    "Этот Telegram уже подключён к ежедневному отчёту компании «:c». Код больше не нужен.": "Bu Telegram «:c» kompaniyasining kunlik hisobotiga allaqachon ulangan. Kod endi kerak emas.",
+    "Подключено чатов: :n. Чтобы добавить ещё один Telegram, откройте бота по ссылке с его телефона.": "Ulangan chatlar: :n. Yana bitta Telegram qo‘shish uchun botni havola orqali o‘sha odamning telefonidan oching."
 }

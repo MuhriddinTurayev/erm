@@ -51,15 +51,27 @@ class TelegramRelay
         return $c && ($c['type'] ?? '') === 'private' ? (string) $c['id'] : null;
     }
 
-    /** Код привязки в сообщении: «/start КОД» по ссылке или сам код (8 заглавных букв и цифр) */
+    /** Код привязки в сообщении: «/start КОД» по ссылке или сам код текстом */
     public static function codeOf(array $u): ?string
     {
-        $t = trim((string) ($u['message']['text'] ?? ''));
+        return self::textCode((string) ($u['message']['text'] ?? ''));
+    }
+
+    /**
+     * Код в тексте: «/start КОД», код сотрудника (8 заглавных букв и цифр) или код отчёта руководителю (6 знаков —
+     * с цифрой или действующий; слово заглавными вроде «SEMENT» кодом не считаем — это запись в журнал).
+     */
+    public static function textCode(string $t): ?string
+    {
+        $t = trim($t);
         if (preg_match('/^\/start\s+(\S+)/u', $t, $m)) {
             return $m[1];
         }
+        if (preg_match('/^[A-Z0-9]{8}$/', $t)) {
+            return $t;
+        }
 
-        return preg_match('/^[A-Z0-9]{8}$/', $t) ? $t : null;
+        return preg_match('/^[A-Z0-9]{6}$/', $t) && (preg_match('/\d/', $t) || Workspace::where('report_link_code', $t)->exists()) ? $t : null;
     }
 
     /** Код выдан на этом сайте */
