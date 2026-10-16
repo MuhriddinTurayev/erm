@@ -32,7 +32,7 @@ class Spec
                 ['object', 'path', 'string', 'id объекта', true], ['apartment', 'path', 'string', 'id квартиры', true],
                 ['status', 'body', 'string', 'free | booked | sold | reserve', false], ['buyer_name', 'body', 'string', 'Покупатель (обязателен для booked и sold)', false],
                 ['buyer_phone', 'body', 'string', 'Телефон покупателя', false], ['price', 'body', 'number', 'Цена квартиры', false],
-                ['plan', 'body', 'string', 'Условия оплаты — как в программе: «Полная оплата», «Рассрочка 6 мес» (12, 24, 36), «Ипотека»', false], ['note', 'body', 'string', 'Заметка', false]]],
+                ['plan', 'body', 'string', 'Условия оплаты — из справочника компании или свои; число в названии — месяцев рассрочки', false], ['note', 'body', 'string', 'Заметка', false]]],
             ['GET', '/sales/payments', 'sales:read', 'Оплаты покупателей по квартирам за период', [
                 ['object', 'query', 'string', 'id объекта (без него — все объекты)', false], ['from', 'query', 'string', 'С даты (YYYY-MM-DD)', false], ['to', 'query', 'string', 'По дату (YYYY-MM-DD)', false]]],
 

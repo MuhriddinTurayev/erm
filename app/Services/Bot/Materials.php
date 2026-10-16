@@ -198,7 +198,11 @@ class Materials
         return $this->u->canEdit() && $this->u->canModule('warehouse');
     }
 
-    private const NEW_UNITS = ['л', 'кг', 'т', 'шт', 'мешок', 'м', 'м²', 'м³', 'пачка'];
+    /** Единицы для нового материала — справочник компании (Настройки → Справочники), не больше 12 кнопок */
+    private function units(): array
+    {
+        return array_slice(\App\Services\Lists::get($this->ws, 'units'), 0, 12);
+    }
     /** Группа склада для раздела бота (по ней материал и попадёт в свой раздел, если название не подскажет) */
     private const CAT_GROUP = ['fuel' => 'Топливо', 'cement' => 'Цемент и смеси', 'metal' => 'Металл', 'brick' => 'Стеновые', 'sand' => 'Сыпучие',
         'wood' => 'Древесина', 'electric' => 'Электрика', 'plumbing' => 'Сантехника', 'other' => null];
@@ -228,7 +232,7 @@ class Materials
             return;
         }
         $this->flow(['k' => 'newunit', 'cat' => $cat, 'name' => $name]);
-        $rows = array_chunk(array_map(fn ($u, $i) => ['text' => Supply::unit($u), 'data' => 'm:nu:'.$i], self::NEW_UNITS, array_keys(self::NEW_UNITS)), 3);
+        $rows = array_chunk(array_map(fn ($u, $i) => ['text' => Supply::unit($u), 'data' => 'm:nu:'.$i], $this->units(), array_keys($this->units())), 3);
         $rows[] = [['text' => '✖ '.__('Отмена'), 'data' => 'm:h']];
         $this->out('➕ <b>'.e($name).'</b>'."\n".__('В чём считаем?'), $rows, $mid);
     }
@@ -237,14 +241,14 @@ class Materials
     public function newItemUnit(int $i, ?int $mid): void
     {
         $f = (array) (((array) ($this->u->tg_state ?? []))['flow'] ?? []);
-        if (($f['k'] ?? '') !== 'newunit' || ! $this->canAdd() || ! isset(self::NEW_UNITS[$i])) {
+        if (($f['k'] ?? '') !== 'newunit' || ! $this->canAdd() || ! isset($this->units()[$i])) {
             $this->home($mid);
 
             return;
         }
         $name = (string) $f['name'];
         $item = Item::of($this->ws->id)->whereRaw('lower(name) = ?', [mb_strtolower($name)])->first()
-            ?? Item::create(['workspace_id' => $this->ws->id, 'name' => $name, 'unit' => self::NEW_UNITS[$i], 'group' => self::CAT_GROUP[$f['cat'] ?? 'other'] ?? null, 'min_qty' => 0, 'price' => 0]);
+            ?? Item::create(['workspace_id' => $this->ws->id, 'name' => $name, 'unit' => $this->units()[$i], 'group' => self::CAT_GROUP[$f['cat'] ?? 'other'] ?? null, 'min_qty' => 0, 'price' => 0]);
         \App\Models\AuditLog::create(['workspace_id' => $this->ws->id, 'user_id' => $this->u->id, 'action' => 'stock.add', 'summary' => 'Новый материал (Telegram): '.$item->name.', '.$item->unit]);
         $this->flow(null);
         $this->item($item->id, $mid, __('Материал добавлен в справочник').': '.e($item->name));

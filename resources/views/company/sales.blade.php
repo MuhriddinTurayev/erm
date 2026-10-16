@@ -103,7 +103,7 @@
         <label class="field"><span>{{ __('Цена') }}, {{ __($cur) }}</span><input type="number" name="price" min="0" step="any"></label>
         <label class="field full"><span>{{ __('Покупатель (ФИО)') }}</span><input name="buyer" maxlength="120"></label>
         <label class="field"><span>{{ __('Телефон') }}</span><input name="phone" maxlength="40" placeholder="+998"></label>
-        <label class="field"><span>{{ __('Условия оплаты') }}</span><select name="plan"><option value="">—</option>@foreach ($PL as $x)<option value="{{ $x }}">{{ __($x) }}</option>@endforeach</select></label>
+        <label class="field"><span>{{ __('Условия оплаты') }}</span><select name="plan" data-free="{{ __('Своё условие оплаты (число — месяцев рассрочки)') }}"><option value="">—</option>@foreach ($lists['pay_plans'] as $x)<option value="{{ $x }}">{{ __($x) }}</option>@endforeach<option value="__other">✎ {{ __('Своё…') }}</option></select></label>
         <label class="field full"><span>{{ __('Примечание') }}</span><input name="note" maxlength="300"></label>
         @if ($canSell)<div class="full"><button class="btn btn-p">{!! ic('check') !!}{{ __('Сохранить') }}</button></div>@endif
       </form>
@@ -115,7 +115,7 @@
         <form method="post" id="ap-pay" class="flex mt" style="flex-wrap:wrap">@csrf
           <input class="input" type="date" name="date" value="{{ $ws->localNow()->toDateString() }}" style="width:150px">
           <input class="input" type="number" name="amount" min="1" step="any" placeholder="{{ __('Сумма') }}" style="width:150px" required>
-          <select class="input" name="way" style="width:auto"><option value="">{{ __('Способ') }}</option>@foreach (['Наличные', 'Перечисление', 'Карта', 'Click', 'Payme'] as $w)<option value="{{ $w }}">{{ __($w) }}</option>@endforeach</select>
+          <select class="input" name="way" style="width:auto" data-free="{{ __('Свой способ оплаты') }}"><option value="">{{ __('Способ') }}</option>@foreach ($lists['pay_methods'] as $w)<option value="{{ $w }}">{{ __($w) }}</option>@endforeach<option value="__other">✎ {{ __('Своё…') }}</option></select>
           <button class="btn btn-p btn-s">{!! ic('plus') !!}{{ __('Принять оплату') }}</button>
         </form>
         <small class="muted">{{ __('Оплата сразу попадает в бухгалтерию объекта как поступление.') }}</small>
@@ -145,7 +145,7 @@
     document.getElementById('ap-sub').innerHTML = `<span>${esc(a.sec)}, ${T.fl} <b>${a.floor}</b></span>${a.typeName ? `<span>${esc(a.typeName)}</span>` : ''}<span><b>${a.area}</b> ${T.m2}</span><span><b>${m(a.price)}</b> (${m(a.price / a.area)}/${T.m2})</span><span class="st st-${a.status}">${esc(ST[a.status])}</span>`
       + (planImg ? `<a class="ap-plan" href="/company/media/${planImg.id}/file" target="_blank" title="${esc(T.plan)}"><img src="/company/media/${planImg.id}/file" alt="${esc(T.plan)}" loading="lazy"></a>` : '');
     const f = document.getElementById('ap-form'); f.action = `/company/sales/${PID}/apt/${a.id}`;
-    f.status.value = a.status; f.price.value = Math.round(a.price); f.buyer.value = a.buyer; f.phone.value = a.phone; f.plan.value = a.plan; f.note.value = a.note;
+    f.status.value = a.status; f.price.value = Math.round(a.price); f.buyer.value = a.buyer; f.phone.value = a.phone; ensureOpt(f.plan, a.plan); f.note.value = a.note;
     const pct = a.price ? Math.min(100, a.paid / a.price * 100) : 0;
     document.getElementById('ap-paid').textContent = `${m(a.paid)} / ${m(a.price)}`; document.getElementById('ap-bar').style.width = pct + '%';
     document.getElementById('ap-next').innerHTML = (a.overdue > 0 ? `<b class="out-c">${T.od}: ${m(a.overdue)}</b> · ` : '') + (a.next ? `${T.next}: <b>${m(a.next.amount)}</b> — ${a.next.date.split('-').reverse().join('.')}` : '');

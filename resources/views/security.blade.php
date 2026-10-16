@@ -43,7 +43,8 @@
         <td>{!! ic($e->kind, '', 15) !!} {{ $e->browser }} · {{ $e->os }}
           @if ($thisDevice && $e->device === $thisDevice)<span class="badge b-ok">{{ __('это устройство') }}</span>@elseif ($e->new_device && $e->created_at?->gt(now()->subDays(14)))<span class="badge b-warn">{{ __('новое устройство') }}</span>@endif
           <br><small class="muted">{{ __('впервые') }}: {{ $e->created_at?->format('d.m.Y H:i') }}</small></td>
-        <td>{{ $e->ip }}</td><td>{{ $methods[$e->method] ?? $e->method }}</td></tr>
+        <td>{{ $e->ip }}@php $other = array_values(array_filter((array) $e->ips, fn ($x) => ($x[0] ?? null) !== $e->ip)); @endphp
+          @if ($other)<br><small class="muted" title="@foreach ($other as $x){{ $x[0] }} — {{ \Illuminate\Support\Carbon::parse($x[1])->timezone(config('app.timezone'))->format('d.m.Y H:i') }}&#10;@endforeach">{{ __('ещё с IP') }}: {{ implode(', ', array_slice(array_column($other, 0), 0, 3)) }}{{ count($other) > 3 ? ' +'.(count($other) - 3) : '' }}</small>@endif</td><td>{{ $methods[$e->method] ?? $e->method }}</td></tr>
     @endforeach
     </tbody></table></div>
     @else<div class="empty">{{ __('История появится после следующего входа') }}</div>@endif

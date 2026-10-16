@@ -25,6 +25,15 @@ const STAGE_DEF = [
   ['Благоустройство территории', 480, 60],
   ['Ввод в эксплуатацию', 540, 30],
 ];
+/* Справочники компании (Настройки → Справочники). Без сервера — стандартные. В списках есть «✎ Своё…» — можно вписать своё значение */
+const LISTS = Object.assign({
+  pay_methods: ['Наличные', 'Банковская карта', 'Перевод на счёт', 'Click', 'Payme', 'Uzum'],
+  pay_plans: ['Полная оплата', 'Рассрочка 6 мес', 'Рассрочка 12 мес', 'Рассрочка 24 мес', 'Рассрочка 36 мес', 'Ипотека'],
+  lead_sources: ['Instagram', 'Facebook', 'WhatsApp', 'Telegram', 'OLX', 'Сайт', 'Звонок', 'Офис продаж', 'Рекомендация', 'Баннер / реклама'],
+  units: ['шт', 'кг', 'т', 'л', 'м', 'м²', 'м³', 'мешок', 'пачка', 'рулон', 'лист', 'комплект'],
+}, (window.OFTOB && window.OFTOB.lists) || {});
+// варианты списка + значение, вписанное раньше (его может не быть в справочнике) + «✎ Своё…»
+const optsFree = (list, sel) => opts(sel && !list.includes(sel) ? [...list, sel] : list, sel) + '<option value="__other">✎ Своё…</option>';
 function defaultStages(start) { return STAGE_DEF.map(([name, off, dur]) => ({ id: uid(), name, start: addDays(start, off), dur, progress: 0, resp: '' })); }
 
 function newProject(name, start) {
@@ -63,7 +72,7 @@ function draftNotice(p, page) {
   if (!isDraft(p) || !DRAFT_PAGES.has(page)) return '';
   const b = p.b;
   return `<div class="draft-note"><div class="dn-t">📐 <b>${T('Это расчёт по образцу дома, а не ваши данные')}</b></div>
-    <div class="dn-s">${T('Образец программы')}: ${b.floors} ${T('эт.')} · ${b.length}×${b.width} ${T('м')} · ${T('подъездов')}: ${b.sections} · ${T('квартир на этаже')}: ${b.aptsPerFloor}.
+    <div class="dn-s">${T('Образец программы')}: ${T('этажей')} ${b.floors} · ${b.length}×${b.width} ${T('метров')} · ${T('подъездов')}: ${b.sections} · ${T('квартир на этаже')}: ${b.aptsPerFloor}.
     ${T('Смета, материалы, котлован, бригады, квартиры и 3D посчитаны для него. Это план «сколько понадобится», а не деньги в кассе и не остатки на складе.')}</div>
     <div class="dn-a">${page !== 'project' ? `<button class="btn-p btn-s" data-act="go" data-page="project">${T('Ввести параметры своего дома')}</button>` : ''}<button class="btn-s" data-act="draftOk">${T('Параметры верны')}</button></div></div>`;
 }

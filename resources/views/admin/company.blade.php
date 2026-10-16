@@ -45,7 +45,7 @@
       <label class="field"><span>{{ __('Тариф') }}</span><select name="plan_id" id="payPlan">@foreach ($plans as $p)<option value="{{ $p->id }}" data-m="{{ $p->price_month }}" data-y="{{ $p->price_year }}" @selected($pp?->id === $p->id)>{{ $p->title() }}</option>@endforeach</select></label>
       <label class="field"><span>{{ __('Месяцев') }}</span><input type="number" name="months" id="payMonths" value="{{ $mm }}" min="1" max="36" required></label>
       <label class="field"><span>{{ __('Сумма') }}</span><input type="number" name="amount" id="payAmount" value="{{ (int) (($pp?->price_month ?? 0) * $mm) }}" min="0" step="any" required></label>
-      <label class="field"><span>{{ __('Способ') }}</span><select name="method">@foreach (\App\Models\SubscriptionPayment::METHODS as $k => $n)<option value="{{ $k }}">{{ __($n) }}</option>@endforeach</select></label>
+      <label class="field"><span>{{ __('Способ') }}</span><select name="method" data-free="{{ __('Свой способ оплаты') }}">@foreach (\App\Models\SubscriptionPayment::METHODS as $k => $n)<option value="{{ $k }}">{{ __($n) }}</option>@endforeach<option value="__other">✎ {{ __('Своё…') }}</option></select></label>
       <label class="field"><span>{{ __('Дата оплаты') }}</span><input type="date" name="paid_at" value="{{ now()->toDateString() }}" required></label>
       <label class="field"><span>{{ __('Комментарий') }}</span><input name="note" placeholder="{{ __('номер платежа…') }}"></label>
     </div>

@@ -129,3 +129,18 @@
     document.querySelectorAll('form[data-sending]').forEach(f => { delete f.dataset.sending; busy(f, false); f.querySelector('input[name="_once"]')?.remove(); });
   });
 })();
+
+/* Список с пунктом «✎ Своё…» (select[data-free]): выбрали — спрашиваем значение и добавляем его в список.
+   ensureOpt(select, value) — выбрать значение, даже если его нет в списке (своё, введённое раньше). */
+(() => {
+  const addOpt = (s, v) => { if (![...s.options].some(o => o.value === v)) { const o = new Option(v, v); s.insertBefore(o, s.querySelector('option[value="__other"]')); } };
+  window.ensureOpt = (s, v) => { if (!s) return; if (v) addOpt(s, v); s.value = v || ''; };
+  document.addEventListener('focusin', e => { const s = e.target; if (s instanceof HTMLSelectElement && s.dataset.free != null && s.value !== '__other') s.dataset.prev = s.value; });
+  document.addEventListener('change', async e => {
+    const s = e.target; if (!(s instanceof HTMLSelectElement) || s.value !== '__other') return;
+    const v = window.ui ? await ui.prompt(s.dataset.free || '…', { required: true }) : prompt(s.dataset.free || '…');
+    const t = (v || '').trim().slice(0, 60);
+    if (!t) { s.value = s.dataset.prev || ''; return; }
+    addOpt(s, t); s.value = t; s.dataset.prev = t; s.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+})();

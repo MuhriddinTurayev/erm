@@ -76,6 +76,40 @@
   <div class="mt"><button class="btn btn-p">{!! ic('check') !!}{{ __('Сохранить') }}</button></div>
 </form>
 
+<div class="card mt" id="lists">
+  <div class="card-h"><h3>{!! ic('list') !!}{{ __('Справочники') }}</h3><span class="muted" style="font-size:13px">{{ __('Списки для выбора в формах. В самих формах можно вписать и своё значение.') }}</span></div>
+  <div class="grid g2">
+  @foreach (\App\Services\Lists::KEYS as $lk => [$lt, $lh])
+    <form method="post" action="/company/settings/lists" class="lst">@csrf<input type="hidden" name="key" value="{{ $lk }}">
+      <b>{{ __($lt) }}</b> @unless (\App\Services\Lists::own($ws, $lk))<span class="badge plain">{{ __('стандартный') }}</span>@endunless
+      <small class="muted">{{ __($lh) }}</small>
+      <div class="chips-ed">
+        @foreach (\App\Services\Lists::get($ws, $lk) as $v)<span class="chip">{{ __($v) }}<input type="hidden" name="items[]" value="{{ $v }}"><button type="button" class="chip-x" aria-label="{{ __('Убрать') }}">×</button></span>@endforeach
+        <input class="chip-in" maxlength="60" placeholder="{{ __('Добавить: впишите и нажмите Enter') }}">
+      </div>
+      <div class="flex" style="gap:8px"><button class="btn btn-p btn-s">{!! ic('check') !!}{{ __('Сохранить') }}</button>
+        @if (\App\Services\Lists::own($ws, $lk))<button class="btn btn-s btn-ghost" name="reset" value="1" data-confirm="{{ __('Вернуть стандартный список?') }}">{!! ic('rotate-ccw') !!}{{ __('Стандартный') }}</button>@endif</div>
+    </form>
+  @endforeach
+  </div>
+</div>
+@push('scripts')
+<script>
+// справочник: Enter или запятая — добавить, × — убрать; при сохранении недописанное тоже попадает в список
+(() => {
+  const add = (box, v) => { v = v.trim(); if (!v) return; if ([...box.querySelectorAll('input[name="items[]"]')].some(i => i.value.toLowerCase() === v.toLowerCase())) return;
+    const s = document.createElement('span'); s.className = 'chip'; s.textContent = v; const h = document.createElement('input'); h.type = 'hidden'; h.name = 'items[]'; h.value = v;
+    const x = document.createElement('button'); x.type = 'button'; x.className = 'chip-x'; x.textContent = '×'; s.append(h, x); box.insertBefore(s, box.querySelector('.chip-in')); };
+  document.querySelectorAll('.chips-ed').forEach(box => {
+    const inp = box.querySelector('.chip-in');
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add(box, inp.value); inp.value = ''; } });
+    box.addEventListener('click', e => { if (e.target.closest('.chip-x')) e.target.closest('.chip').remove(); else inp.focus(); });
+    box.closest('form').addEventListener('submit', () => { add(box, inp.value); inp.value = ''; });
+  });
+})();
+</script>
+@endpush
+
 @php $mods = config('oftob.modules'); $roleList = array_diff_key(config('oftob.roles'), ['admin' => 1]); @endphp
 <form method="post" action="/company/roles" class="card mt" id="roles">@csrf
   <div class="card-h"><h3>{!! ic('user-cog') !!}{{ __('Права ролей на разделы') }}</h3><span class="muted" style="font-size:13px">{{ __('Руководитель видит всё. Доступ к объектам задаётся у каждого сотрудника.') }}</span></div>

@@ -34,7 +34,7 @@ function auditCalc(p) {
     else if (s.start <= t && s.progress < 100) { const exp = Math.min(100, daysBetween(s.start, t) / s.dur * 100); if (exp - s.progress > 20) add('warn', 'Работы и сроки', 'schedule', `Этап «${esc(s.name)}» отстаёт: выполнено ${s.progress}%, по графику должно быть ≈ ${fmt(exp)}%`, { k: 'resched', id: s.id }); }
   });
   const C = prepCalc(p), pitSt = p.stages.find(s => /котлован/i.test(s.name));
-  if (!C.ready) add(pitSt && pitSt.start <= t ? 'bad' : 'warn', 'Работы и сроки', 'prep', `${pitSt && pitSt.start <= t ? 'Котлован уже начат, но не' : 'Не'} выполнены обязательные подготовительные работы: ${C.crit.filter(r => r.status !== 'done').map(r => esc(r.name)).join('; ')}`);
+  if (!C.ready) add(pitSt && pitSt.start <= t ? 'bad' : 'warn', 'Работы и сроки', 'prep', `${T(pitSt && pitSt.start <= t ? 'Котлован уже начат, но не выполнены обязательные подготовительные работы' : 'Не выполнены обязательные подготовительные работы')}: ${C.crit.filter(r => r.status !== 'done').map(r => esc(T(r.name))).join('; ')}`);
   geoCalc(p).notes.filter(n => n[0] !== 'ok').forEach(n => add(n[0], 'Геология и фундамент', 'geology', n[1], n[2] ? { k: n[2] } : null));
   if (!F.some(f => f.sec === 'Работы и сроки')) add('ok', 'Работы и сроки', 'schedule', 'Все этапы идут по графику');
   /* --- Деньги --- */

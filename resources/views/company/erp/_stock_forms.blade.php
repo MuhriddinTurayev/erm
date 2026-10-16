@@ -22,7 +22,7 @@
   <div class="modal-h"><h3>{!! ic('package') !!}{{ __('Товар / материал') }}</h3><button type="button" class="icon-btn" data-close>{!! ic('x') !!}</button></div>
   <div class="modal-b form">
     <label class="field full"><span>{{ __('Название') }}</span><input name="name" required maxlength="160" placeholder="{{ __('Цемент М400, мешок 50 кг') }}"></label>
-    <label class="field"><span>{{ __('Ед. изм.') }}</span><input name="unit" value="шт" required maxlength="16" list="units"><datalist id="units">@foreach (['шт', 'кг', 'т', 'м', 'м²', 'м³', 'л', 'мешок', 'пачка', 'рулон', 'компл.'] as $x)<option value="{{ $x }}">@endforeach</datalist></label>
+    <label class="field"><span>{{ __('Ед. изм.') }}</span><input name="unit" value="шт" required maxlength="16" list="units"><datalist id="units">@foreach (\App\Services\Lists::get($ws, 'units') as $x)<option value="{{ $x }}">{{ __($x) }}</option>@endforeach</datalist></label>
     <label class="field"><span>{{ __('Артикул') }}</span><input name="sku" maxlength="40"></label>
     <label class="field"><span>{{ __('Группа') }}</span><input name="group" maxlength="60" placeholder="{{ __('Сыпучие, Металл, Электрика…') }}"></label>
     <label class="field"><span>{{ __('Минимальный остаток') }}</span><input type="number" step="0.001" min="0" name="min_qty"></label>

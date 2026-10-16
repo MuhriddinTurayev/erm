@@ -69,6 +69,7 @@ class SalesController extends ErpController
             'model' => \App\Services\Locate::model($ws->id, $pid),   // дом в 3D: квартира подсвечивается в карточке
             'links' => BuyerLink::where('workspace_id', $ws->id)->where('project_id', $pid)->pluck('token', 'apt_id'),
             'canSell' => auth()->user()->canEdit() && in_array(auth()->user()->role, ['admin', 'manager', 'accountant', 'cashier'], true),
+            'lists' => \App\Services\Lists::all($ws),
         ]);
     }
 
@@ -89,7 +90,7 @@ class SalesController extends ErpController
         $this->checkProject($pid);
         $d = $request->validate([
             'status' => ['required', Rule::in(array_keys(self::STATUSES))], 'buyer' => ['nullable', 'string', 'max:120'], 'phone' => ['nullable', 'string', 'max:40'],
-            'price' => ['nullable', 'numeric', 'min:0'], 'plan' => ['nullable', Rule::in(self::PLANS)], 'note' => ['nullable', 'string', 'max:300'],
+            'price' => ['nullable', 'numeric', 'min:0'], 'plan' => ['nullable', 'string', 'max:60', 'not_in:__other'], 'note' => ['nullable', 'string', 'max:300'],
         ]);
         if (in_array($d['status'], ['sold', 'booked'], true) && empty($d['buyer'])) {
             return back()->withErrors(['buyer' => __('Укажите покупателя')])->withInput();
@@ -133,7 +134,7 @@ class SalesController extends ErpController
     {
         $this->canSell();
         $this->checkProject($pid);
-        $d = $request->validate(['amount' => ['required', 'numeric', 'min:1'], 'date' => ['required', 'date'], 'way' => ['nullable', 'string', 'max:40']]);
+        $d = $request->validate(['amount' => ['required', 'numeric', 'min:1'], 'date' => ['required', 'date'], 'way' => ['nullable', 'string', 'max:60', 'not_in:__other']]);
         $ws = $this->ws();
         $p = StateWriter::project($ws, $pid) ?? abort(404);
         $a = Apartments::find($p, $aptId) ?? abort(404);
@@ -143,28 +144,34 @@ class SalesController extends ErpController
         if ($a['status'] === 'free' && ($err = $this->guardReady($p, 'booked'))) {   // первая оплата ставит бронь
             return back()->withErrors(['amount' => $err])->with('open', $aptId);
         }
-        if (! \App\Services\Erp\Cash::once($ws, 'aptpay', [$request->user()->id, $pid, $aptId, round((float) $d['amount'], 2), $d['date']])) {
+        $lock = \App\Services\Erp\Cash::lock($ws, 'aptpay', [$request->user()->id, $pid, $aptId, round((float) $d['amount'], 2), $d['date']]);
+        if ($lock === null) {
             return back()->with('warn', \App\Services\Erp\Cash::twice())->with('open', $aptId);
         }
-        $payId = Str::lower(Str::random(8));
-        StateWriter::mutate($ws->id, function (array &$data) use ($pid, $aptId, $d, $a, $payId) {
-            foreach ($data['projects'] as &$p) {
-                if ((string) ($p['id'] ?? '') !== $pid) {
-                    continue;
+        try {
+            $payId = Str::lower(Str::random(8));
+            StateWriter::mutate($ws->id, function (array &$data) use ($pid, $aptId, $d, $a, $payId) {
+                foreach ($data['projects'] as &$p) {
+                    if ((string) ($p['id'] ?? '') !== $pid) {
+                        continue;
+                    }
+                    $txId = Str::lower(Str::random(8));
+                    $p['tx'] = (array) ($p['tx'] ?? []);
+                    $p['tx'][] = ['id' => $txId, 'date' => $d['date'], 'type' => 'in', 'cat' => $a['rooms'] ? 'Продажа квартир' : 'Продажа коммерции', 'amount' => (float) $d['amount'],
+                        'who' => $a['buyer'], 'desc' => 'Оплата кв. №'.$a['num'].(! empty($d['way']) ? ' · '.$d['way'] : ''), 'link' => ['kind' => 'apt', 'id' => $aptId, 'payId' => $payId]];
+                    $o = (array) ($p['apts'][$aptId] ?? []);
+                    if (empty($o['status']) || $o['status'] === 'free') {
+                        $o['status'] = 'booked';
+                    }
+                    $o['payments'] = array_values((array) ($o['payments'] ?? []));
+                    $o['payments'][] = array_filter(['id' => $payId, 'date' => $d['date'], 'amount' => (float) $d['amount'], 'txId' => $txId, 'way' => trim((string) ($d['way'] ?? '')) ?: null], fn ($v) => $v !== null);
+                    $p['apts'][$aptId] = $o;
                 }
-                $txId = Str::lower(Str::random(8));
-                $p['tx'] = (array) ($p['tx'] ?? []);
-                $p['tx'][] = ['id' => $txId, 'date' => $d['date'], 'type' => 'in', 'cat' => $a['rooms'] ? 'Продажа квартир' : 'Продажа коммерции', 'amount' => (float) $d['amount'],
-                    'who' => $a['buyer'], 'desc' => 'Оплата кв. №'.$a['num'].(! empty($d['way']) ? ' · '.$d['way'] : ''), 'link' => ['kind' => 'apt', 'id' => $aptId, 'payId' => $payId]];
-                $o = (array) ($p['apts'][$aptId] ?? []);
-                if (empty($o['status']) || $o['status'] === 'free') {
-                    $o['status'] = 'booked';
-                }
-                $o['payments'] = array_values((array) ($o['payments'] ?? []));
-                $o['payments'][] = ['id' => $payId, 'date' => $d['date'], 'amount' => (float) $d['amount'], 'txId' => $txId];
-                $p['apts'][$aptId] = $o;
-            }
-        });
+            });
+        } catch (\Throwable $e) {
+            \App\Services\Erp\Cash::unlock($lock);   // не записалось — повторить можно сразу
+            throw $e;
+        }
         AuditLog::create(['workspace_id' => $ws->id, 'user_id' => $request->user()->id, 'project' => $this->projects()[$pid] ?? null, 'action' => 'apt.add',
             'summary' => 'Оплата кв. №'.$a['num'].' +'.number_format($d['amount'], 0, '.', ' ').($a['buyer'] ? ' · '.$a['buyer'] : '')]);
 

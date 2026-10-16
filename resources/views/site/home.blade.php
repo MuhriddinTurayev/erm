@@ -64,8 +64,8 @@
         <div class="win-bar"><i></i><i></i><i></i><span>{{ st('Мониторинг руководителя') }}</span></div>
         <div class="win-body">
           <div class="m-row">
-            <div class="m-k hl"><span>{{ st('Деньги во всех кассах') }}</span><b>4,82 {{ st('млрд') }}</b><small class="ok">+640 {{ st('млн') }} · {{ st('за месяц') }}</small></div>
-            <div class="m-k"><span>{{ st('Сегодня ушло') }}</span><b>186 {{ st('млн') }}</b><small><span class="delta up">+12%</span></small></div>
+            <div class="m-k hl"><span>{{ st('Деньги во всех кассах') }}</span><b>4 820 000 000</b><small class="ok">+640 000 000 · {{ st('за месяц') }}</small></div>
+            <div class="m-k"><span>{{ st('Сегодня ушло') }}</span><b>186 000 000</b><small><span class="delta up">+12%</span></small></div>
             <div class="m-k"><span>{{ st('Ждут согласования') }}</span><b>7</b><small class="muted">{{ st('заявок') }}</small></div>
           </div>
           <div class="m-chart"><div class="bars">@foreach ([38, 52, 30, 61, 45, 70, 35, 48, 66, 40, 58, 75, 64, 82] as $i => $hh)<div class="b {{ $i === 13 ? 'today' : '' }}"><i style="height:{{ $hh }}%"></i></div>@endforeach</div></div>
@@ -285,10 +285,10 @@
       <div class="phone"><div class="scr">
         <div class="ph-h"><span class="logo-mark">{!! ic('send', '', 16) !!}</span><div><b>{{ $brand }}</b><small>bot</small></div></div>
         <div class="msg"><b>{{ st('Отчёт за день') }} · {{ now()->format('d.m.Y') }}</b><br>{{ st('ООО «Строй Инвест»') }}<br><br>
-          <b>{{ st('Деньги во всех кассах') }}: 4,82 {{ st('млрд') }} {{ st('сум') }}</b><br>
-          {{ st('Потрачено сегодня') }}: <b>186 {{ st('млн') }}</b> (+12%)<br>
-          {{ st('Поступило сегодня') }}: 320 {{ st('млн') }}<br><br>
-          <b>{{ st('На что ушли деньги') }}:</b><br>• {{ st('Материалы') }} — 100 {{ st('млн') }} (54%)<br>• {{ st('Зарплата') }} — 41 {{ st('млн') }} (22%)<br>• {{ st('Техника и топливо') }} — 28 {{ st('млн') }} (15%)<br><br>
+          <b>{{ st('Деньги во всех кассах') }}: 4 820 000 000 {{ st('сум') }}</b><br>
+          {{ st('Потрачено сегодня') }}: <b>186 000 000</b> (+12%)<br>
+          {{ st('Поступило сегодня') }}: 320 000 000<br><br>
+          <b>{{ st('На что ушли деньги') }}:</b><br>• {{ st('Материалы') }} — 100 000 000 (54%)<br>• {{ st('Зарплата') }} — 41 000 000 (22%)<br>• {{ st('Техника и топливо') }} — 28 000 000 (15%)<br><br>
           <b>{{ st('Вывод ИИ') }}:</b><br>• {{ st('Расход на бетон на 18% выше плана — проверьте поставщика') }}
           <div class="t">20:00</div></div>
       </div></div>
@@ -461,9 +461,9 @@ document.getElementById('period')?.addEventListener('click', e => {
   const num = s => +String(s).replace(/[^\d]/g, '') || 0;
   const grp = n => Math.round(n).toLocaleString('ru-RU').replace(/ /g, ' ');
   const short = n => { const a = Math.abs(n), u = cur === 'usd';
-    if (u) return '$' + (a >= 1e6 ? (n / 1e6).toFixed(a >= 1e7 ? 1 : 2).replace(/\.?0+$/, '') + 'M' : grp(n));
+    if (u) return '$' + grp(n);
     const w = T[cur];
-    return a >= 1e9 ? (n / 1e9).toFixed(2).replace(/\.?0+$/, '').replace('.', ',') + ' ' + T.mlrd + ' ' + w : a >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, '').replace('.', ',') + ' ' + T.mln + ' ' + w : grp(n) + ' ' + w; };
+    return grp(n) + ' ' + w; };   // полностью, без «млн/млрд»
   const chips = document.getElementById('cPresets');
   const drawChips = () => { chips.innerHTML = PRE[cur].map(v => `<button type="button" data-v="${v}">${short(v)}</button>`).join(''); };
   const calc = () => {

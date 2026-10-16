@@ -299,10 +299,16 @@ function machCalc(p) {
 }
 
 /* ---------- Финансы ---------- */
+// перевод между кассами (касса объекта ⇄ касса компании): в остатке объекта есть, но это не доход и не затрата
+const isTransfer = t => !!(t.link && t.link.transfer) || t.cat === 'Перевод из другой кассы' || t.cat === 'Перевод в другую кассу';
 function finance(p) {
-  let inc = 0, out = 0; const byCat = {};
-  p.tx.forEach(t => { if (t.type === 'in') inc += t.amount; else { out += t.amount; byCat[t.cat] = (byCat[t.cat] || 0) + t.amount; } });
-  return { inc, out, bal: inc - out, byCat };
+  let inc = 0, out = 0, bal = 0; const byCat = {};
+  p.tx.forEach(t => {
+    bal += t.type === 'in' ? t.amount : -t.amount;
+    if (isTransfer(t)) return;
+    if (t.type === 'in') inc += t.amount; else { out += t.amount; byCat[t.cat] = (byCat[t.cat] || 0) + t.amount; }
+  });
+  return { inc, out, bal, byCat };
 }
 function progress(p) { let s = 0, w = 0; p.stages.forEach(st => { s += st.dur * (st.progress || 0); w += st.dur; }); return w ? s / w : 0; }
 

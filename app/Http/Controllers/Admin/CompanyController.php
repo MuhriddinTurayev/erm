@@ -76,7 +76,7 @@ class CompanyController extends Controller
             'plan_id' => ['required', Rule::exists('plans', 'id')],
             'months' => ['required', 'integer', 'min:1', 'max:36'],
             'amount' => ['required', 'numeric', 'min:0'],
-            'method' => ['required', Rule::in(array_keys(SubscriptionPayment::METHODS))],
+            'method' => ['required', 'string', 'max:40', 'not_in:__other'],   // из списка или своё (платёжные системы разных стран)
             'paid_at' => ['required', 'date'],
             'note' => ['nullable', 'string', 'max:250'],
             'idem' => ['nullable', 'string', 'max:64'],   // ключ формы: повторная отправка той же формы не запишет оплату дважды

@@ -38,7 +38,7 @@ class DashboardController extends Controller
             'expired' => $by->get('expired', collect())->count() + $by->get('suspended', collect())->count(),
             'users' => User::whereNotNull('workspace_id')->count(),
             'mrr' => $mrr,
-            'paidMonth' => SubscriptionPayment::where('paid_at', '>=', $month)->sum('amount'),
+            'paidMonth' => SubscriptionPayment::where('paid_at', '>=', $month->toDateString())->sum('amount'),
             'aiMonth' => AiUsage::where('created_at', '>=', $month)->where('ok', true)->count(),
             'aiErrors' => AiUsage::where('created_at', '>=', $month)->where('ok', false)->count(),
             'aiProviders' => AiProvider::where('is_active', true)->count(),

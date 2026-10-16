@@ -86,6 +86,19 @@ class SettingsController extends Controller
     }
 
     /** Согласование расходов и публичная шахматка */
+    /** Справочники компании (способы и условия оплаты, источники заявок, единицы) — свой список или стандартный */
+    public function lists(Request $request)
+    {
+        $d = $request->validate(['key' => ['required', Rule::in(array_keys(\App\Services\Lists::KEYS))], 'items' => ['nullable', 'array', 'max:'.\App\Services\Lists::MAX],
+            'items.*' => ['nullable', 'string', 'max:60'], 'reset' => ['nullable', 'boolean']]);
+        $ws = $this->ws();
+        \App\Services\Lists::save($ws, $d['key'], $request->boolean('reset') ? [] : (array) ($d['items'] ?? []));
+        \App\Models\AuditLog::create(['workspace_id' => $ws->id, 'user_id' => $request->user()->id, 'action' => 'settings.edit',
+            'summary' => 'Справочник «'.\App\Services\Lists::KEYS[$d['key']][0].'»: '.implode(', ', \App\Services\Lists::get($ws, $d['key']))]);
+
+        return redirect('/company/settings#lists')->with('ok', $request->boolean('reset') ? __('Возвращён стандартный список') : __('Сохранено'));
+    }
+
     public function updateOps(Request $request)
     {
         $d = $request->validate(['approval_limit' => ['nullable', 'numeric', 'min:0'], 'didox_token' => ['nullable', 'string', 'max:500']]);

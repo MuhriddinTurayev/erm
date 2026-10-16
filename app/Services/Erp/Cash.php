@@ -123,16 +123,18 @@ class Cash
             throw new \DomainException(__('Сумма должна быть больше нуля'));
         }
         $bal = self::lockedBalance($ws, $desk->id);
-        // та же операция того же сотрудника только что проведена — это двойное нажатие (сайт, Telegram, API), второй раз не проводим
-        if (empty($d['transfer_key']) && ! self::once($ws, 'op', [$by->id, $desk->id, $d['type'], $amount, $d['project_id'] ?? null, $d['category_id'] ?? null,
-            $d['counterparty_id'] ?? null, $d['payment_request_id'] ?? null, $d['employee'] ?? null, trim((string) ($d['note'] ?? ''))])) {
-            throw new \DomainException(self::twice());
-        }
         if ($d['type'] === 'out' && $amount > $bal + 0.001) {
             throw new \DomainException(__('В кассе «:n» только :s', ['n' => $desk->name, 's' => Money::fmt($bal, $desk->currency)]));
         }
         $rate = self::checkedRate($ws, $by, $desk->currency, $d['rate'] ?? null);
         $d['amount'] = $amount;
+        // та же операция того же сотрудника только что проведена — это двойное нажатие (сайт, Telegram, API), второй раз не проводим
+        $lock = empty($d['transfer_key']) ? self::lock($ws, 'op', [$by->id, $desk->id, $d['type'], $amount, $d['project_id'] ?? null, $d['category_id'] ?? null,
+            $d['counterparty_id'] ?? null, $d['payment_request_id'] ?? null, $d['employee'] ?? null, trim((string) ($d['note'] ?? ''))]) : '';
+        if ($lock === null) {
+            throw new \DomainException(self::twice());
+        }
+        DB::afterRollBack(fn () => $lock && self::unlock($lock));   // операция не провелась (ошибка дальше) — повторить можно сразу
         $op = CashOp::create([
             'workspace_id' => $ws->id, 'cash_desk_id' => $desk->id, 'type' => $d['type'], 'date' => $d['date'] ?? $ws->localNow()->toDateString(),
             'amount' => round((float) $d['amount'], 2), 'rate' => $rate, 'amount_base' => Money::toBase($ws, (float) $d['amount'], $desk->currency, $rate),
@@ -154,9 +156,22 @@ class Cash
      * Защита от двойного нажатия: одинаковая операция за $sec секунд проходит один раз.
      * Метка ставится в той же транзакции, что и операция: не прошла операция (нет денег, ошибка) — метки тоже нет.
      */
-    public static function once(Workspace $ws, string $kind, array $parts, int $sec = 15): bool
+    public static function once(Workspace $ws, string $kind, array $parts, int $sec = 8): bool
     {
-        return Cache::add('dup:'.$kind.':'.$ws->id.':'.sha1(json_encode($parts)), 1, $sec);
+        return self::lock($ws, $kind, $parts, $sec) !== null;
+    }
+
+    /** Метка «уже проводится»: ключ — если поставлена, null — такая же операция только что была */
+    public static function lock(Workspace $ws, string $kind, array $parts, int $sec = 8): ?string
+    {
+        $key = 'dup:'.$kind.':'.$ws->id.':'.sha1(json_encode($parts));
+
+        return Cache::add($key, 1, $sec) ? $key : null;
+    }
+
+    public static function unlock(string $key): void
+    {
+        Cache::forget($key);
     }
 
     public static function twice(): string
@@ -179,6 +194,12 @@ class Cash
         $op->forceFill(['tx_id' => $txId])->saveQuietly();
     }
 
+    /** Запись бухгалтерии объекта — перевод между кассами: в остатке объекта учитывается, в «пришло/потрачено» компании — нет */
+    public static function isTransferTx(array $t): bool
+    {
+        return ! empty($t['link']['transfer']) || in_array($t['cat'] ?? '', ['Перевод из другой кассы', 'Перевод в другую кассу'], true);
+    }
+
     /** Перевод с кассы объекта или на неё: запись в бухгалтерии этого объекта (между кассами одного объекта — не нужна) */
     private static function postTransfer(Workspace $ws, CashOp $op, CashDesk $desk, CashDesk $other): void
     {
@@ -187,7 +208,7 @@ class Cash
         }
         $txId = StateWriter::addTx($ws->id, $desk->project_id, [
             'date' => $op->date->toDateString(), 'type' => $op->type, 'cat' => $op->type === 'in' ? 'Перевод из другой кассы' : 'Перевод в другую кассу',
-            'amount' => $op->amount_base, 'who' => $other->name, 'desc' => (string) ($op->note ?? ''), 'link' => ['kind' => 'cash', 'id' => $op->id],
+            'amount' => $op->amount_base, 'who' => $other->name, 'desc' => (string) ($op->note ?? ''), 'link' => ['kind' => 'cash', 'id' => $op->id, 'transfer' => true],
         ]);
         $op->forceFill(['project_id' => $desk->project_id, 'tx_id' => $txId])->saveQuietly();
     }
@@ -232,9 +253,11 @@ class Cash
             foreach (collect([$a->id, $b->id])->sort() as $id) {
                 self::lockedBalance($ws, $id);
             }
-            if (! self::once($ws, 'transfer', [$by->id, $a->id, $b->id, round($amount, 2), trim((string) $note)])) {
+            $lock = self::lock($ws, 'transfer', [$by->id, $a->id, $b->id, round($amount, 2), trim((string) $note)]);
+            if ($lock === null) {
                 throw new \DomainException(self::twice());
             }
+            DB::afterRollBack(fn () => self::unlock($lock));
             $base = ['date' => $date, 'transfer_key' => $key, 'note' => $note];
             $o1 = self::add($ws, $by, $base + ['cash_desk_id' => $a->id, 'type' => 'out', 'amount' => $amount, 'rate' => $a->currency === 'USD' ? $usd : 1]);
             $o2 = self::add($ws, $by, $base + ['cash_desk_id' => $b->id, 'type' => 'in', 'amount' => round($received, 2), 'rate' => $b->currency === 'USD' ? $usd : 1]);

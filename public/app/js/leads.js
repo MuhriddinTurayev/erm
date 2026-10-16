@@ -2,7 +2,7 @@
 /* ===== Лиды: обращения покупателей от заявки до сделки ===== */
 const LEAD_ST = [['new', 'Новые', '#64748b'], ['contact', 'Связались', '#2563eb'], ['meet', 'Встреча назначена', '#7c3aed'], ['shown', 'Показ проведён', '#d97706'], ['booked', 'Бронь / задаток', '#ca8a04'], ['deal', 'Сделка', '#16a34a'], ['lost', 'Отказ', '#dc2626']];
 const LEAD_NAME = Object.fromEntries(LEAD_ST.map(x => [x[0], x[1]])), LEAD_ORDER = LEAD_ST.map(x => x[0]);
-const LEAD_SRC = ['Instagram', 'Facebook', 'WhatsApp', 'Telegram', 'OLX', 'Сайт', 'Звонок', 'Офис продаж', 'Рекомендация', 'Баннер / реклама'];
+const LEAD_SRC = LISTS.lead_sources;   // справочник компании
 const LOST_WHY = ['Дорого', 'Не подошёл этаж или планировка', 'Купил у конкурента', 'Не одобрили ипотеку', 'Передумал', 'Не отвечает'];
 const ACTIVE_ST = new Set(['new', 'contact', 'meet', 'shown', 'booked']);
 function leadsCalc(p) {
@@ -45,7 +45,7 @@ PAGES.leads = {
       </tbody></table></div></div>`;
     if (tab === 'connect') body = `<div id="cnWrap">${connectHtml()}</div>`;
     if (tab === 'stats') {
-      const bySrc = LEAD_SRC.map(s => { const ls = p.leads.filter(l => l.src === s); return { s, n: ls.length, d: ls.filter(l => l.status === 'deal').length }; }).filter(x => x.n).sort((x, y) => y.n - x.n), mx = Math.max(1, ...bySrc.map(x => x.n));
+      const bySrc = [...new Set([...LEAD_SRC, ...p.leads.map(l => l.src).filter(Boolean)])].map(s => { const ls = p.leads.filter(l => l.src === s); return { s, n: ls.length, d: ls.filter(l => l.status === 'deal').length }; }).filter(x => x.n).sort((x, y) => y.n - x.n), mx = Math.max(1, ...bySrc.map(x => x.n));
       const funnel = LEAD_ORDER.filter(s => s !== 'lost').map((s, i, arr) => ({ s, n: p.leads.filter(l => arr.indexOf(l.status) >= i).length }));
       const why = LOST_WHY.map(w => ({ w, n: C.lost.filter(l => l.why === w).length })).filter(x => x.n);
       body = `<div class="grid g2"><div class="card"><h3>Источники заявок</h3>${bySrc.map(x => `<div class="hb"><div class="lb"><span>${esc(x.s)}</span><span>${x.n} заявок · сделок ${x.d} (${fmt(x.d / x.n * 100)}%)</span></div><div class="tr"><div class="pl" style="width:${x.n / mx * 100}%"></div><div class="fa" style="width:${x.d / mx * 100}%;background:var(--ok)"></div></div></div>`).join('')}<div class="legend mt"><span><i style="background:#cdd6e6"></i>заявки</span><span><i style="background:var(--ok)"></i>сделки</span></div></div>
@@ -91,7 +91,7 @@ function leadModal(l) {
   <div class="form">
     <label class="fld"><span>Имя клиента *</span><input class="txt" id="ldName" value="${esc(x.name)}"></label>
     <label class="fld"><span>Телефон *</span><input class="txt" id="ldPhone" value="${esc(x.phone)}" placeholder="+998"></label>
-    <label class="fld"><span>Источник</span><select id="ldSrc">${opts(LEAD_SRC, x.src)}</select></label>
+    <label class="fld"><span>Источник</span><select id="ldSrc" data-free="Свой источник заявки">${optsFree(LEAD_SRC, x.src)}</select></label>
     <label class="fld"><span>Этап</span><select id="ldSt">${opts(LEAD_ST.map(s => [s[0], s[1]]), x.status)}</select></label>
     <label class="fld"><span>Комнат</span><select id="ldRooms"><option value="">не важно</option>${opts([['1', '1-комнатная'], ['2', '2-комнатная'], ['3', '3-комнатная']], x.rooms)}</select></label>
     <label class="fld"><span>Бюджет, млн ${cur()}</span><input class="txt" type="number" id="ldBudget" value="${x.budget || ''}"></label>

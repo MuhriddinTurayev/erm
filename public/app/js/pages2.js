@@ -293,7 +293,7 @@ PAGES.sales = {
     </tbody></table></div></div>`;
   }
 };
-const PLANS = ['Полная оплата', 'Рассрочка 6 мес', 'Рассрочка 12 мес', 'Рассрочка 24 мес', 'Рассрочка 36 мес', 'Ипотека'];
+const PLANS = LISTS.pay_plans;   // справочник компании
 ACT.apt = d => {
   const p = P(), a = genApts(p).find(x => x.id === d.id); if (!a) return;
   const o = a.o, pays = o.payments || [], rest = a.price - a.paid, mo = parseInt((o.plan || '').replace(/\D/g, '')) || 0;
@@ -304,7 +304,7 @@ ACT.apt = d => {
     <label class="fld"><span>Покупатель (ФИО)</span><input class="txt" id="mBuyer" value="${esc(a.buyer)}"></label>
     <label class="fld"><span>Телефон</span><input class="txt" id="mPhone" value="${esc(a.phone)}" placeholder="+998"></label>
     <label class="fld"><span>Цена продажи, ${cur()}</span><input class="txt" type="number" id="mPrice" value="${a.price}"></label>
-    <label class="fld"><span>Условия оплаты</span><select id="mPlan"><option value="">—</option>${opts(PLANS, o.plan)}</select></label>
+    <label class="fld"><span>Условия оплаты</span><select id="mPlan" data-free="Своё условие оплаты (число — месяцев рассрочки)"><option value="">—</option>${optsFree(PLANS, o.plan)}</select></label>
     <label class="fld"><span>Примечание</span><input class="txt" id="mNote" value="${esc(o.note || '')}"></label>
   </div>
   <div class="flex mt"><button class="btn-p" data-act="aptSave" data-id="${a.id}">Сохранить</button>${a.rooms ? `<button data-act="aptDesign" data-id="${a.id}">🛋 Дизайн квартиры в 3D</button><button data-act="aptPano" data-id="${a.id}">🌐 Тур 360°</button>` : ''}</div>

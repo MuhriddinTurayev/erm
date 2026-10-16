@@ -46,8 +46,8 @@ if (ACT.projDel) {
 }
 
 /* ---------- Расчёты по деньгам ---------- */
-function moneyOn(p, date) { let out = 0, inc = 0; p.tx.forEach(t => { if (t.date === date) { if (t.type === 'in') inc += t.amount; else out += t.amount; } }); return { out, inc }; }
-function moneyRange(p, from, to) { let out = 0, inc = 0; p.tx.forEach(t => { if (t.date >= from && t.date <= to) { if (t.type === 'in') inc += t.amount; else out += t.amount; } }); return { out, inc }; }
+function moneyOn(p, date) { let out = 0, inc = 0; p.tx.forEach(t => { if (t.date === date && !isTransfer(t)) { if (t.type === 'in') inc += t.amount; else out += t.amount; } }); return { out, inc }; }
+function moneyRange(p, from, to) { let out = 0, inc = 0; p.tx.forEach(t => { if (t.date >= from && t.date <= to && !isTransfer(t)) { if (t.type === 'in') inc += t.amount; else out += t.amount; } }); return { out, inc }; }
 const yesterday = () => addDays(today(), -1);
 function overdueStages(p) { const t = today(); return p.stages.filter(s => s.progress < 100 && addDays(s.start, s.dur) < t).length; }
 function periodRange(per) {
@@ -111,10 +111,10 @@ PAGES.cash = {
     const bal = obj ? sum(projs, p => finance(p).bal) : companyMoney(projs), dT = sum(projs, p => moneyOn(p, t).out), dY = sum(projs, p => moneyOn(p, y).out), iT = sum(projs, p => moneyOn(p, t).inc);
     const wk = sum(projs, p => moneyRange(p, addDays(t, -6), t).out), mo = sum(projs, p => moneyRange(p, monthNow() + '-01', t).out);
     const inPer = all.filter(x => x.date >= from && x.date <= to);
-    const outPer = inPer.filter(x => x.type === 'out'), outSum = sum(outPer, x => x.amount), inSum = sum(inPer.filter(x => x.type === 'in'), x => x.amount);
+    const outPer = inPer.filter(x => x.type === 'out' && !isTransfer(x)), outSum = sum(outPer, x => x.amount), inSum = sum(inPer.filter(x => x.type === 'in' && !isTransfer(x)), x => x.amount);
     const cats = {}; outPer.forEach(x => cats[x.cat] = (cats[x.cat] || 0) + x.amount);
     const catRows = Object.entries(cats).sort((a, b) => b[1] - a[1]);
-    const days = []; for (let i = 29; i >= 0; i--) { const d = addDays(t, -i); days.push([d, sum(all.filter(x => x.type === 'out' && x.date === d), x => x.amount)]); }
+    const days = []; for (let i = 29; i >= 0; i--) { const d = addDays(t, -i); days.push([d, sum(all.filter(x => x.type === 'out' && x.date === d && !isTransfer(x)), x => x.amount)]); }
     const mx = Math.max(1, ...days.map(d => d[1]));
     const list = inPer.filter(x => !cat || x.cat === cat).sort((p, q) => q.date.localeCompare(p.date) || q.amount - p.amount);
     const byObj = DB.projects.map(p => ({ p, d: moneyOn(p, t).out, y: moneyOn(p, y).out, r: moneyRange(p, from, to), bal: finance(p).bal })).sort((p, q) => q.r.out - p.r.out);

@@ -109,7 +109,7 @@ class Present
         return [
             'id' => $m->id, 'date' => self::d($m->date), 'type' => $m->type, 'direction' => $m->qty >= 0 ? 'in' : 'out',
             'item' => $m->item ? ['id' => $m->item->id, 'name' => $m->item->name, 'unit' => $m->item->unit] : ['id' => $m->item_id],
-            'warehouse' => $m->warehouse ? ['id' => $m->warehouse->id, 'name' => __($m->warehouse->name)] : ['id' => $m->warehouse_id],
+            'warehouse' => $m->warehouse ? ['id' => $m->warehouse->id, 'name' => __($m->warehouse->name), 'object_id' => $m->warehouse->project_id] : ['id' => $m->warehouse_id],
             'qty' => self::num($m->qty), 'price' => self::num($m->price), 'batch' => $m->batch, 'object_id' => $m->project_id,
             'counterparty_id' => $m->counterparty_id, 'supply_request_id' => $m->supply_request_id, 'transfer_key' => $m->transfer_key,
             'note' => $m->note, 'created_at' => self::t($m->created_at),
@@ -124,7 +124,7 @@ class Present
     public static function cashOp(CashOp $o): array
     {
         return [
-            'id' => $o->id, 'date' => self::d($o->date), 'type' => $o->type, 'desk_id' => $o->cash_desk_id, 'currency' => $o->desk?->currency,
+            'id' => $o->id, 'date' => self::d($o->date), 'type' => $o->type, 'desk_id' => $o->cash_desk_id, 'desk_object_id' => $o->desk?->project_id, 'currency' => $o->desk?->currency,
             'amount' => self::num($o->amount), 'rate' => self::num($o->rate), 'amount_base' => self::num($o->amount_base),
             'category' => $o->category ? __($o->category->name) : null, 'object_id' => $o->project_id, 'counterparty_id' => $o->counterparty_id,
             'contract_id' => $o->contract_id, 'payment_request_id' => $o->payment_request_id, 'transfer_key' => $o->transfer_key,

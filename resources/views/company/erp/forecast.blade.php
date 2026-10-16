@@ -28,7 +28,7 @@
     <tr><td class="nowrap"><b>{{ $r['from']->format('d.m') }} — {{ $r['from']->copy()->addDays(6)->format('d.m') }}</b></td><td class="n">{{ money_s($r['open'], $cur) }}</td>
       <td class="n in-c">{{ $r['in'] ? '+'.money_s($r['in'], $cur) : '' }}</td><td class="n out-c">{{ $r['out'] ? '−'.money_s($r['out'], $cur) : '' }}</td>
       <td class="n"><b class="{{ $r['close'] < 0 ? 'out-c' : '' }}">{{ money_s($r['close'], $cur) }}</b></td>
-      <td><small class="muted">@foreach (array_slice($r['items_in'], 0, 3) as $x){{ $x }}<br>@endforeach @if (count($r['items_in']) > 3)+{{ count($r['items_in']) - 3 }}<br>@endif @foreach (array_slice($r['items_out'], 0, 3) as $x)<span class="out-c">{{ $x }}</span><br>@endforeach</small></td></tr>
+      <td><small class="muted">@foreach (array_slice($r['items_in'], 0, 3) as $x){{ sys_tr($x) }}<br>@endforeach @if (count($r['items_in']) > 3)+{{ count($r['items_in']) - 3 }}<br>@endif @foreach (array_slice($r['items_out'], 0, 3) as $x)<span class="out-c">{{ sys_tr($x) }}</span><br>@endforeach</small></td></tr>
   @endforeach
   </tbody></table></div>
 </div>

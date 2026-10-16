@@ -88,7 +88,7 @@ class Stock
      * Подписи для таблицы движений: партия (у старых строк без партии — по FIFO) и откуда/куда у перемещений.
      * ['batch' => [id => 'P…'], 'route' => [id => '→ Склад' | '← Склад']]
      */
-    public static function moveLabels(Workspace $ws, $moves): array
+    public static function moveLabels(Workspace $ws, $moves, ?array $balances = null): array
     {
         $moves = collect($moves);
         $keys = $moves->pluck('transfer_key')->filter()->unique()->values();
@@ -108,19 +108,29 @@ class Stock
             }
         }
 
-        return ['batch' => $batch, 'route' => $route, 'after' => self::afterEach($ws, $moves)];
+        return ['batch' => $batch, 'route' => $route, 'after' => self::afterEach($ws, $moves, $balances)];
     }
 
     /**
      * Сколько осталось на складе после каждой операции: [move_id => остаток].
      * Список — последние операции (от новых к старым), поэтому идём от нынешнего остатка назад.
      */
-    private static function afterEach(Workspace $ws, $moves): array
+    private static function afterEach(Workspace $ws, $moves, ?array $balances = null): array
     {
         if ($moves->isEmpty()) {
             return [];
         }
-        $cur = StockMove::of($ws->id)->whereIn('item_id', $moves->pluck('item_id')->unique()->values())->whereIn('warehouse_id', $moves->pluck('warehouse_id')->unique()->values())
+        if ($balances !== null) {   // остатки уже посчитаны на странице — второй раз не считаем
+            $cur = [];
+            foreach ($balances as $item => $byWh) {
+                foreach ($byWh as $wh => $q) {
+                    $cur[$item.':'.$wh] = (float) $q;
+                }
+            }
+        } else {
+            $cur = null;
+        }
+        $cur ??= StockMove::of($ws->id)->whereIn('item_id', $moves->pluck('item_id')->unique()->values())->whereIn('warehouse_id', $moves->pluck('warehouse_id')->unique()->values())
             ->selectRaw('item_id, warehouse_id, sum(qty) q')->groupBy('item_id', 'warehouse_id')->get()
             ->mapWithKeys(fn ($r) => [$r->item_id.':'.$r->warehouse_id => (float) $r->q])->all();
         $list = $moves->all();

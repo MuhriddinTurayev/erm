@@ -38,7 +38,7 @@
       <select id="projSel"></select>
       <button data-act="newProject" title="Добавить объект">{!! ic('plus', '', 18) !!}</button>
     </div>
-    <select id="langSel" title="Язык / Til / Забон"></select>
+    <select id="langSel" title="Забон / Язык / Til"></select>
     <span id="saveState"></span>
     @if ($u->canModule('monitoring'))<a class="erp-btn notr" href="/company/monitor" title="{{ __('Мониторинг') }}">{!! ic('layout-dashboard', '', 16) !!}<span>{{ __('Панель ERP') }}</span></a>@endif
     <button class="icon-btn" onclick="toggleTheme()" title="{{ __('Светлая / тёмная тема') }}">{!! ic('moon', 'only-light', 18) !!}{!! ic('sun', 'only-dark', 18) !!}</button>

@@ -58,10 +58,10 @@ class LoginGuard
             ?? LoginEvent::where('user_id', $user->id)->where('device', sha1($user->id.'|'.$b.'|'.$os))->orderBy('id')->first();
         $seen = ['method' => $method, 'ip' => $request->ip(), 'agent' => mb_substr((string) $request->userAgent(), 0, 255), 'device' => $device, 'last_at' => now()];
         if ($ev) {
-            $ev->forceFill($seen + ['logins' => (int) $ev->logins + 1])->save();
+            $ev->forceFill($seen + ['logins' => (int) $ev->logins + 1, 'ips' => self::ips((array) $ev->ips ?: ($ev->ip ? [[$ev->ip, $ev->last_at?->toIso8601String()]] : []), $request->ip())])->save();
         } else {
             $first = ! LoginEvent::where('user_id', $user->id)->exists();
-            $ev = LoginEvent::create($seen + ['user_id' => $user->id, 'new_device' => ! $first, 'logins' => 1]);
+            $ev = LoginEvent::create($seen + ['user_id' => $user->id, 'new_device' => ! $first, 'logins' => 1, 'ips' => self::ips([], $request->ip())]);
             if ($ev->new_device && $user->login_alerts) {
                 self::alert($user, $ev, "$b, $os");
             }
@@ -69,6 +69,15 @@ class LoginGuard
         $user->forceFill(['last_login_at' => now()])->save();
 
         return $ev;
+    }
+
+    /** С каких IP входили с этого устройства: последние 10, свежие первыми */
+    private static function ips(array $list, ?string $ip): array
+    {
+        $list = array_values(array_filter($list, fn ($x) => is_array($x) && ($x[0] ?? null) !== $ip));
+        array_unshift($list, [$ip, now()->toIso8601String()]);
+
+        return array_slice($list, 0, 10);
     }
 
     /** Метка этого браузера (новая, если её ещё нет); срок cookie продлевается при каждом входе */

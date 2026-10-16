@@ -795,5 +795,12 @@ dialog.modal::backdrop{background:rgba(15,13,40,.5)}
 @media (max-width:760px){.api-steps{grid-template-columns:1fr}}
 .api-objs{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px 14px}
 .is-busy{opacity:.6;pointer-events:none;cursor:progress}
+/* справочники в настройках */
+.lst{display:grid;gap:8px;padding:14px;border:1px solid var(--border-2);border-radius:12px}
+.lst>small{line-height:1.45}
+.chips-ed{display:flex;flex-wrap:wrap;gap:6px;align-items:center;border:1px solid var(--border);border-radius:10px;padding:8px;background:var(--surface);cursor:text}
+.chips-ed .chip{display:inline-flex;align-items:center;gap:4px;background:var(--accent-soft);color:var(--accent-text);border-radius:99px;padding:3px 4px 3px 10px;font-size:13px;font-weight:500}
+.chip-x{border:0;background:none;color:inherit;cursor:pointer;font-size:15px;line-height:1;padding:0 5px;border-radius:50%}.chip-x:hover{background:color-mix(in srgb,currentColor 15%,transparent)}
+.chip-in{border:0;outline:0;background:none;flex:1;min-width:160px;font:inherit;color:var(--text);padding:4px}
 /* «Деньги на счету» полной суммой — шрифт чуть меньше, чтобы не ломать карточку */
 .kpi .k-v.k-full{font-size:clamp(20px,2.1vw,28px);line-height:1.15;word-break:break-word}

@@ -36,10 +36,12 @@ class StockController extends ErpController
         $moves = StockMove::of($ws->id)->with(['item', 'warehouse', 'user', 'counterparty'])->whereIn('warehouse_id', $whs->pluck('id'))->when($wid, fn ($x) => $x->where('warehouse_id', $wid))
             ->latest('date')->latest('id')->limit(60)->get();
 
+        $bal = Stock::balances($ws);
+
         return view('company.erp.stock', [
-            'ws' => $ws, 'whs' => $whs, 'wid' => $wid, 'items' => $items, 'bal' => Stock::balances($ws), 'q' => $q, 'low' => Stock::low($ws),
+            'ws' => $ws, 'whs' => $whs, 'wid' => $wid, 'items' => $items, 'bal' => $bal, 'q' => $q, 'low' => Stock::low($ws),
             'projects' => $this->projects(), 'counterparties' => $this->counterparties(), 'staff' => $this->staff(),
-            'moves' => $moves, 'ml' => Stock::moveLabels($ws, $moves),
+            'moves' => $moves, 'ml' => Stock::moveLabels($ws, $moves, $bal),
             'costs' => Stock::costByProject($ws),
         ]);
     }

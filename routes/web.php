@@ -264,6 +264,7 @@ Route::middleware(['auth', 'role:company'])->group(function () {
             Route::post('/company/settings', [Company\SettingsController::class, 'update']);
             Route::post('/company/telegram/link', [Company\SettingsController::class, 'telegramLink']);
             Route::post('/company/settings/ops', [Company\SettingsController::class, 'updateOps']);
+            Route::post('/company/settings/lists', [Company\SettingsController::class, 'lists']);   // справочники: способы и условия оплаты, источники, единицы
             Route::get('/company/audit', [Company\OpsController::class, 'audit']);
             // API и интеграции: ключи выдаёт администратор платформы; руководитель видит их, просит новый, может срочно отозвать
             Route::get('/company/api', [Company\ApiController::class, 'index']);
@@ -341,6 +342,7 @@ Route::middleware(['auth', 'role:superadmin'])->prefix('admin')->group(function 
     // API: ключи компаниям и партнёрам (с ролью в компании), вебхуки ключей, заявки компаний, общий выключатель
     Route::middleware('perm:api')->prefix('api')->group(function () {
         Route::get('/', [Admin\ApiController::class, 'index']);
+        Route::get('/company/{workspace}', [Admin\ApiController::class, 'company']);
         Route::post('/toggle', [Admin\ApiController::class, 'toggle']);
         Route::post('/tokens', [Admin\ApiController::class, 'tokenSave']);
         Route::post('/tokens/{token}/revoke', [Admin\ApiController::class, 'tokenRevoke']);

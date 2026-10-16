@@ -32,7 +32,7 @@ class ApiController extends Controller
                 ->orWhereHas('workspace', fn ($w) => $w->where('name', 'like', "%$q%"))));
         $active = fn ($x) => $x->whereNull('revoked_at')->where(fn ($y) => $y->whereNull('expires_at')->orWhere('expires_at', '>', now()));
         $day = now()->subDay();
-        $companies = Workspace::orderBy('name')->get();
+        $companies = Workspace::orderBy('name')->get(['id', 'name']);   // без данных CRM — их может быть много
         $tokens = $only(ApiToken::with(['workspace', 'user', 'webhooks']))->orderByRaw('case when revoked_at is null then 0 else 1 end')->orderByDesc('id')->limit(300)->get();
         $hooks = Webhook::with(['workspace', 'token'])->when($cid, fn ($x) => $x->where('workspace_id', $cid))->orderByDesc('is_active')->orderByDesc('fails')->orderByDesc('id')->get();
 
@@ -40,10 +40,10 @@ class ApiController extends Controller
             'enabled' => Scopes::enabled(),
             'cid' => $cid, 'q' => $q,
             'companies' => $companies,
-            // для окна «Выдать ключ»: объекты каждой компании и что может каждая роль в каждой компании
-            'objectsOf' => $companies->mapWithKeys(fn ($w) => [$w->id => collect(StateWriter::projects($w))->map(fn ($n, $id) => ['id' => (string) $id, 'name' => $n])->values()]),
-            'rolesOf' => $companies->mapWithKeys(fn ($w) => [$w->id => collect(config('oftob.roles'))->mapWithKeys(fn ($n, $r) => [$r => Scopes::forRole($w, $r)])]),
-            'requests' => Workspace::whereNotNull('settings->api_request')->orderBy('name')->get()->filter(fn ($w) => is_array($w->setting('api_request'))),
+            // названия объектов — только у компаний, где ключ ограничен объектами
+            'names' => Workspace::whereIn('id', $tokens->filter(fn ($t) => $t->allowedObjects())->pluck('workspace_id')->unique())->get()
+                ->mapWithKeys(fn ($w) => [$w->id => StateWriter::projects($w)]),
+            'requests' => Workspace::whereNotNull('settings->api_request')->orderBy('name')->get(['id', 'name', 'settings'])->filter(fn ($w) => is_array($w->setting('api_request'))),
             'tokens' => $tokens,
             'hooks' => $hooks,
             'deliveries' => WebhookDelivery::whereIn('webhook_id', $hooks->pluck('id'))->latest('id')->limit(80)->get()->groupBy('webhook_id'),
@@ -60,6 +60,15 @@ class ApiController extends Controller
             ],
             'base' => url('/api/v1'),
             'endpoints' => Spec::endpoints(),
+        ]);
+    }
+
+    /** Для окна «Выдать ключ»: объекты выбранной компании и что может каждая роль в ней */
+    public function company(Workspace $workspace)
+    {
+        return response()->json([
+            'objects' => collect(StateWriter::projects($workspace))->map(fn ($n, $id) => ['id' => (string) $id, 'name' => $n])->values(),
+            'roles' => collect(config('oftob.roles'))->mapWithKeys(fn ($n, $r) => [$r => Scopes::forRole($workspace, $r)]),
         ]);
     }
 

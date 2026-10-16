@@ -196,7 +196,7 @@ class V1Controller extends Controller
         $d = $r->validate([
             'status' => ['sometimes', Rule::in(array_keys(SalesController::STATUSES))], 'buyer_name' => ['sometimes', 'nullable', 'string', 'max:120'],
             'buyer_phone' => ['sometimes', 'nullable', 'string', 'max:40'], 'price' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'plan' => ['sometimes', 'nullable', Rule::in(SalesController::PLANS)], 'note' => ['sometimes', 'nullable', 'string', 'max:300'],
+            'plan' => ['sometimes', 'nullable', 'string', 'max:60'], 'note' => ['sometimes', 'nullable', 'string', 'max:300'],
         ]);
         if (! $d) {
             throw ValidationException::withMessages(['status' => 'Nothing to change: send status, buyer_name, buyer_phone, price, plan or note']);

@@ -10,11 +10,11 @@ class LoginEvent extends Model
 {
     public const UPDATED_AT = null;
 
-    protected $fillable = ['user_id', 'method', 'ip', 'agent', 'device', 'new_device', 'last_at', 'logins'];
+    protected $fillable = ['user_id', 'method', 'ip', 'agent', 'device', 'new_device', 'last_at', 'logins', 'ips'];
 
     protected function casts(): array
     {
-        return ['new_device' => 'boolean', 'created_at' => 'datetime', 'last_at' => 'datetime', 'logins' => 'integer'];
+        return ['new_device' => 'boolean', 'created_at' => 'datetime', 'last_at' => 'datetime', 'logins' => 'integer', 'ips' => 'array'];
     }
 
     public function user(): BelongsTo

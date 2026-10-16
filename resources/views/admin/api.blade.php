@@ -7,7 +7,6 @@
   $roles = config('oftob.roles');
   $EV = Webhooks::EVENTS;
   $newKey = session('apiKey');
-  $names = $companies->mapWithKeys(fn ($w) => [$w->id => collect($objectsOf[$w->id] ?? [])->pluck('name', 'id')->all()]);
   $openHook = session('hook');
   $sendText = $newKey ? __('Доступ к API Oftob_Sohtumon')."\n".__('Компания').': '.$newKey['company']."\n".__('Роль').': '.$newKey['role']."\n".__('Адрес API').': '.$base."\n".__('Ключ').': '.$newKey['key']."\n".__('Документация').': '.url('/developers') : '';
 @endphp
@@ -196,7 +195,9 @@
 @push('scripts')
 <script>
 (() => {
-  const OBJ = @json($objectsOf), ROLES = @json($rolesOf), LABEL = @json(collect(Scopes::MODULES)->map(fn ($m) => __($m[0])));
+  const META = {}, LABEL = @json(collect(Scopes::MODULES)->map(fn ($m) => __($m[0])));
+  // объекты и права ролей выбранной компании — по запросу (не грузим все компании разом)
+  const meta = async id => META[id] || (META[id] = await fetch('/admin/api/company/' + id, { headers: { Accept: 'application/json' } }).then(r => r.json()).catch(() => ({ objects: [], roles: {} })));
   const T = { read: @json(__('чтение')), write: @json(__('чтение и запись')), none: @json(__('ничего, кроме объектов')), add: @json(__('Выдать ключ')), edit: @json(__('Изменить ключ')), save: @json(__('Сохранить')) };
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-copy]'); if (!b) return;
@@ -207,16 +208,17 @@
   const ws = kf.elements.workspace_id, role = kf.elements.role, ro = kf.elements.read_only;
   let picked = @json((array) old('objects', []));
   const drawObjects = () => {
-    const list = OBJ[ws.value] || [];
+    const list = (META[ws.value] || {}).objects || [];
     kd.querySelector('[data-objects]').innerHTML = list.map(o => `<label class="check"><input type="checkbox" name="objects[]" value="${o.id}" ${picked.includes(o.id) ? 'checked' : ''}> ${o.name.replace(/</g, '&lt;')}</label>`).join('') || '<span class="muted">—</span>';
   };
   const drawPreview = () => {
-    let sc = ((ROLES[ws.value] || {})[role.value] || []);
+    let sc = (((META[ws.value] || {}).roles || {})[role.value] || []);
     if (ro.checked) sc = sc.filter(s => s.endsWith(':read'));
     const mods = {}; sc.forEach(s => { const [m, a] = s.split(':'); if (!mods[m] || a === 'write') mods[m] = a; });
     kd.querySelector('[data-preview]').innerHTML = Object.keys(LABEL).filter(m => mods[m]).map(m => `<span class="badge plain ${mods[m] === 'write' ? 'b-warn' : 'b-info'}">${LABEL[m]} — ${T[mods[m]]}</span>`).join('') || `<span class="muted">${T.none}</span>`;
   };
-  ws.addEventListener('change', () => { picked = []; drawObjects(); drawPreview(); });
+  const redraw = async () => { await meta(ws.value); drawObjects(); drawPreview(); };
+  ws.addEventListener('change', () => { picked = []; redraw(); });
   role.addEventListener('change', drawPreview); ro.addEventListener('change', drawPreview);
   // окна открываются общим обработчиком (data-open, data-fill) — здесь дорисовываем объекты, права, события
   document.addEventListener('click', e => {
@@ -226,7 +228,7 @@
       picked = o.dataset.objects ? JSON.parse(o.dataset.objects) : [];
       ws.disabled = edit; kf.elements.expires.querySelector('[value=keep]').hidden = !edit;
       kd.querySelector('[data-key-title]').textContent = edit ? T.edit : T.add; kd.querySelector('[data-key-btn]').textContent = edit ? T.save : T.add;
-      drawObjects(); drawPreview();
+      redraw();
     }
     if (o.dataset.open === 'dlg-hook') {
       const allowed = JSON.parse(o.dataset.allowed || '[]'), ev = o.dataset.events ? JSON.parse(o.dataset.events) : allowed.filter(x => ['lead.created', 'apartment.updated', 'apartment.paid', 'task.created'].includes(x));
@@ -234,7 +236,7 @@
       document.querySelectorAll('#dlg-hook [name="events[]"]').forEach(c => { c.disabled = !allowed.includes(c.value); c.checked = !c.disabled && ev.includes(c.value); c.closest('label').style.opacity = c.disabled ? .45 : 1; });
     }
   });
-  drawObjects(); drawPreview();
+  redraw();
   @if (session('open'))document.getElementById(@json(session('open')))?.showModal();@endif
   @if ($openHook)document.getElementById('hook-{{ (int) $openHook }}')?.scrollIntoView({ block: 'center' });@endif
 })();

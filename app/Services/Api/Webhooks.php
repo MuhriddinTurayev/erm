@@ -94,7 +94,13 @@ class Webhooks
                 return;
             }
             $data = $data instanceof Closure ? $data() : $data;
-            $oid = $data['object_id'] ?? ($data['apartment']['object_id'] ?? null);
+            // чей это объект: склад — по объекту склада (как в GET /stock/moves), касса — по операции или по кассе объекта
+            $oid = match ($event) {
+                'stock.moved' => $data['warehouse']['object_id'] ?? $data['object_id'] ?? null,
+                'cash.created' => $data['object_id'] ?? $data['desk_object_id'] ?? null,
+                'apartment.paid' => $data['apartment']['object_id'] ?? null,
+                default => $data['object_id'] ?? null,
+            };
             $tokens = ApiToken::with('workspace')->whereIn('id', array_values(array_filter(array_column($hooks, 2))))->get()->keyBy('id');
             $body = null;
             foreach ($hooks as [$id, , $tid]) {

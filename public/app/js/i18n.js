@@ -1,6 +1,6 @@
 'use strict';
 /* ===== Языки интерфейса: русский, узбекский, таджикский ===== */
-const LANGS = [['ru', 'Русский'], ['uz', "O'zbekcha"], ['tg', 'Тоҷикӣ']];
+const LANGS = [['tg', 'Тоҷикӣ'], ['ru', 'Русский'], ['uz', "O'zbekcha"]];   // таджикский первым
 const L10N = { uz: {}, tg: {} };      // точные фразы
 const L10W = { uz: {}, tg: {} };      // слова и части фраз
 const curLang = () => (typeof DB !== 'undefined' && DB && DB.settings && DB.settings.lang) || 'ru';

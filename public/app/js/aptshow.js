@@ -82,9 +82,11 @@ function aptPlanSvg(a) {
   return { svg: s, plan };
 }
 /* ---------- расчёт оплаты ---------- */
-const PAY_PLANS = [['full', 'Полная оплата'], ['r6', 'Рассрочка 6 мес'], ['r12', 'Рассрочка 12 мес'], ['r24', 'Рассрочка 24 мес'], ['r36', 'Рассрочка 36 мес'], ['ipo', 'Ипотека 15 лет']];
+// условия оплаты для калькулятора — из справочника: «ипотека» — через банк, число — месяцев рассрочки, без числа — сразу
+const planKey = s => /ипотек|ipotek|mortgage|ипотека/i.test(s) ? 'ipo' : (+String(s).replace(/\D/g, '') ? 'r' + (+String(s).replace(/\D/g, '')) : 'full');
+const PAY_PLANS = (() => { const seen = new Set(); return LISTS.pay_plans.map(s => [planKey(s), s]).filter(([k]) => !seen.has(k) && seen.add(k)); })();
 function aptCalc(p, a) {
-  const c = (p.apts[a.id] && p.apts[a.id].calc) || {}, plan = c.plan || 'r12', disc = c.disc ?? (plan === 'full' ? 5 : 0), firstPct = c.first ?? (plan === 'full' ? 100 : 30), rate = c.rate ?? 18;
+  const c = (p.apts[a.id] && p.apts[a.id].calc) || {}, plan = c.plan || (PAY_PLANS.some(x => x[0] === 'r12') ? 'r12' : (PAY_PLANS[0] || ['full'])[0]), disc = c.disc ?? (plan === 'full' ? 5 : 0), firstPct = c.first ?? (plan === 'full' ? 100 : 30), rate = c.rate ?? 18;
   const price = Math.round(a.price * (1 - disc / 100) / 1000) * 1000, first = plan === 'full' ? price : Math.round(price * firstPct / 100 / 1000) * 1000, rest = price - first;
   let months = 0, monthly = 0;
   if (plan.startsWith('r')) { months = +plan.slice(1); monthly = rest / months; }
@@ -181,7 +183,7 @@ ACT.aptBookForm = d => {
     <label class="fld"><span>Цена квартиры, ${cur()}</span><input class="txt" type="number" id="bkPrice" value="${c.price}"></label>
     <label class="fld"><span>Условия оплаты</span><select id="bkPlan">${opts(PAY_PLANS, c.plan)}</select></label>
     <label class="fld"><span>Сумма задатка, ${cur()} *</span><input class="txt" type="number" id="bkDep" value="${dep}"></label>
-    <label class="fld"><span>Способ оплаты</span><select id="bkWay">${opts(['Наличные', 'Банковская карта', 'Перевод на счёт'])}</select></label>
+    <label class="fld"><span>Способ оплаты</span><select id="bkWay" data-free="Свой способ оплаты">${optsFree(LISTS.pay_methods)}</select></label>
     <label class="fld"><span>Бронь действует, дней</span><input class="txt" type="number" id="bkDays" value="14"></label>
     <label class="fld chk" style="grid-column:1/-1"><input type="checkbox" id="bkSold"> <span>Договор купли-продажи уже подписан — сразу отметить «Продана»</span></label></div>
   <div class="note mt">После оформления: квартира станет «${T('Бронь')}» в шахматке, задаток проведётся в бухгалтерии, откроются соглашение о задатке и квитанция для печати.</div>

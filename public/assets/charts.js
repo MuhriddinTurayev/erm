@@ -1,10 +1,9 @@
 /* Графики панели на Chart.js (assets/vendor/chart.umd.js, MIT).
    Разметка: <div class="chart-box" data-chart='{"type":"bar|line|donut|hbar","labels":[…],"series":[{"name":"…","data":[…],"color":"c1"}],"money":"сум"}'></div>
-   Цвета — из токенов темы (--c1…--c8), при смене темы графики перерисовываются. Суммы на осях — коротко (12,5 млн), в подсказке — полностью. */
+   Цвета — из токенов темы (--c1…--c8), при смене темы графики перерисовываются. Суммы — всегда полностью, без сокращений. */
 (function () {
   'use strict';
   const LOC = (document.documentElement.lang || 'ru').slice(0, 2);
-  const UNITS = { uz: ['ming', 'mln', 'mlrd'], tg: ['ҳаз.', 'млн', 'млрд'], ru: ['тыс.', 'млн', 'млрд'] }[LOC] || ['тыс.', 'млн', 'млрд'];
   const css = (n) => getComputedStyle(document.documentElement).getPropertyValue('--' + n).trim();
   const color = (c) => (c && c[0] === '#') || /^rgb/.test(c || '') ? c : css(c || 'c1') || '#6c4cf1';
   const alpha = (hex, a) => {
@@ -13,12 +12,9 @@
     return `rgba(${parseInt(h.slice(0, 2), 16)},${parseInt(h.slice(2, 4), 16)},${parseInt(h.slice(4, 6), 16)},${a})`;
   };
   const num = (v, d = 0) => Number(v).toLocaleString('ru-RU', { maximumFractionDigits: d, minimumFractionDigits: 0 }).replace(/,/g, ',');
-  // 12 500 000 → «12,5 млн»
+  // суммы — полностью, без «млн/млрд»: 12 500 000
   function short(v) {
     const a = Math.abs(v), s = v < 0 ? '−' : '';
-    if (a >= 1e9) return s + num(a / 1e9, a >= 1e10 ? 1 : 2) + ' ' + UNITS[2];
-    if (a >= 1e6) return s + num(a / 1e6, a >= 1e7 ? 0 : 1) + ' ' + UNITS[1];
-    if (a >= 1e4) return s + num(a / 1e3, 0) + ' ' + UNITS[0];
     return s + num(a, a < 10 ? 1 : 0);
   }
   const full = (v, cur) => (v < 0 ? '−' : '') + num(Math.abs(v)) + (cur ? ' ' + cur : '');

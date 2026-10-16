@@ -10,14 +10,8 @@ const sum = (arr, f = x => x) => arr.reduce((s, x) => s + (f(x) || 0), 0);
 const fmt = (n, d = 0) => (isFinite(n) ? +n : 0).toLocaleString('ru-RU', { maximumFractionDigits: d });
 const cur = () => DB.settings.currency;
 const money = n => fmt(Math.round(n || 0)) + ' ' + cur();
-function short(n) {
-  n = n || 0; const a = Math.abs(n);
-  if (a >= 1e12) return fmt(n / 1e12, 2) + ' трлн';
-  if (a >= 1e9) return fmt(n / 1e9, 2) + ' млрд';
-  if (a >= 1e6) return fmt(n / 1e6, 1) + ' млн';
-  if (a >= 1e4) return fmt(n / 1e3, 0) + ' тыс';
-  return fmt(n);
-}
+// суммы — всегда полностью, без «млн/млрд» (сокращение прятало расходы в миллионах при остатке в миллиардах)
+function short(n) { return fmt(Math.round(n || 0)); }
 const moneyS = n => short(n) + ' ' + cur();
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function isoDate(d) { const z = new Date(d); z.setMinutes(z.getMinutes() - z.getTimezoneOffset()); return z.toISOString().slice(0, 10); }

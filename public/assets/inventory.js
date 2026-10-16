@@ -23,7 +23,7 @@
   const money = n => fmt(Math.round(n)) + ' ' + C.cur;
   // коротко для клеток шахматки: 1,03 млрд · 668 млн · 85,5 млн
   const short = n => { n = +n || 0; const a = Math.abs(n);
-    return a >= 1e9 ? fmt(n / 1e9, 2) + ' ' + T.bn : a >= 1e8 ? fmt(n / 1e6, 0) + ' ' + T.mn : a >= 1e6 ? fmt(n / 1e6, 1) + ' ' + T.mn : a >= 1e3 ? fmt(n / 1e3, 0) + ' ' + T.th : fmt(n); };
+    return fmt(Math.round(n)); };   // полностью, без «млн/млрд»
   const blockOf = id => inv.blocks.find(b => b.id === id);
   const typeOf = id => inv.types.find(t => t.id === id);
   const unitsOf = (b, e) => inv.units.filter(u => u.b === b && (e === undefined || u.e === e));

@@ -47,6 +47,9 @@ class CompanyStats
                 if ((($t['link'] ?? [])['kind'] ?? '') !== 'cash') {
                     $nonCash += $in ? $amt : -$amt;
                 }
+                if (Cash::isTransferTx($t)) {
+                    continue;   // перевод между кассами — деньги компании не пришли и не ушли
+                }
                 $T[$in ? 'in_all' : 'out_all'] += $amt;
                 if ($td === $date) {
                     $o[$in ? 'in_day' : 'out_day'] += $amt;
@@ -178,17 +181,10 @@ class CompanyStats
     }
 
     /** 12,3 млн */
+    /** Сумма для показа — всегда полностью, без «млн/млрд»: сокращение прятало изменения (149,99 млрд → 149,99 млрд после расхода в 7 млн) */
     public static function short(float $n): string
     {
-        $a = abs($n);
-
-        return match (true) {
-            $a >= 1e12 => self::num($n / 1e12, 2).' '.__('трлн'),
-            $a >= 1e9 => self::num($n / 1e9, 2).' '.__('млрд'),
-            $a >= 1e6 => self::num($n / 1e6, 1).' '.__('млн'),
-            $a >= 1e4 => self::num($n / 1e3, 0).' '.__('тыс'),
-            default => self::num($n, 0),
-        };
+        return self::money($n);
     }
 
     private static function num(float $n, int $d): string

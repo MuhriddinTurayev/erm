@@ -142,8 +142,18 @@ class MonitorController extends ErpController
         if ($stats) {
             $prev = CompanyStats::build($ws, $ws->localNow()->subMonthNoOverflow()->toDateString(), $only)['totals'];
             $total = $only === null ? (float) $stats['totals']['balance'] : Cash::totalBase($ws);
-            $net7 = (float) \App\Models\CashOp::of($ws->id)->whereNull('transfer_key')->where('date', '>=', $ws->localNow()->subDays(6)->toDateString())
+            $from7 = $ws->localNow()->subDays(6)->toDateString();
+            $net7 = (float) \App\Models\CashOp::of($ws->id)->whereNull('transfer_key')->where('date', '>=', $from7)
                 ->selectRaw("sum(case when type = 'in' then amount_base else -amount_base end) s")->value('s');
+            if ($only === null) {   // оплаты квартир, расходы из Telegram — их нет в кассах, но они в «Деньги на счету»
+                foreach ($ws->projects() as $p) {
+                    foreach ((array) ($p['tx'] ?? []) as $t) {
+                        if ((($t['link'] ?? [])['kind'] ?? '') !== 'cash' && (string) ($t['date'] ?? '') >= $from7) {
+                            $net7 += (($t['type'] ?? '') === 'in' ? 1 : -1) * (float) ($t['amount'] ?? 0);
+                        }
+                    }
+                }
+            }
 
             return ['money' => true, 'cash' => $total, 'cash_prev' => $total - $net7, 'out' => $stats['totals']['out_month'], 'out_prev' => $prev['out_month'],
                 'in' => $stats['totals']['in_month'], 'in_prev' => $prev['in_month'], 'decide' => $decide];

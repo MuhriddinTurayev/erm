@@ -56,7 +56,7 @@ function tileInfo(k, p) {
 function homeMoneyStrip() {
   const t = today(), y = yesterday(), P_ = DB.projects;
   const bal = companyMoney(P_), dT = sum(P_, x => moneyOn(x, t).out), dY = sum(P_, x => moneyOn(x, y).out), iT = sum(P_, x => moneyOn(x, t).inc);
-  const cats = {}; P_.forEach(x => x.tx.forEach(tx => { if (tx.type === 'out' && tx.date === t) cats[tx.cat] = (cats[tx.cat] || 0) + tx.amount; }));
+  const cats = {}; P_.forEach(x => x.tx.forEach(tx => { if (tx.type === 'out' && tx.date === t && !isTransfer(tx)) cats[tx.cat] = (cats[tx.cat] || 0) + tx.amount; }));
   const top = Object.entries(cats).sort((a, b) => b[1] - a[1])[0];
   return `<section class="money-strip" data-act="go" data-page="cash">
     <div class="ms-main"><span>💰 Деньги компании на счету</span><b class="ms-full" title="${moneyS(bal)}">${money(bal)}</b><small>${SAAS && SAAS.cashDesks != null ? T('во всех кассах и на счетах') : P_.length + ' ' + T('объект(ов)')}</small></div>

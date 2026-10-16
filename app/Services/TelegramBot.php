@@ -297,7 +297,7 @@ class TelegramBot
 
     /* ---------------- язык бота ---------------- */
 
-    private const LANGS = ['uz' => "🇺🇿 O'zbekcha", 'ru' => '🇷🇺 Русский', 'tg' => '🇹🇯 Тоҷикӣ'];
+    private const LANGS = ['tg' => '🇹🇯 Тоҷикӣ', 'ru' => '🇷🇺 Русский', 'uz' => "🇺🇿 O'zbekcha"];   // таджикский первым
 
     /** Язык, выбранный в чате до привязки к сотруднику */
     private static function chatLang(string $chat): ?string
