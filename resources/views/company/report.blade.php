@@ -16,7 +16,9 @@
   <div class="card">
     <div class="card-h"><h3>{!! ic('send') !!}{{ __('Так выглядит сообщение в Telegram') }}</h3>
       @if ($r->sent_at)<span class="muted">{{ __('отправлен') }} {{ $r->sent_at->timezone($ws->timezone)->format('d.m.Y H:i') }}</span>@endif</div>
-    @if ($r->error)<div class="alert alert-bad">{!! ic('circle-alert') !!}<div>{{ $r->error }}</div></div>@endif
+    @if ($r->error)<div class="alert alert-bad">{!! ic('circle-alert') !!}<div>{{ $r->error }}
+      @if (! $ws->report_chats && ! $ws->report_email)<div style="margin-top:6px"><a class="btn btn-s" href="/company/settings#report">{!! ic('settings', '', 14) !!}{{ __('Указать, куда отправлять') }}</a></div>@endif
+    </div></div>@endif
     <div class="tg-preview"><div class="tg-msg">{!! strip_tags($text, '<b><i>') !!}</div></div>
   </div>
   <div>

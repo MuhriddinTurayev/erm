@@ -14,7 +14,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div class="card" id="report">
     <div class="card-h"><h3>{!! ic('bell') !!}{{ __('Ежедневный отчёт руководителю') }}</h3></div>
     <div class="form">
       <label class="switch wide"><input type="checkbox" name="report_enabled" value="1" @checked($ws->report_enabled)> {{ __('Отправлять каждый день') }}</label>
