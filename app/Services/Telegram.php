@@ -81,12 +81,22 @@ class Telegram
     /** Новые сообщения боту (long polling) */
     public static function updates(int $offset, int $timeout = 25): array
     {
-        return self::call('getUpdates', ['offset' => $offset, 'timeout' => $timeout, 'allowed_updates' => ['message', 'callback_query']], null, $timeout + 10);
+        return self::call('getUpdates', ['offset' => $offset, 'timeout' => $timeout, 'allowed_updates' => self::ALLOWED], null, $timeout + 10);
     }
+
+    /** edited_message — трансляция геопозиции сотрудника: Telegram присылает её обновления как правку сообщения */
+    private const ALLOWED = ['message', 'edited_message', 'callback_query'];
 
     public static function setWebhook(string $url, string $secret): void
     {
-        self::call('setWebhook', ['url' => $url, 'secret_token' => $secret, 'allowed_updates' => ['message', 'callback_query']]);
+        self::call('setWebhook', ['url' => $url, 'secret_token' => $secret, 'allowed_updates' => self::ALLOWED]);
+    }
+
+    /** Сообщение с одной кнопкой внизу, которая отправляет боту местоположение телефона (GPS берёт сам Telegram) */
+    public static function askLocation(string $chatId, string $html, string $label): void
+    {
+        self::call('sendMessage', ['chat_id' => $chatId, 'text' => mb_substr($html, 0, 4000), 'parse_mode' => 'HTML', 'disable_web_page_preview' => true,
+            'reply_markup' => ['keyboard' => [[['text' => $label, 'request_location' => true]]], 'resize_keyboard' => true, 'is_persistent' => true]]);
     }
 
     public static function deleteWebhook(): void

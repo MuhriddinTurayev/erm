@@ -5,49 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\Checkin;
 use App\Models\WorkerToken;
 use App\Models\WorkSite;
+use App\Services\WorkerGeo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 /** Приход сотрудников: личные ссылки, отметки «Пришёл / Ушёл» с GPS, расстояние до объекта */
 class GeoController extends Controller
 {
-    private static function dist(float $a, float $b, float $c, float $d): int
-    {
-        $r = fn ($x) => $x * M_PI / 180;
-        $s = sin($r($c - $a) / 2) ** 2 + cos($r($a)) * cos($r($c)) * sin($r($d - $b) / 2) ** 2;
-
-        return (int) round(6371000 * 2 * atan2(sqrt($s), sqrt(1 - $s)));
-    }
-
-    /** Состояние смены сотрудника: открыта ли, сколько отработано сегодня */
-    private static function state(WorkerToken $w): array
-    {
-        $ev = Checkin::where('token', $w->token)->where('created_at', '>=', now()->subHours(40))->orderBy('id')->get();
-        $open = null;
-        $ms = 0;
-        $today = now()->startOfDay();
-        foreach ($ev as $e) {
-            if ($e->type === 'in') {
-                $open = $e;
-            } elseif ($e->type === 'out' && $open) {
-                if ($e->created_at >= $today) {
-                    $ms += ($e->created_at->getTimestamp() - max($open->created_at->getTimestamp(), $today->getTimestamp())) * 1000;
-                }
-                $open = null;
-            }
-        }
-        if ($open && $open->created_at->lt(now()->subHours(18))) {
-            $open = null; // забытая смена старше 18 ч не считается открытой
-        }
-        $last = $ev->last();
-
-        return [
-            'open' => $open?->created_at->toIso8601String(),
-            'todayMs' => $ms,
-            'last' => $last ? ['t' => $last->created_at->toIso8601String(), 'type' => $last->type] : null,
-        ];
-    }
-
     /* ---------- телефон сотрудника (по личной ссылке, без входа) ---------- */
     public function page()
     {
@@ -66,10 +30,12 @@ class GeoController extends Controller
     public function workerState(Request $request)
     {
         $w = $this->worker($request);
-        $site = WorkSite::where('workspace_id', $w->workspace_id)->where('project_id', $w->project_id)->first();
-        $lang = json_decode((string) DB::table('workspaces')->where('id', $w->workspace_id)->value('data'), true)['settings']['lang'] ?? 'ru';
+        $site = WorkerGeo::site($w);
+        $bot = \App\Services\Telegram::enabled() ? (string) \App\Models\PlatformSetting::get('telegram_bot', '') : '';
 
-        return response()->json(['name' => $w->name, 'role' => $w->role, 'site' => $site?->name ?? '', 'hasSite' => (bool) $site, 'r' => $site?->radius, 'lang' => $lang] + self::state($w));
+        // точка объекта — для карты на телефоне («где я и где объект»); бот — отметки через Telegram
+        return response()->json(['name' => $w->name, 'role' => $w->role, 'site' => $site?->name ?? '', 'hasSite' => (bool) $site, 'r' => $site?->radius,
+            'lat' => $site?->lat, 'lng' => $site?->lng, 'lang' => WorkerGeo::lang($w), 'bot' => $bot, 'tg' => (bool) $w->tg_chat_id] + WorkerGeo::state($w));
     }
 
     public function workerEvent(Request $request)
@@ -84,21 +50,10 @@ class GeoController extends Controller
         if (! is_numeric($lat) || ! is_numeric($lng) || abs((float) $lat) > 90 || abs((float) $lng) > 180) {
             return response()->json(['error' => 'Нет координат GPS'], 400);
         }
-        $st = self::state($w);
-        $lastT = $st['last'] ? strtotime($st['last']['t']) : 0;
-        if (($type === 'in' && $st['open']) || ($type !== 'in' && ! $st['open']) || ($type === 'ping' && time() - $lastT < 60)) {
-            return response()->json(['ok' => true] + $st);
-        }
-        $site = WorkSite::where('workspace_id', $w->workspace_id)->where('project_id', $w->project_id)->first();
-        $dist = $site ? self::dist((float) $lat, (float) $lng, $site->lat, $site->lng) : null;
-        $on = $dist === null ? null : $dist <= ($site->radius ?: 150);
-        Checkin::create([
-            'workspace_id' => $w->workspace_id, 'token' => $w->token, 'project_id' => $w->project_id, 'staff_id' => $w->staff_id,
-            'type' => $type, 'lat' => round((float) $lat, 6), 'lng' => round((float) $lng, 6),
-            'acc' => (int) round((float) $request->input('acc', 0)), 'dist' => $dist, 'on_site' => $on,
-        ]);
+        $r = WorkerGeo::record($w, $type, (float) $lat, (float) $lng, (float) $request->input('acc', 0));
+        unset($r['saved']);
 
-        return response()->json(['ok' => true, 'dist' => $dist, 'on' => $on] + self::state($w));
+        return response()->json($r);
     }
 
     /* ---------- для программы (после входа) ---------- */

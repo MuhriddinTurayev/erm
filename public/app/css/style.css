@@ -391,3 +391,5 @@ input.cell.n{text-align:right}
 .warnbox .mini-tbl th,.warnbox .mini-tbl td{padding:3px 14px 3px 0;text-align:left;border:0;background:none;color:inherit;font-weight:500}
 .warnbox .mini-tbl th{font-weight:700}
 .warnbox > div + div{margin-top:4px}
+/* карта GPS: кнопка «где я» */
+.leaflet-bar.gps-me{width:34px;height:34px;line-height:34px;text-align:center;font-size:17px;background:#fff;display:block;text-decoration:none;cursor:pointer}

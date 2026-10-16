@@ -140,3 +140,8 @@ _W2.forEach(([r, u, t]) => { L10W.uz[r] = u; L10W.tg[r] = t; });
   ['Перенести объект: перетащите метку или нажмите на карту.', 'Obyektni ko‘chirish: belgini suring yoki xaritani bosing.', 'Гузаронидани объект: аломатро кашед ё харитаро пахш кунед.'],
   ['👆 Нажмите на карту там, где стройка, — объект встанет в эту точку (радиус — ниже, в «Где находится объект»).', '👆 Xaritada qurilish joyini bosing — obyekt shu nuqtaga qo‘yiladi (radius — pastda, «Obyekt qayerda joylashgan» blokida).', '👆 Дар харита ҷои сохтмонро пахш кунед — объект ба ин нуқта гузошта мешавад (радиус — дар поён, дар «Объект дар куҷо ҷойгир аст»).'],
 ].forEach(([r, u, t]) => { L10N.uz[r] = u; L10N.tg[r] = t; });
+[
+  ['Показать, где я', 'Qayerdaligimni ko‘rsatish', 'Нишон додани ҷои ман'],
+  ['Браузер даёт GPS только сайтам с https — на этом адресе (http) местоположение недоступно.', 'Brauzer GPS’ni faqat https saytlarga beradi — bu manzilda (http) joylashuv olinmaydi.', 'Браузер GPS-ро танҳо ба сайтҳои https медиҳад — дар ин суроға (http) ҷойгиршавӣ дастрас нест.'],
+  ['Вы здесь', 'Siz shu yerdasiz', 'Шумо дар ин ҷо'],
+].forEach(([r, u, t]) => { L10N.uz[r] = u; L10N.tg[r] = t; });

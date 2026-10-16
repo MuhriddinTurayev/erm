@@ -46,7 +46,7 @@ class TelegramRelay
     /** Чат обновления: личные сообщения и нажатия кнопок */
     public static function chatOf(array $u): ?string
     {
-        $c = $u['message']['chat'] ?? $u['callback_query']['message']['chat'] ?? null;
+        $c = $u['message']['chat'] ?? $u['edited_message']['chat'] ?? $u['callback_query']['message']['chat'] ?? null;
 
         return $c && ($c['type'] ?? '') === 'private' ? (string) $c['id'] : null;
     }
@@ -67,6 +67,9 @@ class TelegramRelay
     {
         if (str_starts_with($code, 'b_')) {
             return BuyerLink::where('token', substr($code, 2))->exists();
+        }
+        if (str_starts_with($code, 'w_')) {   // личная ссылка сотрудника (приход на объект)
+            return \App\Models\WorkerToken::where('token', substr($code, 2))->exists();
         }
         $c = strtoupper($code);
 

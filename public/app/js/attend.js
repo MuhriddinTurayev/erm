@@ -110,6 +110,19 @@ async function gpsMap(p) {
   if (has) { const c = [+p.gps.lat, +p.gps.lng]; Lf.circle(c, { radius: +p.gps.r || 150, color: '#16a34a', weight: 2, fillOpacity: .12 }).addTo(GPS.map).bindTooltip(esc(p.name));
     const pin = Lf.marker(c, { draggable: zone }).addTo(GPS.map).bindPopup('🏗 ' + esc(p.name)); if (zone) pin.on('dragend', () => setAt(pin.getLatLng())); pts.push(c); }
   if (zone) GPS.map.on('click', async e => { if (!has || await ui.confirm(T('Перенести объект в эту точку?'))) setAt(e.latlng); });
+  // «Где я»: моя точка на карте (браузер даёт GPS только сайту с https — иначе честно говорим почему)
+  const Me = Lf.Control.extend({ options: { position: 'topleft' }, onAdd() {
+    const b = Lf.DomUtil.create('a', 'leaflet-bar gps-me'); b.href = '#'; b.title = T('Показать, где я'); b.textContent = '📍';
+    Lf.DomEvent.on(b, 'click', ev => { Lf.DomEvent.stop(ev);
+      if (window.isSecureContext === false) return toast(T('Браузер даёт GPS только сайтам с https — на этом адресе (http) местоположение недоступно.'));
+      if (!navigator.geolocation) return toast(T('Геолокация недоступна'));
+      navigator.geolocation.getCurrentPosition(c => { const pt = [c.coords.latitude, c.coords.longitude];
+        if (GPS.me) GPS.me.remove();
+        GPS.me = Lf.circleMarker(pt, { radius: 8, color: '#fff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 }).addTo(GPS.map).bindTooltip(T('Вы здесь'), { permanent: true, direction: 'top', offset: [0, -8] });
+        GPS.map.setView(pt, Math.max(GPS.map.getZoom(), 16)); },
+      () => toast(T('Не удалось получить местоположение — разрешите доступ к геолокации')), { enableHighAccuracy: true, timeout: 20000 }); });
+    return b; } });
+  GPS.me = null; new Me().addTo(GPS.map);
   C.open.forEach(sh => { if (sh.last.lat == null) return; const c = [sh.last.lat, sh.last.lng], bad = sh.last.on === false;
     Lf.circleMarker(c, { radius: 8, color: '#fff', weight: 2, fillColor: bad ? '#dc2626' : sh.silent > 15 ? '#94a3b8' : '#16a34a', fillOpacity: 1 }).addTo(GPS.map).bindTooltip(`${esc(sh.s.name)} · ${gpsDist(sh.last.dist)}`, { direction: 'top' }); pts.push(c); });
   if (pts.length > 1) GPS.map.fitBounds(pts, { padding: [40, 40], maxZoom: 17 }); else GPS.map.setView(pts[0] || [41.3111, 69.2797], pts.length ? 16 : 11);

@@ -6,6 +6,7 @@ use App\Models\BuyerLink;
 use App\Models\Expense;
 use App\Models\SiteLog;
 use App\Models\User;
+use App\Models\WorkerToken;
 use App\Models\Workspace;
 use App\Services\Ai\AiService;
 use App\Services\Erp\Supply;
@@ -44,6 +45,8 @@ class TelegramBot
                 $this->onCallback($u['callback_query']);
             } elseif (isset($u['message'])) {
                 $this->onMessage($u['message']);
+            } elseif (isset($u['edited_message']['location'])) {
+                $this->onLiveLocation($u['edited_message']);   // трансляция геопозиции сотрудника
             }
         } catch (\Throwable $e) {
             Log::error('Telegram bot: '.$e->getMessage(), ['update' => $u['update_id'] ?? null]);
@@ -71,8 +74,20 @@ class TelegramBot
 
             return;
         }
+        // сотрудник по личной ссылке (приход на объект): местоположение — отметка «Пришёл / Ушёл»
+        $worker = WorkerToken::where('tg_chat_id', $chat)->first();
+        if ($worker && isset($m['location'])) {
+            $this->workerLocation($chat, $worker, $m['location'], false);
+
+            return;
+        }
         $user = User::where('telegram_chat_id', $chat)->where('is_active', true)->whereNotNull('workspace_id')->first();
         if (! $user) {
+            if ($worker) {
+                $this->workerHelp($chat, $worker);
+
+                return;
+            }
             if (preg_match('/^\/(start|til|lang|язык|забон)\b/u', $text)) {
                 $this->askLang($chat, 'hello');
 
@@ -261,9 +276,102 @@ class TelegramBot
         });
     }
 
+    /* ---------------- приход сотрудника через Telegram ---------------- */
+
+    /** Трансляция геопозиции: Telegram присылает новые координаты правкой сообщения */
+    private function onLiveLocation(array $m): void
+    {
+        if (($m['chat']['type'] ?? '') !== 'private') {
+            return;
+        }
+        $chat = (string) $m['chat']['id'];
+        if ($w = WorkerToken::where('tg_chat_id', $chat)->first()) {
+            $this->workerLocation($chat, $w, $m['location'], true);
+        }
+    }
+
+    /**
+     * Местоположение сотрудника. Смены нет — «Пришёл». Смена идёт: трансляция — отметка «я здесь» (молча),
+     * обычная точка (кнопка «Ушёл» или 📎 → Геопозиция) — «Ушёл».
+     */
+    private function workerLocation(string $chat, WorkerToken $w, array $loc, bool $edited): void
+    {
+        $live = $edited || isset($loc['live_period']);
+        $open = (bool) WorkerGeo::state($w)['open'];
+        if ($edited && ! $open) {
+            return;   // трансляция ещё идёт после «Ушёл» — это не новая смена
+        }
+        $type = ! $open ? 'in' : ($live ? 'ping' : 'out');
+        $r = WorkerGeo::record($w, $type, (float) $loc['latitude'], (float) $loc['longitude'], $loc['horizontal_accuracy'] ?? null);
+        if ($type === 'ping' || ! $r['saved']) {
+            return;
+        }
+        $at = Workspace::find($w->workspace_id)?->localNow()->format('H:i') ?? now()->format('H:i');
+        $this->as(null, function () use ($chat, $r, $type, $live, $at) {
+            $where = $r['dist'] === null ? '' : "\n📍 ".($r['on'] ? __('Вы на объекте') : '⚠️ '.__('Вы НЕ на объекте')).' · '.__('до объекта').' '.self::meters($r['dist']);
+            if ($type === 'in') {
+                $this->workerKeyboard($chat, '✅ <b>'.__('Смена начата').'</b> · '.$at.$where."\n\n".($live
+                    ? __('Трансляция геопозиции включена: местоположение передаётся само, даже при выключенном экране.')
+                    : __('Чтобы местоположение передавалось весь день, даже при выключенном экране: 📎 → Геопозиция → «Транслировать геопозицию» на 8 часов.')), true);
+            } else {
+                $this->workerKeyboard($chat, '🏁 <b>'.__('Смена закончена').'</b> · '.$at.' · '.__('отработано сегодня').': '.self::hm((int) $r['todayMs']).$where
+                    ."\n\n".__('Трансляцию геопозиции теперь можно остановить.'), false);
+            }
+        }, WorkerGeo::lang($w));
+    }
+
+    /** Подсказка сотруднику и кнопка внизу экрана: «Пришёл» или «Ушёл» (кнопка сама отправит местоположение) */
+    private function workerHelp(string $chat, WorkerToken $w): void
+    {
+        $open = (bool) WorkerGeo::state($w)['open'];
+        $this->as(null, fn () => $this->workerKeyboard($chat, '👷 <b>'.e($w->name).'</b>'."\n"
+            .($open ? __('Смена идёт. Закончить — кнопкой внизу.') : __('Начать смену — кнопкой внизу: она отправит ваше местоположение.'))
+            ."\n\n".__('Чтобы местоположение передавалось весь день, даже при выключенном экране: 📎 → Геопозиция → «Транслировать геопозицию» на 8 часов.'), $open), WorkerGeo::lang($w));
+    }
+
+    private function workerKeyboard(string $chat, string $html, bool $open): void
+    {
+        // у руководителя или прораба в этом же Telegram своё меню — его не подменяем, только сообщение
+        if (User::where('telegram_chat_id', $chat)->exists()) {
+            $this->say($chat, $html);
+
+            return;
+        }
+        try {
+            Telegram::askLocation($chat, $html, $open ? '🏁 '.__('Ушёл — отправить местоположение') : '▶️ '.__('Пришёл — отправить местоположение'));
+        } catch (\Throwable $e) {
+            Log::warning('Telegram send: '.$e->getMessage());
+        }
+    }
+
+    private static function meters(int $d): string
+    {
+        return $d < 1000 ? $d.' '.__('м') : str_replace('.', ',', (string) round($d / 1000, 1)).' '.__('км');
+    }
+
+    private static function hm(int $ms): string
+    {
+        $m = max(0, (int) round($ms / 60000));
+
+        return intdiv($m, 60).':'.str_pad((string) ($m % 60), 2, '0', STR_PAD_LEFT);
+    }
+
     /** /start КОД: сотрудник, чат отчёта руководителя или покупатель */
     private function link(string $chat, string $code, array $m): bool
     {
+        if (str_starts_with($code, 'w_')) {   // личная ссылка сотрудника (приход на объект)
+            $w = WorkerToken::where('token', substr($code, 2))->first();
+            if (! $w) {
+                return false;
+            }
+            WorkerToken::where('tg_chat_id', $chat)->whereKeyNot($w->id)->update(['tg_chat_id' => null]);
+            $w->forceFill(['tg_chat_id' => $chat])->save();
+            TelegramRelay::linked($chat, WorkerGeo::lang($w));
+            $this->as(null, fn () => $this->say($chat, '✅ '.__('Telegram привязан: :n', ['n' => e($w->name)])), WorkerGeo::lang($w));
+            $this->workerHelp($chat, $w);
+
+            return true;
+        }
         if (str_starts_with($code, 'b_')) {
             $bl = BuyerLink::where('token', substr($code, 2))->first();
             if (! $bl) {

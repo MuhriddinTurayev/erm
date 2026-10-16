@@ -4816,5 +4816,18 @@
     "Подключить Telegram": "Telegramni ulash",
     "Авто — сначала самая старая партия": "Avtomatik — avval eng eski partiya",
     "На этом складе этого товара нет": "Bu omborda bu tovar yo‘q",
-    "В партии «:b» на этом складе только :q :u. Оставьте партию «Авто» — всего на складе :t :u.": "Bu ombordagi «:b» partiyasida faqat :q :u bor. Partiyani «Avtomatik» qoldiring — omborda jami :t :u bor."
+    "В партии «:b» на этом складе только :q :u. Оставьте партию «Авто» — всего на складе :t :u.": "Bu ombordagi «:b» partiyasida faqat :q :u bor. Partiyani «Avtomatik» qoldiring — omborda jami :t :u bor.",
+    "Вы на объекте": "Siz obyektdasiz",
+    "Вы НЕ на объекте": "Siz obyektda EMASSIZ",
+    "до объекта": "obyektgacha",
+    "Смена начата": "Smena boshlandi",
+    "Смена закончена": "Smena tugadi",
+    "отработано сегодня": "bugun ishlangan",
+    "Трансляция геопозиции включена: местоположение передаётся само, даже при выключенном экране.": "Jonli joylashuv yoqilgan: joylashuv ekran o‘chiq bo‘lsa ham o‘zi yuborilib turadi.",
+    "Чтобы местоположение передавалось весь день, даже при выключенном экране: 📎 → Геопозиция → «Транслировать геопозицию» на 8 часов.": "Joylashuv kun bo‘yi, ekran o‘chiq bo‘lsa ham yuborilib turishi uchun: 📎 → Joylashuv → «Jonli joylashuvni ulashish» — 8 soatga.",
+    "Трансляцию геопозиции теперь можно остановить.": "Endi jonli joylashuvni to‘xtatsangiz bo‘ladi.",
+    "Смена идёт. Закончить — кнопкой внизу.": "Smena davom etmoqda. Tugatish — pastdagi tugma bilan.",
+    "Начать смену — кнопкой внизу: она отправит ваше местоположение.": "Smenani boshlash — pastdagi tugma bilan: u joylashuvingizni yuboradi.",
+    "Ушёл — отправить местоположение": "Ketdim — joylashuvni yuborish",
+    "Пришёл — отправить местоположение": "Keldim — joylashuvni yuborish"
 }
