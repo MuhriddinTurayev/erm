@@ -72,6 +72,55 @@ Artisan::command('oftob:telegram {--once}', function (\App\Services\TelegramPoll
     }
 })->purpose('Получить сообщения Telegram-бота (режим без вебхука)');
 
+/*
+ * Компьютер без планировщика (Open Server): один фоновый процесс без окна делает то, что делал bot.bat, —
+ * принимает сообщения бота, отправляет ежедневные отчёты и напоминания. Сайт запускает его сам (TelegramPoller::autostart).
+ * Всё — внутри процесса, без дочерних процессов (у них в Windows мелькали бы окна консоли).
+ * Через несколько часов процесс перезапускает себя, чтобы работать на свежем коде.
+ */
+Artisan::command('oftob:worker {--hours=4}', function (\App\Services\TelegramPoller $poller) {
+    if (\App\Services\TelegramPoller::workerAlive()) {
+        return 0;   // уже работает планировщик или другой фоновый процесс
+    }
+    $end = time() + 3600 * max(1, (int) $this->option('hours'));
+    $run = function (string $cmd) {
+        try {
+            \Illuminate\Support\Facades\Artisan::call($cmd);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    };
+    $minute = $quarter = 0;
+    while (time() < $end) {
+        \Illuminate\Support\Facades\Cache::put('worker-at', time(), 86400);
+        if ((int) \Illuminate\Support\Facades\Cache::get('sched-at', 0) > time() - 150) {
+            \Illuminate\Support\Facades\Cache::forget('worker-at');
+
+            return 0;   // запустили настоящий планировщик (bot.bat) — уступаем ему
+        }
+        if (time() - $minute >= 60) {
+            $minute = time();
+            $run('oftob:reports');
+        }
+        if (time() - $quarter >= 900) {
+            $quarter = time();
+            $run('oftob:remind');
+        }
+        if (\App\Services\TelegramPoller::active() && ! \App\Services\TelegramPoller::yielded()) {
+            $poller->listen(50);
+        } else {
+            sleep(30);
+        }
+    }
+    \Illuminate\Support\Facades\Cache::forget('worker-at');
+    \App\Services\TelegramPoller::spawnWorker();   // смена без перерыва
+
+    return 0;
+})->purpose('Фоновая работа на компьютере без планировщика: бот, отчёты, напоминания');
+
+/* Планировщик жив (schedule:work на сервере или bot.bat) — фоновый процесс на компьютере тогда не нужен */
+Schedule::call(fn () => \Illuminate\Support\Facades\Cache::put('sched-at', time(), 86400))->everyMinute()->name('scheduler-heartbeat');
+
 /* Напоминания: покупателям о платежах, исполнителям о задачах, бухгалтерии об оплатах */
 Artisan::command('oftob:remind', function (\App\Services\Reminders $r) {
     $n = $r->run();

@@ -16,7 +16,13 @@
       <div class="alert alert-warn" style="margin:0">{!! ic('triangle-alert') !!}<div>{{ __('Telegram-бот ещё не настроен администратором платформы.') }}</div></div>
     @elseif ($u->telegram_chat_id)
       <p>{{ __('Ваш Telegram привязан. Бот :b принимает ваши расходы, фото чеков и записи журнала работ.', ['b' => '@'.$bot]) }}</p>
-      @if ($deaf)
+      @if ($deaf && $starting)
+      {{-- компьютер: фоновый приём сообщений только что запущен сайтом — через несколько секунд бот на связи --}}
+      <div class="alert alert-info">{!! ic('refresh-cw') !!}<div>
+        <b>{{ __('Бот запускается.') }}</b> {{ __('Через несколько секунд он начнёт отвечать в Telegram — ничего запускать вручную не нужно.') }}
+      </div></div>
+      @if (! request()->has('w'))<script>setTimeout(() => location.replace(location.pathname + '?w=1'), 6000)</script>@endif
+      @elseif ($deaf)
       <div class="alert alert-warn">{!! ic('triangle-alert') !!}<div>
         <b>{{ __('Бот сейчас не получает сообщения — поэтому не отвечает.') }}</b>
         {{ $u->isAdmin() || $u->role === 'superadmin' ? __('Не запущен планировщик. На компьютере (Open Server) запустите файл bot.bat из папки проекта и не закрывайте его окно; на сервере он работает сам.') : __('Сообщите руководителю компании: не запущен планировщик бота.') }}

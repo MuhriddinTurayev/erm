@@ -31,13 +31,16 @@ class TelegramController extends Controller
         if (! $u->telegram_chat_id && ! $u->tg_link_code) {
             $u->forceFill(['tg_link_code' => strtoupper(Str::random(8))])->save();
         }
+        TelegramPoller::autostart();   // компьютер без планировщика — приём сообщений бота запускается сам
 
         return view('company.telegram', [
             'u' => $u,
             'bot' => \App\Models\PlatformSetting::get('telegram_bot'),
             'enabled' => Telegram::enabled(),
             // бот без вебхука, а сообщения никто не забирает (не запущен планировщик) — он не отвечает
-            'deaf' => TelegramPoller::active() && ! TelegramPoller::listening(),
+            // на компьютере фоновый приём сообщений запускается сам (autostart) — тогда «бот запускается», а не «запустите bot.bat»
+            'deaf' => TelegramPoller::active() && ! TelegramPoller::listening() && ! TelegramPoller::shared(),
+            'starting' => TelegramPoller::autoMode(),
             // тот же бот получает сообщения ещё и на другом сайте — коды и сообщения могут уходить туда
             'shared' => TelegramPoller::active() && TelegramPoller::shared(),
         ]);
@@ -56,7 +59,7 @@ class TelegramController extends Controller
         $conflict = false;
         try {
             // несколько секунд слушаем: если тот же бот опрашивает другой сайт, Telegram сразу ответит «Conflict»
-            $poller->once($request->boolean('pull') ? 0 : 3);
+            $poller->once($request->boolean('pull') ? 0 : 3, true);
         } catch (\Throwable $e) {
             $conflict = str_contains($e->getMessage(), 'Conflict');
         }

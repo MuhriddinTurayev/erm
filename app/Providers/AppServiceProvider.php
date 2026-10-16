@@ -25,6 +25,16 @@ class AppServiceProvider extends ServiceProvider
 
         $this->webhooks();
 
+        // компьютер (Open Server) без планировщика: после ответа страницы сам запускаем фоновую работу бота — без bot.bat
+        if (\App\Services\TelegramPoller::autoMode() && ! $this->app->runningInConsole()) {
+            $this->app->terminating(function () {
+                try {
+                    \App\Services\TelegramPoller::autostart();
+                } catch (\Throwable) {
+                }
+            });
+        }
+
         // даты по-узбекски — латиницей (у Carbon «uz» по умолчанию кириллица)
         \Illuminate\Support\Facades\Event::listen(\Illuminate\Foundation\Events\LocaleUpdated::class, function ($e) {
             \Illuminate\Support\Carbon::setLocale($e->locale === 'uz' ? 'uz_Latn' : $e->locale);

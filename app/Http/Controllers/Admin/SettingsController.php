@@ -14,6 +14,8 @@ class SettingsController extends Controller
 {
     public function edit()
     {
+        \App\Services\TelegramPoller::autostart();
+
         return view('admin.settings', [
             'v' => fn ($k) => PlatformSetting::get($k),
             'hasToken' => Telegram::enabled(),
@@ -58,6 +60,7 @@ class SettingsController extends Controller
         if (array_key_exists('telegram_token', $d) && $d['telegram_token'] !== Telegram::token()) {
             $d['telegram_offset'] = '0';
             \Illuminate\Support\Facades\Cache::forget('tg-conflict-at');
+            \Illuminate\Support\Facades\Cache::forget('tg-yield');   // свой бот — уступать больше некому
         }
         foreach ($d as $k => $v) {
             PlatformSetting::put($k, $v === null ? '' : (string) $v);

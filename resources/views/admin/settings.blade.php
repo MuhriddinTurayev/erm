@@ -34,6 +34,8 @@
       </div></div>
       @elseif ($tgListening)
       <div class="alert alert-ok mt" style="margin-bottom:0">{!! ic('circle-check') !!}<div>{{ __('Бот на связи: этот сайт получает сообщения боту.') }}</div></div>
+      @elseif (\App\Services\TelegramPoller::autoMode())
+      <div class="alert alert-info mt" style="margin-bottom:0">{!! ic('refresh-cw') !!}<div><b>{{ __('Бот запускается.') }}</b> {{ __('Через несколько секунд он начнёт отвечать в Telegram — ничего запускать вручную не нужно.') }}</div></div>
       @else
       <div class="alert alert-warn mt" style="margin-bottom:0">{!! ic('triangle-alert') !!}<div>{{ __('Бот сейчас не получает сообщения: не запущен планировщик. На сервере он работает сам; на компьютере (Open Server) запустите bot.bat из папки проекта.') }}</div></div>
       @endif
