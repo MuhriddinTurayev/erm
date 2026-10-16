@@ -1,6 +1,6 @@
 'use strict';
 /* ===== Приход сотрудников: таймер смены с телефона и GPS — на объекте или нет ===== */
-const GPS = { map: null, layer: null, route: null, tick: null, url: '', busy: false };
+const GPS = { map: null, layer: null, route: null, tick: null, url: '', busy: false, tg: new Set() };
 const gpsTok = () => { const a = new Uint8Array(12); crypto.getRandomValues(a); return [...a].map(x => x.toString(16).padStart(2, '0')).join(''); };
 const gpsActive = p => p.staff.filter(s => s.active !== false && !s.isNew);
 const gpsTime = iso => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -77,7 +77,7 @@ async function gpsSync() {
     if (p.gps.lat !== '' && p.gps.lng !== '') sites[p.id] = { lat: +p.gps.lat, lng: +p.gps.lng, r: +p.gps.r || 150, name: p.name };
   });
   if (changed) save();
-  try { const r = await fetch('/api/geo/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workers, sites, revoke, lang: DB.settings.lang }) }); const j = await r.json(); GPS.url = j.publicUrl || ''; if (DB.settings.gpsRevoke) { delete DB.settings.gpsRevoke; save(); } } catch (e) { }
+  try { const r = await fetch('/api/geo/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workers, sites, revoke, lang: DB.settings.lang }) }); const j = await r.json(); GPS.url = j.publicUrl || ''; GPS.tg = new Set(j.tg || []); if (DB.settings.gpsRevoke) { delete DB.settings.gpsRevoke; save(); } } catch (e) { }
 }
 async function gpsPoll() {
   if (!viaServer() || GPS.busy || !DB) return; GPS.busy = true;
@@ -154,7 +154,16 @@ PAGES.attend = {
     const dayS = C.S.filter(s => s.date === date).sort((x, y) => x.in.t.localeCompare(y.in.t));
     const st = sh => sh.last.on === false ? `<span class="pill p-sold">⚠️ ${T('не на объекте')}</span>` : sh.last.on ? `<span class="pill p-free">✅ ${T('на объекте')}</span>` : `<span class="pill">${T('объект не задан')}</span>`;
     const ago = m => m < 1 ? T('только что') : Math.round(m) + ' ' + T('мин назад');
-    const links = gpsActive(p);
+    // ссылки сотрудников — с тем, что у каждого сегодня: на смене / ещё не пришёл / ушёл; сверху — кто на смене
+    const stNow = s => {
+      const o = C.open.find(x => x.sid === s.id);
+      if (o) return { k: 0, h: `<span class="pill p-free">🟢 ${T('На смене')}</span> <span class="small muted">${T('Пришёл')} ${gpsTime(o.in.t)}</span>${o.last.on === false ? ` <span class="small bad">⚠️ ${T('не на объекте')}</span>` : ''}` };
+      const d = C.todayS.filter(x => x.sid === s.id && x.out);
+      if (d.length) return { k: 2, h: `<span class="pill p-reserve">⏹ ${T('Ушёл')} ${gpsTime(d[0].out.t)}</span> <span class="small muted">${fmt(sum(d, x => x.ms) / 3600e3, 1)} ${T('ч')}</span>` };
+      return { k: 1, h: `<span class="pill p-booked">⚪ ${T('Ещё не пришёл')}</span>` };
+    };
+    const links = gpsActive(p).map(s => ({ s, st: stNow(s) })).sort((a, b) => a.st.k - b.st.k);
+    const cnt = k => links.filter(x => x.st.k === k).length;
     // смены этого дня на других объектах — чтобы не искать, куда «пропал» сотрудник
     const elsewhere = DB.projects.filter(x => x !== p).map(x => ({ x, S: gpsShifts(x).filter(s => s.date === date) })).filter(o => o.S.length);
     return `${viaServer() ? '' : `<div class="card"><b>⚠️ Программа открыта как файл.</b> Отметки с телефонов принимает сервер — запустите «Запустить_localhost.bat».</div>`}
@@ -200,7 +209,8 @@ PAGES.attend = {
       <div class="card"><h3>📱 Ссылки для телефонов сотрудников</h3>
         <div class="small muted mb">У каждого сотрудника своя ссылка. Он открывает её на телефоне, нажимает «Пришёл» — включается таймер и GPS, в конце дня — «Ушёл». Можно добавить ссылку на главный экран телефона.</div>
         ${GPS.url ? '' : `<div class="audit a-warn"><span>⚠️</span><div>Телефонам нужен адрес в интернете с https (GPS в браузере работает только так). Укажите его в разделе <a href="#leads?tab=connect" data-act="gpsConnect">Лиды → Подключения</a>.</div><span></span></div>`}
-        <div class="tbl-wrap"><table><tbody>${links.map(s => `<tr><td><b>${esc(s.name)}</b><div class="small muted">${esc(s.role)}</div></td><td style="white-space:nowrap">${GPS.url && s.wtok ? `<button class="btn-s" data-act="gpsQr" data-id="${s.id}">▦ QR</button><button class="btn-s" data-act="gpsCopy" data-id="${s.id}">📋</button>${s.phone ? `<a class="btn btn-s" target="_blank" rel="noopener" href="https://wa.me/${String(s.phone).replace(/\D/g, '')}?text=${encodeURIComponent(T('Ваша ссылка для отметки прихода на работу') + ': ' + gpsLink(s))}">🟢 WhatsApp</a>` : ''}` : '<span class="small muted">—</span>'}<button class="btn-s" data-act="gpsNewTok" data-id="${s.id}" title="${T('Новая ссылка — старая перестанет работать')}">↻</button></td></tr>`).join('')}</tbody></table></div>
+        <div class="flex mb" style="gap:6px;flex-wrap:wrap;align-items:center"><span class="small muted">${T('Сегодня')}:</span><span class="pill p-free">🟢 ${T('На смене')}: ${cnt(0)}</span><span class="pill p-booked">⚪ ${T('Ещё не пришёл')}: ${cnt(1)}</span><span class="pill p-reserve">⏹ ${T('Ушёл')}: ${cnt(2)}</span></div>
+        <div class="tbl-wrap"><table><tbody>${links.map(({ s, st }) => `<tr><td><b>${esc(s.name)}</b>${GPS.tg.has(s.wtok) ? ` <span class="small" title="${T('Отмечается кнопкой в Telegram-боте')}">✈️</span>` : ''}<div class="small muted">${esc(s.role)}</div><div style="margin-top:4px">${st.h}</div></td><td style="white-space:nowrap">${GPS.url && s.wtok ? `<button class="btn-s" data-act="gpsQr" data-id="${s.id}">▦ QR</button><button class="btn-s" data-act="gpsCopy" data-id="${s.id}">📋</button>${s.phone ? `<a class="btn btn-s" target="_blank" rel="noopener" href="https://wa.me/${String(s.phone).replace(/\D/g, '')}?text=${encodeURIComponent(T('Ваша ссылка для отметки прихода на работу') + ': ' + gpsLink(s))}">🟢 WhatsApp</a>` : ''}` : '<span class="small muted">—</span>'}<button class="btn-s" data-act="gpsNewTok" data-id="${s.id}" title="${T('Новая ссылка — старая перестанет работать')}">↻</button></td></tr>`).join('')}</tbody></table></div>
       </div>
     </div>`;
   },

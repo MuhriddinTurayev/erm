@@ -240,4 +240,5 @@ L10P.push(
  ["Ключи хранятся на сервере в зашифрованном виде — не в браузере и не в резервной копии.", "Kalitlar serverda shifrlangan holda saqlanadi — brauzerda ham, zaxira nusxada ham emas.", "Калидҳо дар сервер рамзгузорӣ шуда нигоҳ дошта мешаванд — на дар браузер ва на дар нусхаи эҳтиётӣ."],
  ["Instagram — формы в рекламе", "Instagram — reklamadagi shakllar", "Instagram — шаклҳо дар реклама"],
 ["В этот день на другом объекте", "Shu kuni boshqa obyektda", "Дар ин рӯз дар объекти дигар"],
+["Ещё не пришёл", "Hali kelmagan", "Ҳанӯз наомадааст"], ["Отмечается кнопкой в Telegram-боте", "Telegram botdagi tugma bilan belgilaydi", "Бо тугмаи боти Telegram қайд мекунад"],
 ].forEach(([r, u, t]) => { L10N.uz[r] = u; L10N.tg[r] = t; });

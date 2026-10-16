@@ -101,7 +101,11 @@ class GeoController extends Controller
             }
         });
 
-        return response()->json(['ok' => true, 'publicUrl' => rtrim($this->ws()->integrationOrCreate()->public_url ?: url('/'), '/'), 'now' => now()->getTimestampMs()]);
+        // у кого ссылка привязана к Telegram-боту (отмечается кнопкой в боте) — значок в списке ссылок
+        $tg = WorkerToken::where('workspace_id', $ws)->whereNotNull('tg_chat_id')->get(['token', 'project_id'])
+            ->filter(fn ($t) => $mine($t->project_id))->pluck('token')->values();
+
+        return response()->json(['ok' => true, 'publicUrl' => rtrim($this->ws()->integrationOrCreate()->public_url ?: url('/'), '/'), 'now' => now()->getTimestampMs(), 'tg' => $tg]);
     }
 
     public function events(Request $request)
