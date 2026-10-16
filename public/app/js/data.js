@@ -57,6 +57,22 @@ function migrate(p) {
     if (p[k] === undefined) p[k] = d[k];
     else if (d[k] && typeof d[k] === 'object' && !Array.isArray(d[k]) && p[k] && typeof p[k] === 'object') for (const kk in d[k]) if (p[k][kk] === undefined) p[k][kk] = d[k][kk];
   }
+  (p.staff || []).forEach(s => { s.role = canonRole(s.role); });
+}
+/*
+ * Должность хранится по-русски (как в списке ROLES) — по ней считаются ИТР, ставки, бригады; на экране она переводится.
+ * Демо-компании раньше записывали её уже переведённой («Prorab», «Uchastka ustasi») — тогда список показывал всем «Прораб»,
+ * а ИТР не находились. Переведённую должность возвращаем к исходной по словарю.
+ */
+const _roleKey = s => String(s || '').trim().toLowerCase().replace(/[‘’ʻʼ`´]/g, "'").replace(/\s+/g, ' ');
+let _roleMap = null;
+function canonRole(r) {
+  if (!r || ROLES.includes(r)) return r;
+  if (!_roleMap && typeof L10N !== 'undefined') {
+    _roleMap = {};
+    ['uz', 'tg'].forEach(l => ROLES.forEach(k => { const t = typeof tWhole === 'function' ? tWhole(l, k) : (L10N[l] || {})[k]; if (t) _roleMap[_roleKey(t)] = k; }));
+  }
+  return (_roleMap && _roleMap[_roleKey(r)]) || r;
 }
 /* Новый объект открывается с параметрами-образцом (12 этажей, 56×17 м…): смета, материалы, котлован, бригады и 3D
    посчитаны для него. Пока параметры своего дома не введены (или не подтверждены) — показываем это явно. */

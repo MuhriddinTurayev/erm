@@ -160,7 +160,7 @@ class DemoSeeder extends Seeder
         $p += ['staff' => [], 'apts' => [], 'tx' => [], 'fleet' => [], 'stages' => []];
         foreach ($p['staff'] as &$x) {
             $x['name'] = $name($x['name']);
-            $x['role'] = Lang::has($x['role'], $l, false) ? __($x['role'], [], $l) : $x['role'];
+            // должность не переводим: это ключ (список должностей, ИТР, ставки); на экране программа переводит её сама
         }
         foreach ($p['apts'] as &$o) {
             $o['buyer'] = $name($o['buyer'] ?? '');
