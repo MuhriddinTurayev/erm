@@ -222,6 +222,15 @@ input.cell.n{text-align:right}
 .ai-empty{color:var(--muted);text-align:center;margin:auto;max-width:360px}
 .ai-dots{letter-spacing:3px;color:var(--faint);animation:aiP 1s infinite}
 @keyframes aiP{50%{opacity:.3}}
+/* ИИ думает: три прыгающие точки; ИИ печатает: мигающий курсор в конце текста */
+.ai-think{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+.ai-think .ai-dots{display:inline-flex;gap:4px;letter-spacing:0;animation:none}
+.ai-think .ai-dots i{width:6px;height:6px;border-radius:50%;background:var(--accent,#4f46e5);opacity:.35;animation:aiJ 1.2s infinite ease-in-out}
+.ai-think .ai-dots i:nth-child(2){animation-delay:.15s}.ai-think .ai-dots i:nth-child(3){animation-delay:.3s}
+@keyframes aiJ{0%,60%,100%{transform:translateY(0);opacity:.35}30%{transform:translateY(-4px);opacity:1}}
+.ai-caret{display:inline-block;width:7px;height:1.05em;margin-left:2px;vertical-align:-2px;border-radius:1px;background:currentColor;opacity:.75;animation:aiC .9s steps(1) infinite}
+@keyframes aiC{50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.ai-think .ai-dots i,.ai-caret{animation:none}}
 .ai-quick{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
 .ai-quick button{white-space:normal;text-align:left;background:var(--info-soft);border-color:var(--border)}
 .ai-input{display:flex;gap:8px}

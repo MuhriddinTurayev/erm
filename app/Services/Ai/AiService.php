@@ -65,7 +65,7 @@ class AiService
 
             return null;
         }
-        AiUsage::create($log + ['ok' => true, 'input_tokens' => $r['in'], 'output_tokens' => $r['out'], 'ms' => (int) ((microtime(true) - $t) * 1000)]);
+        AiUsage::create(['model' => $r['model'] ?? $p->model] + $log + ['ok' => true, 'input_tokens' => $r['in'], 'output_tokens' => $r['out'], 'ms' => (int) ((microtime(true) - $t) * 1000)]);
         if (! preg_match('/\{.*\}/s', $r['text'], $m)) {
             return null;
         }
@@ -100,7 +100,7 @@ class AiService
 
             return null;
         }
-        AiUsage::create($log + ['ok' => true, 'input_tokens' => $r['in'], 'output_tokens' => $r['out'], 'ms' => (int) ((microtime(true) - $t) * 1000)]);
+        AiUsage::create(['model' => $r['model'] ?? $p->model] + $log + ['ok' => true, 'input_tokens' => $r['in'], 'output_tokens' => $r['out'], 'ms' => (int) ((microtime(true) - $t) * 1000)]);
 
         return $r['text'];
     }
@@ -108,20 +108,65 @@ class AiService
     /** @return array{text: string, provider: array} */
     public function ask(?Workspace $ws, ?User $user, string $kind, string $system, array $messages, ?int $providerId = null, ?int $maxTokens = null): array
     {
-        $p = $this->providerFor($ws, $providerId);
-        if (! $p) {
+        // проверка подключения администратором — только выбранная модель, без запасных
+        $strict = $kind === 'test';
+
+        return $this->each($ws, $user, $kind, $providerId, $strict,
+            fn (AiProvider $p) => $this->gateway->chat($p, $system, $messages, $maxTokens, ! $strict));
+    }
+
+    /**
+     * Ответ по кусочкам (чат): $onText('кусок') — сразу показать пользователю; вернул false — пользователь ушёл.
+     *
+     * @return array{text: string, provider: array}
+     */
+    public function stream(?Workspace $ws, ?User $user, string $kind, string $system, array $messages, ?int $providerId, callable $onText): array
+    {
+        $sent = false;
+        $emit = function (string $t) use (&$sent, $onText) {
+            $sent = true;
+
+            return $onText($t);
+        };
+
+        return $this->each($ws, $user, $kind, $providerId, false,
+            fn (AiProvider $p) => $this->gateway->stream($p, $system, $messages, $emit), function () use (&$sent) {
+                return ! $sent;
+            });
+    }
+
+    /**
+     * Спросить выбранное подключение; не ответило (лимит, перегрузка, нет связи, кончились деньги) —
+     * следующее включённое подключение платформы. Каждая попытка — в журнал расхода.
+     */
+    private function each(?Workspace $ws, ?User $user, string $kind, ?int $providerId, bool $strict, callable $call, ?callable $canSpare = null): array
+    {
+        $first = $this->providerFor($ws, $providerId);
+        if (! $first) {
             throw new AiException(__('ИИ ещё не подключён. Администратор платформы должен добавить ключ Gemini, ChatGPT, DeepSeek или Claude.'), 503);
         }
-        $t = microtime(true);
-        $log = ['workspace_id' => $ws?->id, 'user_id' => $user?->id, 'ai_provider_id' => $p->id, 'driver' => $p->driver, 'model' => $p->model, 'kind' => $kind];
-        try {
-            $r = $this->gateway->chat($p, $system, $messages, $maxTokens);
-        } catch (AiException $e) {
-            AiUsage::create($log + ['ok' => false, 'error' => mb_substr($e->getMessage(), 0, 500), 'ms' => (int) ((microtime(true) - $t) * 1000)]);
-            throw $e;
-        }
-        AiUsage::create($log + ['ok' => true, 'input_tokens' => $r['in'], 'output_tokens' => $r['out'], 'ms' => (int) ((microtime(true) - $t) * 1000)]);
+        $list = $strict ? collect([$first]) : collect([$first])->merge(AiProvider::active()->whereKeyNot($first->id)->get());
+        $last = null;
+        foreach ($list as $p) {
+            $t = microtime(true);
+            $log = ['workspace_id' => $ws?->id, 'user_id' => $user?->id, 'ai_provider_id' => $p->id, 'driver' => $p->driver, 'model' => $p->model, 'kind' => $kind];
+            try {
+                $r = $call($p);
+            } catch (AiException $e) {
+                AiUsage::create($log + ['ok' => false, 'error' => mb_substr($e->getMessage(), 0, 500), 'ms' => (int) ((microtime(true) - $t) * 1000)]);
+                $last = $e;
+                // отказ отвечать на вопрос другой сервис не исправит; начатый ответ не начинаем заново
+                if ($e->status === 422 || ($canSpare && ! $canSpare())) {
+                    throw $e;
+                }
 
-        return ['text' => $r['text'], 'provider' => $p->publicInfo()];
+                continue;
+            }
+            AiUsage::create(['model' => $r['model'] ?? $p->model] + $log + ['ok' => true, 'input_tokens' => $r['in'], 'output_tokens' => $r['out'], 'ms' => (int) ((microtime(true) - $t) * 1000)]);
+
+            return ['text' => $r['text'], 'provider' => $p->publicInfo()];
+        }
+
+        throw $last;
     }
 }

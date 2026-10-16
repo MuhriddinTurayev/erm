@@ -83,13 +83,18 @@ class Insights
             return $cached + ['ai_pending' => false, 'note' => null];
         }
         $ready = $this->aiReady($ws, $mode !== 'refresh');
-        if ($mode === 'fast' || ! $ready) {
-            return array_merge($base, ['ai_pending' => $ready && $mode === 'fast', 'note' => $ready ? null : $this->whyNoAi($ws)]);
+        // ИИ недавно не ответил — при открытии страниц сами не спрашиваем (кнопка «Обновить» спросит)
+        $cool = 'ins:cool:'.$ws->id.':'.$topic;
+        $cooling = $mode !== 'refresh' && Cache::has($cool);
+        if ($mode === 'fast' || ! $ready || $cooling) {
+            return array_merge($base, ['ai_pending' => $ready && ! $cooling && $mode === 'fast',
+                'note' => ! $ready ? $this->whyNoAi($ws) : ($cooling ? __('ИИ сейчас недоступен — показаны выводы по правилам.') : null)]);
         }
         try {
             $r = $this->ask($ws, $u, $topic, $data);
         } catch (\Throwable $e) {
             Log::warning('Insights '.$topic.': '.$e->getMessage());
+            Cache::put($cool, true, 600);
 
             return array_merge($base, ['note' => __('ИИ сейчас недоступен — показаны выводы по правилам.')]);
         }

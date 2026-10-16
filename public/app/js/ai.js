@@ -225,28 +225,83 @@ PAGES.ai = {
   mounted() { const m = $('#aiMsgs'); if (m) m.scrollTop = m.scrollHeight; }
 };function aiMsgsHtml() {
   if (!AI.view.length) return `<div class="ai-empty">👋 Здравствуйте! Я консультант по строительству. Выберите вопрос ниже или напишите свой — например, «проверь бригады бетонщиков» или «сколько ещё нужно денег до сдачи дома».</div>`;
-  return AI.view.map(v => `<div class="ai-msg ${v.role} notr">${v.role === 'user' ? esc(v.text) : (v.html ?? mdLite(v.text)) || '<span class="ai-dots">●●●</span>'}</div>`).join('');
+  return AI.view.map(v => `<div class="ai-msg ${v.role} notr"${v.k ? ` data-k="${v.k}"` : ''}>${v.role === 'user' ? esc(v.text) : aiBody(v)}</div>`).join('');
+}
+/* текст ответа: пока ИИ думает — точки; пока печатает — мигающий курсор в конце строки */
+function aiBody(v) {
+  if (v.html != null) return v.html;
+  if (!v.text && !v.err) return `<span class="ai-think"><span class="ai-dots"><i></i><i></i><i></i></span>${esc(T('ИИ думает…'))}</span>`;
+  let h = v.text ? mdLite(v.text) : '';
+  if (v.typing) h = /<\/(p|li|h4)>(<\/ul>)?$/.test(h) ? h.replace(/(<\/(?:p|li|h4)>)(<\/ul>)?$/, '<span class="ai-caret"></span>$1$2') : h + '<span class="ai-caret"></span>';
+  if (v.err) h += `<p class="bad">${esc(v.err)}</p>`;
+  return h;
 }
 function aiRefresh() { const m = $('#aiMsgs'); if (!m) return; m.innerHTML = aiMsgsHtml(); m.scrollTop = m.scrollHeight; const b = $('#aiSendBtn'); if (b) b.disabled = AI.busy; }
+/* перерисовать один ответ, не трогая остальные; прокручиваем, только если пользователь внизу */
+function aiPaint(out) {
+  const m = $('#aiMsgs'), el = m && m.querySelector(`[data-k="${out.k}"]`); if (!el) return;
+  const low = m.scrollHeight - m.scrollTop - m.clientHeight < 90;
+  el.innerHTML = aiBody(out);
+  if (low) m.scrollTop = m.scrollHeight;
+}
+/* печать по буквам: ответ приходит кусками, а показываем плавно; отстали — печатаем быстрее */
+function aiType(out) {
+  if (out.tick) return;
+  const next = () => { out.tick = document.hidden ? setTimeout(step, 200) : requestAnimationFrame(step); };
+  const step = () => {
+    out.tick = 0;
+    const back = out.full.length - out.text.length;
+    if (back > 0) {
+      let n = document.hidden ? back : Math.max(1, Math.ceil(back / 30)), cut = out.text.length + n;
+      if (/[\uD800-\uDBFF]/.test(out.full[cut - 1] || '')) cut++;   // эмодзи не режем пополам
+      out.text = out.full.slice(0, cut); aiPaint(out);
+    }
+    if (out.text.length < out.full.length || !out.end) return next();
+    out.typing = false; aiPaint(out); if (out.onDone) out.onDone();
+  };
+  next();
+}
 async function aiAsk(text, persona) {
   text = (text || '').trim(); if (!text || AI.busy) return;
   if (persona && persona !== AI.persona) { AI.persona = persona; AI.hist = []; AI.view = []; }
   if (!aiReady()) { toast(aiProviders().length ? 'ИИ не входит в ваш тариф' : 'ИИ ещё не подключён администратором платформы'); return; }
   if (curPage !== 'ai' && curPage !== 'home') go('ai');
   AI.busy = true; AI.hist.push({ role: 'user', content: text }); AI.view.push({ role: 'user', text });
-  const out = { role: 'assistant', text: '' }; AI.view.push(out); aiRefresh();
+  const out = { role: 'assistant', text: '', full: '', k: 'a' + Date.now(), typing: true, end: false }; AI.view.push(out); aiRefresh();
+  const typed = new Promise(res => { out.onDone = res; });
   const ps = $('#aiProv'); if (ps) AI.provider = ps.value || null;
+  let fin = null;
   try {
-    const r = await fetch('/api/ai/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ system: aiSystem(P()), messages: AI.hist.slice(-30), provider: AI.provider ? +AI.provider : null }) });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j.error || j.message || ('HTTP ' + r.status));
-    out.text = j.text || '…';
-    AI.hist.push({ role: 'assistant', content: out.text });
-    if (window.OFTOB && window.OFTOB.plan && j.limit) { window.OFTOB.plan.aiUsed = j.used; const u = $('#aiUsage'); if (u) u.textContent = T('запросов в этом месяце') + ': ' + j.used + ' ' + T('из') + ' ' + j.limit; }
+    const r = await fetch('/api/ai/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      body: JSON.stringify({ system: aiSystem(P()), messages: AI.hist.slice(-30), provider: AI.provider ? +AI.provider : null, stream: true }) });
+    if (!r.ok || !(r.headers.get('content-type') || '').includes('event-stream') || !r.body) {
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || j.message || ('HTTP ' + r.status));
+      out.full = j.text || '…'; fin = j;
+    } else {
+      // поток с сервера: «data: {...}» — кусок текста {d}, конец {done} или ошибка {error}
+      const rd = r.body.getReader(), dec = new TextDecoder(); let buf = '';
+      for (;;) {
+        const { value, done } = await rd.read(); if (done) break;
+        buf += dec.decode(value, { stream: true }).replace(/\r/g, '');
+        let i;
+        while ((i = buf.indexOf('\n\n')) >= 0) {
+          const line = buf.slice(0, i).split('\n').find(l => l.startsWith('data:')); buf = buf.slice(i + 2);
+          if (!line) continue;
+          let j; try { j = JSON.parse(line.slice(5)); } catch (e) { continue; }
+          if (j.d) { out.full += j.d; aiType(out); } else if (j.error) throw new Error(j.error); else if (j.done) fin = j;
+        }
+      }
+      if (!fin) throw new Error(T('Ответ прервался — нет связи с сервером. Попробуйте ещё раз.'));
+    }
+    out.end = true; aiType(out); await typed;
+    AI.hist.push({ role: 'assistant', content: out.full });
+    if (window.OFTOB && window.OFTOB.plan && fin.limit) { window.OFTOB.plan.aiUsed = fin.used; const u = $('#aiUsage'); if (u) u.textContent = T('запросов в этом месяце') + ': ' + fin.used + ' ' + T('из') + ' ' + fin.limit; }
   } catch (e) {
-    AI.hist.pop();
-    out.html = `<p class="bad">${esc(e.message === 'Failed to fetch' ? T('Нет связи с сервером. Проверьте интернет.') : e.message)}</p>`;
+    const msg = e.message === 'Failed to fetch' || e.name === 'TypeError' ? T('Нет связи с сервером. Проверьте интернет.') : e.message;
+    if (out.full) { out.end = true; aiType(out); await typed; AI.hist.push({ role: 'assistant', content: out.full }); out.err = msg; }
+    else { AI.hist.pop(); out.html = `<p class="bad">${esc(msg)}</p>`; }
+    out.typing = false;
   }
   AI.busy = false; aiRefresh();
 }

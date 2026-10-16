@@ -107,3 +107,14 @@ _W2.forEach(([r, u, t]) => { L10W.uz[r] = u; L10W.tg[r] = t; });
 /* перечень помещений (Объекты → Помещения): «Блок A · подъезд 2», виды помещений в прайс-листе */
 [['Блок', 'Blok', 'Блок'], ['офис', 'ofis', 'офис'], ['паркинг', 'avtoturargoh', 'таваққуфгоҳ'], ['кладовая', 'omborxona', 'анбор'], ['коммерция', 'tijorat', 'тиҷоратӣ']]
   .forEach(([r, u, t]) => { L10W.uz[r] = u; L10W.tg[r] = t; });
+/* ИИ-консультант: вопросы юристу и инженеру по ТБ, «думает», обрыв ответа */
+[
+  ['Проанализируй юридические риски проекта: споры, претензии, договоры, просроченные оплаты покупателей. Что делать в первую очередь и какие сроки нельзя пропустить?',
+    'Loyihaning yuridik xavflarini tahlil qil: nizolar, da’volar, shartnomalar, xaridorlarning muddati o‘tgan to‘lovlari. Birinchi navbatda nima qilish kerak va qaysi muddatlarni o‘tkazib yuborib bo‘lmaydi?',
+    'Хатарҳои ҳуқуқии лоиҳаро таҳлил кун: баҳсҳо, даъвоҳо, шартномаҳо, пардохтҳои мӯҳлаташ гузаштаи харидорон. Пеш аз ҳама чӣ бояд кард ва кадом мӯҳлатҳоро аз даст додан мумкин нест?'],
+  ['Проверь состояние охраны труда на объекте по данным проекта: инструктажи, удостоверения, СИЗ, происшествия. Что нарушает требования и что сделать в первую очередь?',
+    'Loyiha ma’lumotlari bo‘yicha obyektdagi mehnat muhofazasi holatini tekshir: yo‘l-yo‘riq (instruktaj)lar, guvohnomalar, shaxsiy himoya vositalari, baxtsiz hodisalar. Nimalar talablarga zid va birinchi navbatda nima qilish kerak?',
+    'Ҳолати ҳифзи меҳнатро дар объект аз рӯи маълумоти лоиҳа санҷ: дастурдиҳӣ, шаҳодатномаҳо, воситаҳои муҳофизати инфиродӣ, ҳодисаҳо. Чӣ талаботро вайрон мекунад ва пеш аз ҳама чӣ бояд кард?'],
+  ['ИИ думает…', 'SI o‘ylayapti…', 'ЗС фикр мекунад…'],
+  ['Ответ прервался — нет связи с сервером. Попробуйте ещё раз.', 'Javob uzilib qoldi — server bilan aloqa yo‘q. Yana bir bor urinib ko‘ring.', 'Ҷавоб қатъ шуд — бо сервер пайвастагӣ нест. Бори дигар кӯшиш кунед.'],
+].forEach(([r, u, t]) => { L10N.uz[r] = u; L10N.tg[r] = t; });

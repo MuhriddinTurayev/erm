@@ -52,7 +52,7 @@ function trNode(n) {
   while ((x = tw.nextNode())) list.push(x);
   list.forEach(trNode);
   [n, ...n.querySelectorAll('[placeholder],[title]')].forEach(e => {
-    if (e.closest && e.closest(SKIP_SEL)) return;
+    if (e.closest && e.closest('.notr,script,style')) return;   // у поля ввода переводим подсказку, а не то, что ввёл пользователь
     ['placeholder', 'title'].forEach(a => { if (e.hasAttribute && e.hasAttribute(a)) { const v = e.getAttribute(a), t = T(v); if (t !== v) e.setAttribute(a, t); } });
   });
 }

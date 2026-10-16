@@ -17,10 +17,18 @@ class AiController extends Controller
             'messages.*.role' => ['required', 'in:user,assistant'],
             'messages.*.content' => ['required', 'string', 'max:30000'],
             'provider' => ['nullable', 'integer'],
+            'stream' => ['nullable', 'boolean'],
         ]);
         $ws = $this->ws();
         try {
             $ai->assertAllowed($ws);
+        } catch (AiException $e) {
+            return response()->json(['error' => $e->getMessage()], $e->status);
+        }
+        if ($request->boolean('stream')) {
+            return $this->stream($ai, $ws, $request->user(), $data);
+        }
+        try {
             $r = $ai->ask($ws, $request->user(), 'chat', $data['system'], $data['messages'], $data['provider'] ?? null);
         } catch (AiException $e) {
             return response()->json(['error' => $e->getMessage()], $e->status);
@@ -28,5 +36,34 @@ class AiController extends Controller
         $limit = $ws->aiLimit();
 
         return response()->json($r + ['used' => $ws->aiUsedThisMonth(), 'limit' => $limit]);
+    }
+
+    /**
+     * Ответ печатается по мере того, как ИИ его пишет (Server-Sent Events):
+     * {"d":"кусок текста"} … {"done":1,"used":…,"limit":…} или {"error":"…"}
+     */
+    private function stream(AiService $ai, $ws, $user, array $data)
+    {
+        return response()->stream(function () use ($ai, $ws, $user, $data) {
+            while (ob_get_level() > 0) {
+                @ob_end_flush();
+            }
+            $send = function (array $x) {
+                echo 'data: '.json_encode($x, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE)."\n\n";
+                @flush();
+
+                return ! connection_aborted();
+            };
+            $send(['s' => 1]);   // сразу: соединение открыто, ИИ думает
+            try {
+                $r = $ai->stream($ws, $user, 'chat', $data['system'], $data['messages'], $data['provider'] ?? null, fn (string $t) => $send(['d' => $t]));
+                $send(['done' => 1, 'used' => $ws->aiUsedThisMonth(), 'limit' => $ws->aiLimit(), 'provider' => $r['provider']]);
+            } catch (AiException $e) {
+                $send(['error' => $e->getMessage()]);
+            } catch (\Throwable $e) {
+                report($e);
+                $send(['error' => __('Ошибка сервиса ИИ')]);
+            }
+        }, 200, ['Content-Type' => 'text/event-stream; charset=UTF-8', 'Cache-Control' => 'no-cache, no-transform', 'X-Accel-Buffering' => 'no']);
     }
 }

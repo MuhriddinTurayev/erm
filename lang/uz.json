@@ -4782,5 +4782,8 @@
     "позиции": "pozitsiyalar",
     "Задаток за кв.": "Xonadon uchun zakalat",
     "ГБ": "GB",
-    "Условия оплаты — из справочника компании или свои; число в названии — месяцев рассрочки": "To'lov shartlari — kompaniya ma'lumotnomasidan yoki o'zingizniki; nomdagi son — bo'lib to'lash oylari"
+    "Условия оплаты — из справочника компании или свои; число в названии — месяцев рассрочки": "To'lov shartlari — kompaniya ma'lumotnomasidan yoki o'zingizniki; nomdagi son — bo'lib to'lash oylari",
+    "Дневной лимит ключа ИИ исчерпан. Завтра он обновится; чтобы не ждать, администратор платформы может подключить платный ключ или ещё один сервис ИИ.": "SI kalitining kunlik limiti tugadi. Ertaga yangilanadi; kutmaslik uchun platforma administratori pullik kalit yoki yana bitta SI xizmatini ulashi mumkin.",
+    "Сервис ИИ сейчас перегружен — попробуйте через минуту": "SI xizmati hozir band — bir daqiqadan so'ng urinib ko'ring",
+    "Модель ИИ не найдена": "SI modeli topilmadi"
 }
