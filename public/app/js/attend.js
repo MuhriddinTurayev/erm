@@ -104,7 +104,12 @@ async function gpsMap(p) {
   const Lf = window.L, C = gpsCalc(p), has = p.gps.lat !== '' && p.gps.lng !== '', pts = [];
   GPS.map = Lf.map(el, { zoomControl: true, attributionControl: true });
   Lf.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(GPS.map);
-  if (has) { const c = [+p.gps.lat, +p.gps.lng]; Lf.circle(c, { radius: +p.gps.r || 150, color: '#16a34a', weight: 2, fillOpacity: .12 }).addTo(GPS.map).bindTooltip(esc(p.name)); Lf.marker(c).addTo(GPS.map).bindPopup('🏗 ' + esc(p.name)); pts.push(c); }
+  // руководитель ставит объект прямо на карте: щелчок — точка объекта, метку можно перетащить.
+  // Точка уже есть — сначала спросим, чтобы случайный щелчок не передвинул объект
+  const zone = gpsCanZone(), setAt = ll => { $('#gpsLat').value = ll.lat.toFixed(6); $('#gpsLng').value = ll.lng.toFixed(6); $('#gpsUrl').value = ''; ACT.gpsSave(); };
+  if (has) { const c = [+p.gps.lat, +p.gps.lng]; Lf.circle(c, { radius: +p.gps.r || 150, color: '#16a34a', weight: 2, fillOpacity: .12 }).addTo(GPS.map).bindTooltip(esc(p.name));
+    const pin = Lf.marker(c, { draggable: zone }).addTo(GPS.map).bindPopup('🏗 ' + esc(p.name)); if (zone) pin.on('dragend', () => setAt(pin.getLatLng())); pts.push(c); }
+  if (zone) GPS.map.on('click', async e => { if (!has || await ui.confirm(T('Перенести объект в эту точку?'))) setAt(e.latlng); });
   C.open.forEach(sh => { if (sh.last.lat == null) return; const c = [sh.last.lat, sh.last.lng], bad = sh.last.on === false;
     Lf.circleMarker(c, { radius: 8, color: '#fff', weight: 2, fillColor: bad ? '#dc2626' : sh.silent > 15 ? '#94a3b8' : '#16a34a', fillOpacity: 1 }).addTo(GPS.map).bindTooltip(`${esc(sh.s.name)} · ${gpsDist(sh.last.dist)}`, { direction: 'top' }); pts.push(c); });
   if (pts.length > 1) GPS.map.fitBounds(pts, { padding: [40, 40], maxZoom: 17 }); else GPS.map.setView(pts[0] || [41.3111, 69.2797], pts.length ? 16 : 11);
@@ -127,7 +132,9 @@ PAGES.attend = {
       ${kpi('Отработано сегодня', fmt(C.todayMs / 3600e3, 1) + ' ч', C.todayS.length + ' смен', 'ac')}
     </div>
     <div class="grid g2">
-      <div class="card"><h3>🗺 Карта объекта <span class="tools"><span class="small muted">🟢 на объекте · 🔴 не на объекте · ⚪ нет сигнала</span></span></h3><div id="gpsMap" class="gps-map"></div></div>
+      <div class="card"><h3>🗺 Карта объекта <span class="tools"><span class="small muted">🟢 на объекте · 🔴 не на объекте · ⚪ нет сигнала</span></span></h3>
+        ${gpsCanZone() ? `<div class="small mb ${has ? 'muted' : 'warn'}">${has ? 'Перенести объект: перетащите метку или нажмите на карту.' : '👆 Нажмите на карту там, где стройка, — объект встанет в эту точку (радиус — ниже, в «Где находится объект»).'}</div>` : ''}
+        <div id="gpsMap" class="gps-map"></div></div>
       <div class="card"><h3>⏱ Сейчас на смене (${C.open.length})</h3>
         <div class="tbl-wrap"><table><thead><tr><th>Сотрудник</th><th>Пришёл</th><th class="n">На смене</th><th>Где</th><th>Сигнал</th></tr></thead><tbody>
         ${C.open.map(sh => `<tr class="gps-row" data-act="gpsRoute" data-sid="${sh.sid}" data-in="${sh.in.t}"><td><b>${esc(sh.s.name)}</b><div class="small muted">${esc(sh.s.role)}</div></td><td>${gpsTime(sh.in.t)}${sh.in.on === false ? '<div class="small bad">' + T('не на объекте') + '</div>' : ''}</td><td class="n"><b class="gtimer" data-in="${sh.in.t}">${gpsHM(sh.ms)}</b></td><td>${st(sh)}<div class="small muted">${gpsDist(sh.last.dist)}${sh.last.acc > 100 ? ' · ±' + sh.last.acc + ' м' : ''}</div></td><td class="small ${sh.silent > 15 ? 'warn-t' : 'muted'}">${ago(sh.silent)}</td></tr>`).join('') || `<tr><td colspan="5" class="muted">${T('Сейчас никто не на смене')}</td></tr>`}
