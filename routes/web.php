@@ -67,6 +67,8 @@ Route::middleware('throttle:public')->group(function () {
     Route::post('/webhook/telegram/{secret}', [TelegramController::class, 'webhook']);
     // один бот на двух сайтах: второй сайт (копия на компьютере) забирает здесь свои сообщения (запрос подписан ключом бота)
     Route::post('/webhook/tg-relay', [TelegramController::class, 'relay']);
+    // мини-приложение Telegram «Пришёл / Ушёл» (то же, что на GitHub Pages) — когда сайт на https, кнопка откроет его отсюда
+    Route::get('/tg/geo', [TelegramController::class, 'geoApp']);
     // Шахматка для сайта застройщика и кабинет покупателя
     Route::get('/s/{key}', [PublicController::class, 'chess']);
     Route::post('/s/{key}', [PublicController::class, 'chessLead'])->middleware('throttle:10,1');

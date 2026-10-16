@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\WorkerToken;
 use App\Models\Workspace;
 use App\Services\Ai\AiService;
+use App\Services\Bot\GeoApp;
 use App\Services\Erp\Supply;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\App;
@@ -76,10 +77,13 @@ class TelegramBot
         }
         // сотрудник по личной ссылке (приход на объект): местоположение — отметка «Пришёл / Ушёл»
         $worker = WorkerToken::where('tg_chat_id', $chat)->first();
-        if ($worker && (isset($m['location']) || isset($m['venue']))) {
+        if ($worker && (isset($m['location']) || isset($m['venue']) || isset($m['web_app_data']))) {
             $this->workerLocation($chat, $worker, $m, false);
 
             return;
+        }
+        if (isset($m['web_app_data'])) {
+            return;   // ответ кнопки «Пришёл», а чат уже не привязан к сотруднику
         }
         $user = User::where('telegram_chat_id', $chat)->where('is_active', true)->whereNotNull('workspace_id')->first();
         if (! $user) {
@@ -291,29 +295,46 @@ class TelegramBot
     }
 
     /**
-     * Местоположение сотрудника. «Пришёл / Ушёл» — только обычной точкой от кнопки внизу: кнопка берёт GPS телефона.
-     * Не принимаются: место из списка (venue), пересланная точка. Трансляция (📎 → «Транслировать») смену не открывает
-     * и не закрывает — во время смены она только отмечает «я здесь» (молча).
+     * Местоположение сотрудника — отметка «Пришёл / Ушёл».
+     * Основной путь — кнопка-мини-приложение (GeoApp): ответ web_app_data приходит только от неё, с одноразовым кодом;
+     * пока она работает, любые точки через 📎 (обычные, с карты, трансляция) не принимаются.
+     * Мини-приложение недоступно (нет https) — обычная кнопка «отправить местоположение»; тогда не принимаются
+     * место из списка (venue) и пересланная точка, а трансляция смену не открывает и не закрывает — только «я здесь» (молча).
      */
     private function workerLocation(string $chat, WorkerToken $w, array $m, bool $edited): void
     {
-        $loc = $m['location'] ?? $m['venue']['location'] ?? [];
         $open = (bool) WorkerGeo::state($w)['open'];
-        if (isset($m['venue']) || isset($m['forward_origin']) || isset($m['forward_date']) || ! isset($loc['latitude'], $loc['longitude'])) {
+        if (isset($m['web_app_data'])) {
+            $loc = GeoApp::read($w, $chat, (string) ($m['web_app_data']['data'] ?? ''));
+            if (! $loc) {
+                $this->workerHelp($chat, $w, fn () => '⚠️ '.__('Кнопка устарела — нажмите кнопку внизу ещё раз.'));
+
+                return;
+            }
+        } elseif (GeoApp::url()) {
             if (! $edited) {
-                $this->workerHelp($chat, $w, fn () => '⚠️ '.__('Это местоположение не принято: выбранное на карте место или пересланная точка не подходят.'));
+                $this->workerHelp($chat, $w, fn () => '⚠️ '.__('Местоположение через 📎 не принимается — только кнопкой внизу.'));
             }
 
             return;
-        }
-        if ($edited || isset($loc['live_period'])) {
-            if ($open) {
-                WorkerGeo::record($w, 'ping', (float) $loc['latitude'], (float) $loc['longitude'], $loc['horizontal_accuracy'] ?? null);
-            } elseif (! $edited) {
-                $this->workerHelp($chat, $w, fn () => 'ℹ️ '.__('Трансляция геопозиции не начинает смену.'));
-            }
+        } else {
+            $loc = $m['location'] ?? $m['venue']['location'] ?? [];
+            if (isset($m['venue']) || isset($m['forward_origin']) || isset($m['forward_date']) || ! isset($loc['latitude'], $loc['longitude'])) {
+                if (! $edited) {
+                    $this->workerHelp($chat, $w, fn () => '⚠️ '.__('Это местоположение не принято: выбранное на карте место или пересланная точка не подходят.'));
+                }
 
-            return;
+                return;
+            }
+            if ($edited || isset($loc['live_period'])) {
+                if ($open) {
+                    WorkerGeo::record($w, 'ping', (float) $loc['latitude'], (float) $loc['longitude'], $loc['horizontal_accuracy'] ?? null);
+                } elseif (! $edited) {
+                    $this->workerHelp($chat, $w, fn () => 'ℹ️ '.__('Трансляция геопозиции не начинает смену.'));
+                }
+
+                return;
+            }
         }
         $type = $open ? 'out' : 'in';
         $r = WorkerGeo::record($w, $type, (float) $loc['latitude'], (float) $loc['longitude'], $loc['horizontal_accuracy'] ?? null);
@@ -339,9 +360,11 @@ class TelegramBot
     }
 
     /** Кнопка «Пришёл / Ушёл» внизу экрана: отправляет местоположение телефона — точку на карте ею не выбрать */
-    private static function workerButton(WorkerToken $w): array
+    private static function workerButton(WorkerToken $w, string $chat): array
     {
-        return ['text' => WorkerGeo::state($w)['open'] ? '🏁 '.__('Ушёл — отправить местоположение') : '▶️ '.__('Пришёл — отправить местоположение'), 'request_location' => true];
+        $open = (bool) WorkerGeo::state($w)['open'];
+
+        return GeoApp::button($w, $chat, $open ? '🏁 '.__('Ушёл — отправить местоположение') : '▶️ '.__('Пришёл — отправить местоположение'), $open);
     }
 
     private function workerKeyboard(string $chat, WorkerToken $w, string $html): void
@@ -349,7 +372,7 @@ class TelegramBot
         // у руководителя или прораба в этом же Telegram своё меню — кнопка «Пришёл / Ушёл» встаёт над ним
         $user = User::where('telegram_chat_id', $chat)->where('is_active', true)->whereNotNull('workspace_id')->first();
         try {
-            Telegram::menu($chat, $html, $user ? array_merge([[self::workerButton($w)]], \App\Services\Bot\Sections::menu($user)) : [[self::workerButton($w)]],
+            Telegram::menu($chat, $html, $user ? array_merge([[self::workerButton($w, $chat)]], \App\Services\Bot\Sections::menu($user)) : [[self::workerButton($w, $chat)]],
                 $user ? __('Напишите или выберите раздел') : '');
         } catch (\Throwable $e) {
             Log::warning('Telegram send: '.$e->getMessage());
@@ -920,7 +943,7 @@ class TelegramBot
         try {
             $rows = \App\Services\Bot\Sections::menu($user);
             if ($w = WorkerToken::where('tg_chat_id', $chat)->first()) {
-                array_unshift($rows, [self::workerButton($w)]);   // этот же человек отмечает и свой приход на объект
+                array_unshift($rows, [self::workerButton($w, $chat)]);   // этот же человек отмечает и свой приход на объект
             }
             Telegram::menu($chat, $html, $rows, __('Напишите или выберите раздел'));
         } catch (\Throwable $e) {

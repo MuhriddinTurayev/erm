@@ -4860,5 +4860,7 @@
     "Уходя, нажмите кнопку «Ушёл» внизу.": "Ketayotganda pastdagi «Ketdim» tugmasini bosing.",
     "Смена идёт. Уходя, нажмите кнопку «Ушёл» внизу.": "Smena davom etmoqda. Ketayotganda pastdagi «Ketdim» tugmasini bosing.",
     "Придя на объект, нажмите кнопку «Пришёл» внизу — телефон сам отправит, где вы сейчас.": "Obyektga kelganingizda pastdagi «Keldim» tugmasini bosing — telefon qayerdaligingizni o‘zi yuboradi.",
-    "Местоположение принимается только этой кнопкой.": "Joylashuv faqat shu tugma orqali qabul qilinadi."
+    "Местоположение принимается только этой кнопкой.": "Joylashuv faqat shu tugma orqali qabul qilinadi.",
+    "Кнопка устарела — нажмите кнопку внизу ещё раз.": "Tugma eskirgan — pastdagi tugmani yana bir marta bosing.",
+    "Местоположение через 📎 не принимается — только кнопкой внизу.": "📎 orqali yuborilgan joylashuv qabul qilinmaydi — faqat pastdagi tugma bilan."
 }

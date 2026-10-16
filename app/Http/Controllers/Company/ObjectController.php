@@ -589,6 +589,7 @@ class ObjectController extends ErpController
         $path = $poster ? $m->poster : ($finished && ! empty($m->meta['finished']) ? $m->meta['finished'] : $m->path);
         abort_unless($path && Storage::disk('local')->exists($path), 404);
         $ext = $poster ? pathinfo($path, PATHINFO_EXTENSION) : $m->ext;
+        @set_time_limit(0);   // модель на 200 МБ по медленному интернету идёт дольше 3 минут — не обрывать на середине
 
         return response()->file(Storage::disk('local')->path($path), [
             'Content-Type' => ObjectMedia::mimeOf($ext), 'Cache-Control' => 'private, max-age=604800',

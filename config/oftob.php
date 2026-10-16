@@ -1,6 +1,9 @@
 <?php
 
 return [
+    // Мини-приложение Telegram «Пришёл / Ушёл» (docs/tg/geo.html) на https; пусто — свой сайт на https или GitHub Pages
+    'tg_geo_url' => env('TG_GEO_URL', ''),
+
     // Версия Graph API (Facebook / Instagram / WhatsApp)
     'graph_version' => env('META_GRAPH_VERSION', 'v23.0'),
 

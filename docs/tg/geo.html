@@ -1,0 +1,179 @@
+<!doctype html>
+<!-- oftob-geo-app — Telegram mini-ilova: «Keldim / Ketdim» tugmasi telefonning haqiqiy GPS joylashuvini botga yuboradi.
+     Faqat botdagi tugmadan ochiladi (Telegram.WebApp.sendData); xaritadan nuqta tanlab bo'lmaydi. -->
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="robots" content="noindex">
+<title>Oftob_Sohtumon — joylashuv</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --text: var(--tg-theme-text-color, #1e1b4b);
+    --hint: var(--tg-theme-hint-color, #6b7280);
+    --card: var(--tg-theme-secondary-bg-color, #f5f3ff);
+    --btn: var(--tg-theme-button-color, #6c4cf1);
+    --btn-t: var(--tg-theme-button-text-color, #ffffff);
+    --accent: #6c4cf1;
+    --ok: #16a34a;
+    --bad: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", Arial, sans-serif; }
+  .wrap { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px 32px; text-align: center; gap: 14px; }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--accent); font-size: 15px; }
+  .brand svg { width: 28px; height: 28px; }
+  .pin { width: 116px; height: 116px; border-radius: 50%; display: grid; place-items: center; background: var(--card); position: relative; margin: 10px 0 4px; }
+  .pin svg { width: 54px; height: 54px; color: var(--accent); }
+  .pin.busy::before, .pin.busy::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--accent); opacity: 0; animation: ring 1.8s ease-out infinite; }
+  .pin.busy::after { animation-delay: .9s; }
+  .pin.ok { background: #dcfce7; } .pin.ok svg { color: var(--ok); }
+  .pin.bad { background: #fee2e2; } .pin.bad svg { color: var(--bad); }
+  @keyframes ring { 0% { transform: scale(1); opacity: .55; } 100% { transform: scale(1.55); opacity: 0; } }
+  h1 { font-size: 21px; margin: 0; line-height: 1.25; }
+  .st { color: var(--hint); font-size: 15px; max-width: 340px; margin: 0; }
+  .acc { font-size: 13px; color: var(--hint); }
+  .help { display: none; background: var(--card); border-radius: 14px; padding: 12px 14px; text-align: left; font-size: 14px; max-width: 360px; width: 100%; }
+  .help b { display: block; margin-bottom: 4px; }
+  .btns { display: none; flex-direction: column; gap: 8px; width: 100%; max-width: 360px; }
+  button { appearance: none; border: 0; border-radius: 12px; padding: 13px 16px; font: inherit; font-weight: 600; cursor: pointer; background: var(--btn); color: var(--btn-t); }
+  button.sec { background: var(--card); color: var(--text); }
+  .foot { color: var(--hint); font-size: 12px; margin-top: 6px; max-width: 340px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c5cff"/><stop offset="1" stop-color="#5b3fd6"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="url(#g)"/><circle cx="16" cy="17" r="5" fill="#fff"/><g stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M16 6v3M8.2 9.2l2 2M23.8 9.2l-2 2M5 17h3M24 17h3"/><path d="M8 24h16"/></g></svg>
+    <span>Oftob_Sohtumon</span>
+  </div>
+  <div class="pin busy" id="pin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 4.99-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></div>
+  <h1 id="title"></h1>
+  <p class="st" id="st"></p>
+  <div class="acc" id="acc"></div>
+  <div class="help" id="help"></div>
+  <div class="btns" id="btns">
+    <button id="again"></button>
+    <button class="sec" id="settings" hidden></button>
+  </div>
+  <div class="foot" id="foot"></div>
+</div>
+<script>
+(function () {
+  var T = {
+    uz: { in: 'Keldim — smenani boshlash', out: 'Ketdim — smenani tugatish', finding: 'Joylashuvingiz aniqlanmoqda… Telefonni ochiq joyda ushlab turing.', sending: 'Yuborilmoqda…', sent: 'Yuborildi ✅', acc: 'Aniqlik: ±{m} m',
+      deniedT: "Joylashuvga ruxsat berilmagan", denied: "Telegram'ga joylashuvdan foydalanishga ruxsat bering, so'ng «Qayta urinish»ni bosing.",
+      deniedIos: "iPhone: Sozlamalar → Maxfiylik → Joylashuv xizmatlari → Telegram → «Ilovadan foydalanganda».", deniedAnd: "Android: Sozlamalar → Ilovalar → Telegram → Ruxsatlar → Joylashuv → Ruxsat berish.",
+      offT: "Joylashuv (GPS) o'chiq", off: "Ekranni yuqoridan pastga suring va «Joylashuv» (Geolokatsiya)ni yoqing, so'ng «Qayta urinish»ni bosing.",
+      slowT: "GPS signal topilmadi", slow: "Ochiq joyga chiqing yoki derazaga yaqinlashing va qayta urining.",
+      again: 'Qayta urinish', settings: 'Telegram sozlamalarini ochish', notg: "Bu sahifa faqat Telegram botdagi «Keldim / Ketdim» tugmasi orqali ishlaydi.",
+      foot: "Joylashuv telefonning GPS'idan olinadi — uni qo'lda tanlab bo'lmaydi." },
+    ru: { in: 'Пришёл — начать смену', out: 'Ушёл — закончить смену', finding: 'Определяем ваше местоположение… Держите телефон на открытом месте.', sending: 'Отправляем…', sent: 'Отправлено ✅', acc: 'Точность: ±{m} м',
+      deniedT: 'Нет доступа к местоположению', denied: 'Разрешите Telegram доступ к местоположению и нажмите «Повторить».',
+      deniedIos: 'iPhone: Настройки → Конфиденциальность → Службы геолокации → Telegram → «При использовании».', deniedAnd: 'Android: Настройки → Приложения → Telegram → Разрешения → Местоположение → Разрешить.',
+      offT: 'Геолокация (GPS) выключена', off: 'Потяните шторку сверху вниз и включите «Местоположение» (Геолокацию), затем нажмите «Повторить».',
+      slowT: 'Нет сигнала GPS', slow: 'Выйдите на открытое место или подойдите к окну и повторите.',
+      again: 'Повторить', settings: 'Открыть настройки Telegram', notg: 'Эта страница работает только через кнопку «Пришёл / Ушёл» в Telegram-боте.',
+      foot: 'Местоположение берётся из GPS телефона — выбрать точку вручную нельзя.' },
+    tg: { in: 'Омадам — оғози баст', out: 'Рафтам — анҷоми баст', finding: 'Ҷойгиршавии шумо муайян карда мешавад… Телефонро дар ҷои кушода нигоҳ доред.', sending: 'Фиристода мешавад…', sent: 'Фиристода шуд ✅', acc: 'Дақиқӣ: ±{m} м',
+      deniedT: 'Ба ҷойгиршавӣ иҷозат нест', denied: 'Ба Telegram иҷозати ҷойгиршавӣ диҳед ва «Аз нав»-ро пахш кунед.',
+      deniedIos: 'iPhone: Танзимот → Махфият → Хидматҳои ҷойгиршавӣ → Telegram → «Ҳангоми истифода».', deniedAnd: 'Android: Танзимот → Барномаҳо → Telegram → Иҷозатҳо → Ҷойгиршавӣ → Иҷозат.',
+      offT: 'Ҷойгиршавӣ (GPS) хомӯш аст', off: 'Пардаи телефонро аз боло кашед ва «Ҷойгиршавӣ»-ро фаъол кунед, баъд «Аз нав»-ро пахш кунед.',
+      slowT: 'Сигнали GPS нест', slow: 'Ба ҷои кушода бароед ё ба тиреза наздик шавед ва аз нав кӯшиш кунед.',
+      again: 'Аз нав', settings: 'Кушодани танзимоти Telegram', notg: 'Ин саҳифа танҳо тавассути тугмаи «Омадам / Рафтам» дар боти Telegram кор мекунад.',
+      foot: 'Ҷойгиршавӣ аз GPS-и телефон гирифта мешавад — онро дастӣ интихоб кардан мумкин нест.' }
+  };
+  var q = new URLSearchParams(location.search);
+  var L = T[q.get('l')] || T.uz, nonce = q.get('n') || '', mode = q.get('m') === 'out' ? 'out' : 'in';
+  var tg = window.Telegram && window.Telegram.WebApp;
+  var $ = function (id) { return document.getElementById(id); };
+  var ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  var done = false, watch = null, timer = null;
+
+  document.documentElement.lang = q.get('l') || 'uz';
+  $('title').textContent = L[mode];
+  $('foot').textContent = L.foot;
+  $('again').textContent = L.again;
+  $('settings').textContent = L.settings;
+
+  function state(cls, text) { $('pin').className = 'pin ' + cls; $('st').textContent = text; }
+  function fail(title, text, extra, canSettings) {
+    stop();
+    state('bad', title);
+    $('help').innerHTML = '';
+    var b = document.createElement('b'); b.textContent = text; $('help').appendChild(b);
+    if (extra) { var d = document.createElement('div'); d.textContent = extra; $('help').appendChild(d); }
+    $('help').style.display = 'block';
+    $('btns').style.display = 'flex';
+    $('settings').hidden = !canSettings;
+    if (tg && tg.HapticFeedback) try { tg.HapticFeedback.notificationOccurred('error'); } catch (e) {}
+  }
+  function stop() {
+    if (watch !== null && navigator.geolocation) navigator.geolocation.clearWatch(watch);
+    watch = null; clearTimeout(timer);
+  }
+  function send(lat, lng, acc, src) {
+    if (done) return;
+    done = true; stop();
+    state('ok', L.sending);
+    if (acc) $('acc').textContent = L.acc.replace('{m}', Math.round(acc));
+    if (tg && tg.HapticFeedback) try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
+    var data = JSON.stringify({ v: 1, n: nonce, m: mode, lat: +lat.toFixed(6), lng: +lng.toFixed(6), acc: acc ? Math.round(acc) : null, src: src });
+    setTimeout(function () { state('ok', L.sent); tg.sendData(data); }, 350);   // Telegram сам закроет окно
+  }
+
+  // браузерный GPS: ждём до 15 с самую точную отметку; ≤ 30 м — сразу
+  function browserGps() {
+    if (!navigator.geolocation) return fail(L.offT, L.off, '', false);
+    var best = null;
+    watch = navigator.geolocation.watchPosition(function (p) {
+      if (!best || p.coords.accuracy < best.coords.accuracy) best = p;
+      $('acc').textContent = L.acc.replace('{m}', Math.round(best.coords.accuracy));
+      if (best.coords.accuracy <= 30) send(best.coords.latitude, best.coords.longitude, best.coords.accuracy, 'web');
+    }, function (e) {
+      if (best) return send(best.coords.latitude, best.coords.longitude, best.coords.accuracy, 'web');
+      if (e.code === 1) fail(L.deniedT, L.denied, ios ? L.deniedIos : L.deniedAnd, false);
+      else if (e.code === 3) fail(L.slowT, L.slow, '', false);
+      else fail(L.offT, L.off, '', false);
+    }, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+    timer = setTimeout(function () {
+      if (best) send(best.coords.latitude, best.coords.longitude, best.coords.accuracy, 'web');
+      else fail(L.slowT, L.slow, '', false);
+    }, 15000);
+  }
+
+  function start() {
+    done = false;
+    $('help').style.display = 'none'; $('btns').style.display = 'none'; $('acc').textContent = '';
+    state('busy', L.finding);
+    // Telegram 8.0+: GPS через сам Telegram (LocationManager) — работает и там, где браузеру геолокация недоступна
+    var LM = tg.isVersionAtLeast && tg.isVersionAtLeast('8.0') ? tg.LocationManager : null;
+    if (!LM) return browserGps();
+    var go = function () {
+      if (!LM.isLocationAvailable) return browserGps();
+      LM.getLocation(function (d) {
+        if (d && d.latitude != null) return send(d.latitude, d.longitude, d.horizontal_accuracy, 'tg');
+        if (LM.isAccessRequested && !LM.isAccessGranted) return fail(L.deniedT, L.denied, ios ? L.deniedIos : L.deniedAnd, true);
+        browserGps();
+      });
+    };
+    LM.isInited ? go() : LM.init(go);
+  }
+
+  $('again').onclick = start;
+  $('settings').onclick = function () { try { tg.LocationManager.openSettings(); } catch (e) {} };
+
+  if (!tg || !tg.platform || tg.platform === 'unknown' || !nonce) {
+    state('bad', L.notg);
+    $('title').textContent = 'Oftob_Sohtumon';
+    return;
+  }
+  tg.ready();
+  try { tg.expand(); } catch (e) {}
+  start();
+})();
+</script>
+</body>
+</html>

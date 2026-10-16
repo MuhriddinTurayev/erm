@@ -28,6 +28,12 @@ class TelegramController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /** Мини-приложение «Пришёл / Ушёл»: страница без данных — GPS телефона уходит боту через Telegram */
+    public function geoApp()
+    {
+        return response()->file(base_path('docs/tg/geo.html'), ['Content-Type' => 'text/html; charset=UTF-8', 'Cache-Control' => 'no-cache']);
+    }
+
     /** Один бот на двух сайтах: второй сайт забирает здесь свои сообщения (запрос подписан ключом из токена бота) */
     public function relay(Request $request)
     {
