@@ -350,6 +350,21 @@ class TelegramBot
         }, WorkerGeo::lang($w));
     }
 
+    /** Руководитель закрыл смену за сотрудника — сообщить ему и вернуть кнопку «Пришёл» */
+    public function shiftClosed(WorkerToken $w, Carbon $at, string $by, string $note = ''): void
+    {
+        if (! $w->tg_chat_id) {
+            return;
+        }
+        $chat = (string) $w->tg_chat_id;
+        $ws = Workspace::find($w->workspace_id);
+        $hm = $at->copy()->timezone($ws?->timezone ?: config('app.timezone'))->format('H:i');
+        $ms = (int) WorkerGeo::state($w)['todayMs'];
+        $this->as(null, fn () => $this->workerKeyboard($chat, $w, '🏁 <b>'.__('Смену закрыл руководитель').'</b> · '.$hm.self::workObj($w)
+            ."\n".__('отработано сегодня').': '.self::hm($ms)
+            ."\n👤 ".e($by).($note !== '' ? ' — '.e($note) : '')), WorkerGeo::lang($w));
+    }
+
     /** «\n🏗 Объект» — на каком объекте отметка (ссылка сотрудника привязана к одному объекту) */
     private static function workObj(WorkerToken $w): string
     {

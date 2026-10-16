@@ -4862,5 +4862,11 @@
     "Придя на объект, нажмите кнопку «Пришёл» внизу — телефон сам отправит, где вы сейчас.": "Obyektga kelganingizda pastdagi «Keldim» tugmasini bosing — telefon qayerdaligingizni o‘zi yuboradi.",
     "Местоположение принимается только этой кнопкой.": "Joylashuv faqat shu tugma orqali qabul qilinadi.",
     "Кнопка устарела — нажмите кнопку внизу ещё раз.": "Tugma eskirgan — pastdagi tugmani yana bir marta bosing.",
-    "Это местоположение не принято: отметка — только кнопкой внизу, через 📎 нельзя. Кнопка обновлена — нажмите её.": "Bu joylashuv qabul qilinmadi: belgi faqat pastdagi tugma bilan, 📎 orqali mumkin emas. Tugma yangilandi — uni bosing."
+    "Это местоположение не принято: отметка — только кнопкой внизу, через 📎 нельзя. Кнопка обновлена — нажмите её.": "Bu joylashuv qabul qilinmadi: belgi faqat pastdagi tugma bilan, 📎 orqali mumkin emas. Tugma yangilandi — uni bosing.",
+    "Смена не найдена": "Smena topilmadi",
+    "Смена уже закрыта": "Smena allaqachon yopilgan",
+    "Время ухода раньше прихода (:t)": "Ketish vaqti kelgan vaqtdan oldin (:t)",
+    "Время ухода — не позже :t": "Ketish vaqti :t dan kech bo‘lmasin",
+    "Неверное время": "Noto‘g‘ri vaqt",
+    "Смену закрыл руководитель": "Smenani rahbar yopdi"
 }

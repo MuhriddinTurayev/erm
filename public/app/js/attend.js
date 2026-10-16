@@ -87,7 +87,7 @@ async function gpsPoll() {
     j = await (await fetch('/api/geo/events?since=' + (DB.settings.geoSeq || 0))).json(); got += j.items.length;
     for (const e of j.items) {
       const p = DB.projects.find(x => x.id === e.pid); if (!p || p.geoEv.some(x => x.seq === e.seq)) continue;
-      p.geoEv.push({ seq: e.seq, t: e.t, sid: e.sid, type: e.type, lat: e.lat, lng: e.lng, acc: e.acc, dist: e.dist, on: e.on });
+      p.geoEv.push(Object.assign({ seq: e.seq, t: e.t, sid: e.sid, type: e.type, lat: e.lat, lng: e.lng, acc: e.acc, dist: e.dist, on: e.on }, e.by ? { by: e.by, note: e.note || '' } : {}));
       if (p.geoEv.length > 6000) p.geoEv = p.geoEv.slice(-6000);
       const s = p.staff.find(x => x.id === e.sid), nm = s ? s.name : '';
       if (e.type === 'in') msgs.push(e.on === false ? `⚠️ ${nm}: ${T('начал смену НЕ на объекте')} (${gpsDist(e.dist)})` : `🟢 ${nm}: ${T('пришёл на объект')}`);
@@ -105,6 +105,33 @@ async function gpsPoll() {
   GPS.busy = false;
 }
 setTimeout(() => { gpsSync(); gpsPoll(); setInterval(gpsPoll, 20000); }, 2000);
+
+/*
+ * Руководитель закрывает смену за сотрудника (забыл нажать «Ушёл», сел телефон): время ухода и причина.
+ * Отметку пишет сервер (видно, кто закрыл), сюда она приходит обычным путём — часы сами уходят в табель.
+ */
+const gpsCanClose = () => viaServer() && !!SV && SV.canEdit !== false;
+const gpsLocal = d => { const z = new Date(d); z.setMinutes(z.getMinutes() - z.getTimezoneOffset()); return z.toISOString().slice(0, 16); };
+const gpsCloseBtn = sh => gpsCanClose() ? `<button class="btn-s" data-act="gpsClose" data-sid="${sh.sid}" data-in="${sh.in.seq ?? ''}" title="${T('Закрыть смену за сотрудника')}">⏹ ${T('Закрыть смену')}</button>` : '';
+const gpsByTag = e => e && e.by ? ` <span class="small muted">· 👤 ${T('Закрыл руководитель')}: ${esc(e.by)}${e.note ? ' · ' + esc(e.note) : ''}</span>` : '';
+ACT.gpsClose = async d => {
+  const p = P(), s = p.staff.find(x => x.id === d.sid);
+  const sh = gpsShifts(p).find(x => x.sid === d.sid && !x.out && (d.in === '' || String(x.in.seq) === String(d.in)));
+  if (!s || !s.wtok || !sh) return toast(T('Смена уже закрыта'));
+  const end = Math.min(Date.now(), new Date(sh.in.t).getTime() + 24 * 3600e3);
+  const def = sh.open ? Date.now() : Math.min(end, new Date(sh.last.t).getTime());   // забытая смена — время последнего сигнала
+  const f = await ui.form(T('Закрыть смену') + ': ' + s.name, [
+    { name: 'at', type: 'datetime-local', label: T('Время ухода'), value: gpsLocal(def), min: gpsLocal(sh.in.t), max: gpsLocal(end), required: true },
+    { name: 'note', label: T('Причина (необязательно)'), placeholder: T('Например: сел телефон, забыл нажать «Ушёл»') },
+  ], { text: `${T('Пришёл')} ${gpsTime(sh.in.t)} · ${T('последний сигнал')} ${gpsTime(sh.last.t)}. ${T('Сотрудник получит сообщение в Telegram.')}`, ok: T('Закрыть смену') });
+  if (!f || !f.at) return;
+  let j = {};
+  try { const r = await fetch('/api/geo/close', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ t: s.wtok, in: sh.in.seq, at: new Date(f.at).toISOString(), note: f.note || '' }) }); j = await r.json().catch(() => ({})); if (!r.ok) return toast('⚠️ ' + (j.error || j.message || T('Не удалось закрыть смену'))); }
+  catch (e) { return toast('⚠️ ' + T('Нет связи с сервером')); }
+  toast('🏁 ' + T('Смена закрыта') + ': ' + s.name);
+  GPS.busy = false; await gpsPoll();
+  if (curPage === 'attend') rerender();
+};
 
 /* Карта: OpenStreetMap через Leaflet, загружается только на этой странице */
 let gpsLeaf = null;
@@ -157,9 +184,9 @@ PAGES.attend = {
     // ссылки сотрудников — с тем, что у каждого сегодня: на смене / ещё не пришёл / ушёл; сверху — кто на смене
     const stNow = s => {
       const o = C.open.find(x => x.sid === s.id);
-      if (o) return { k: 0, h: `<span class="pill p-free">🟢 ${T('На смене')}</span> <span class="small muted">${T('Пришёл')} ${gpsTime(o.in.t)}</span>${o.last.on === false ? ` <span class="small bad">⚠️ ${T('не на объекте')}</span>` : ''}` };
+      if (o) return { k: 0, h: `<span class="pill p-free">🟢 ${T('На смене')}</span> <span class="small muted">${T('Пришёл')} ${gpsTime(o.in.t)}</span>${o.last.on === false ? ` <span class="small bad">⚠️ ${T('не на объекте')}</span>` : ''} ${gpsCloseBtn(o)}` };
       const d = C.todayS.filter(x => x.sid === s.id && x.out);
-      if (d.length) return { k: 2, h: `<span class="pill p-reserve">⏹ ${T('Ушёл')} ${gpsTime(d[0].out.t)}</span> <span class="small muted">${fmt(sum(d, x => x.ms) / 3600e3, 1)} ${T('ч')}</span>` };
+      if (d.length) return { k: 2, h: `<span class="pill p-reserve">⏹ ${T('Ушёл')} ${gpsTime(d[0].out.t)}</span> <span class="small muted">${fmt(sum(d, x => x.ms) / 3600e3, 1)} ${T('ч')}</span>${gpsByTag(d[0].out)}` };
       return { k: 1, h: `<span class="pill p-booked">⚪ ${T('Ещё не пришёл')}</span>` };
     };
     const links = gpsActive(p).map(s => ({ s, st: stNow(s) })).sort((a, b) => a.st.k - b.st.k);
@@ -179,8 +206,8 @@ PAGES.attend = {
         ${gpsCanZone() ? `<div class="small mb ${has ? 'muted' : 'warn'}">${has ? 'Перенести объект: перетащите метку или нажмите на карту.' : '👆 Нажмите на карту там, где стройка, — объект встанет в эту точку (радиус — ниже, в «Где находится объект»).'}</div>` : ''}
         <div id="gpsMap" class="gps-map"></div></div>
       <div class="card"><h3>⏱ Сейчас на смене (${C.open.length})</h3>
-        <div class="tbl-wrap"><table><thead><tr><th>Сотрудник</th><th>Пришёл</th><th class="n">На смене</th><th>Где</th><th>Сигнал</th></tr></thead><tbody>
-        ${C.open.map(sh => `<tr class="gps-row" data-act="gpsRoute" data-sid="${sh.sid}" data-in="${sh.in.t}"><td><b>${esc(sh.s.name)}</b><div class="small muted">${esc(sh.s.role)}</div></td><td>${gpsTime(sh.in.t)}${sh.in.on === false ? '<div class="small bad">' + T('не на объекте') + '</div>' : ''}</td><td class="n"><b class="gtimer" data-in="${sh.in.t}">${gpsHM(sh.ms)}</b></td><td>${st(sh)}<div class="small muted">${gpsDist(sh.last.dist)}${sh.last.acc > 100 ? ' · ±' + sh.last.acc + ' м' : ''}</div></td><td class="small ${sh.silent > 15 ? 'warn-t' : 'muted'}">${ago(sh.silent)}</td></tr>`).join('') || `<tr><td colspan="5" class="muted">${T('Сейчас никто не на смене')}</td></tr>`}
+        <div class="tbl-wrap"><table><thead><tr><th>Сотрудник</th><th>Пришёл</th><th class="n">На смене</th><th>Где</th><th>Сигнал</th><th></th></tr></thead><tbody>
+        ${C.open.map(sh => `<tr class="gps-row" data-act="gpsRoute" data-sid="${sh.sid}" data-in="${sh.in.t}"><td><b>${esc(sh.s.name)}</b><div class="small muted">${esc(sh.s.role)}</div></td><td>${gpsTime(sh.in.t)}${sh.in.on === false ? '<div class="small bad">' + T('не на объекте') + '</div>' : ''}</td><td class="n"><b class="gtimer" data-in="${sh.in.t}">${gpsHM(sh.ms)}</b></td><td>${st(sh)}<div class="small muted">${gpsDist(sh.last.dist)}${sh.last.acc > 100 ? ' · ±' + sh.last.acc + ' м' : ''}</div></td><td class="small ${sh.silent > 15 ? 'warn-t' : 'muted'}">${ago(sh.silent)}</td><td>${gpsCloseBtn(sh)}</td></tr>`).join('') || `<tr><td colspan="6" class="muted">${T('Сейчас никто не на смене')}</td></tr>`}
         </tbody></table></div>
         ${isToday && C.absent.length ? `<h4 class="mt">Не отметились сегодня (${C.absent.length})</h4><div class="small muted">${C.absent.map(s => esc(s.name)).join(', ')}</div>` : ''}
       </div>
@@ -189,7 +216,7 @@ PAGES.attend = {
       <div class="tbl-wrap"><table><thead><tr><th>Сотрудник</th><th>Пришёл</th><th>Ушёл</th><th class="n">Часов</th><th>Уходил с объекта</th><th class="n">В табеле</th><th></th></tr></thead><tbody>
       ${dayS.map(sh => `<tr><td><b>${esc(sh.s.name)}</b><div class="small muted">${esc(sh.s.role)}</div></td>
         <td>${gpsTime(sh.in.t)} ${sh.in.on === false ? `<span class="bad small">⚠️ ${gpsDist(sh.in.dist)}</span>` : sh.in.on ? '✅' : ''}</td>
-        <td>${sh.out ? gpsTime(sh.out.t) + ' ' + (sh.out.on === false ? `<span class="bad small">⚠️ ${gpsDist(sh.out.dist)}</span>` : sh.out.on ? '✅' : '') : sh.open ? `<span class="pill p-free">${T('на смене')}</span>` : `<span class="pill p-sold">${T('не закрыл смену')}</span>`}</td>
+        <td>${sh.out ? gpsTime(sh.out.t) + ' ' + (sh.out.on === false ? `<span class="bad small">⚠️ ${gpsDist(sh.out.dist)}</span>` : sh.out.on ? '✅' : '') + gpsByTag(sh.out) : (sh.open ? `<span class="pill p-free">${T('на смене')}</span>` : `<span class="pill p-sold">${T('не закрыл смену')}</span>`) + ' ' + gpsCloseBtn(sh)}</td>
         <td class="n"><b>${fmt(sh.ms / 3600e3, 1)}</b></td>
         <td>${sh.offs.length ? `<span class="bad">${sh.offs.length} ${T('раз')}, ${T('до')} ${gpsDist(sh.maxDist)}</span>` : `<span class="ok">${T('нет')}</span>`}</td>
         <td class="n">${(p.ts[sh.sid] || {})[sh.date] ?? '—'}</td><td><button class="btn-s" data-act="gpsRoute" data-sid="${sh.sid}" data-in="${sh.in.t}">🗺 ${T('Маршрут')}</button></td></tr>`).join('') || `<tr><td colspan="7" class="muted">${T('За этот день отметок нет')}</td></tr>`}

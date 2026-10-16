@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Checkin extends Model
 {
-    protected $fillable = ['workspace_id', 'token', 'project_id', 'staff_id', 'type', 'lat', 'lng', 'acc', 'dist', 'on_site'];
+    protected $fillable = ['workspace_id', 'token', 'project_id', 'staff_id', 'type', 'lat', 'lng', 'acc', 'dist', 'on_site', 'closed_by', 'note'];
 
     protected function casts(): array
     {
@@ -27,6 +27,6 @@ class Checkin extends Model
             'acc' => $this->acc,
             'dist' => $this->dist,
             'on' => $this->on_site,
-        ];
+        ] + array_filter(['by' => $this->closed_by, 'note' => $this->note]);   // смену закрыл руководитель
     }
 }

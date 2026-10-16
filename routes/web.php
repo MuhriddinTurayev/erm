@@ -106,6 +106,7 @@ Route::middleware(['auth', 'role:company'])->group(function () {
 
         Route::post('/api/geo/sync', [GeoController::class, 'sync']);
         Route::get('/api/geo/events', [GeoController::class, 'events']);
+        Route::post('/api/geo/close', [GeoController::class, 'close']);   // руководитель закрывает смену сотрудника
 
         // Telegram сотрудника, журнал работ, согласование, файлы
         Route::get('/me/telegram', [TelegramController::class, 'me']);

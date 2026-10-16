@@ -7,6 +7,7 @@ use App\Models\WorkerToken;
 use App\Models\WorkSite;
 use App\Services\WorkerGeo;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /** Приход сотрудников: личные ссылки, отметки «Пришёл / Ушёл» с GPS, расстояние до объекта */
@@ -106,6 +107,36 @@ class GeoController extends Controller
             ->filter(fn ($t) => $mine($t->project_id))->pluck('token')->values();
 
         return response()->json(['ok' => true, 'publicUrl' => rtrim($this->ws()->integrationOrCreate()->public_url ?: url('/'), '/'), 'now' => now()->getTimestampMs(), 'tg' => $tg]);
+    }
+
+    /** Руководитель закрывает смену сотрудника: время ухода и причина; сотруднику — сообщение в Telegram (если подключён) */
+    public function close(Request $request)
+    {
+        $user = $request->user();
+        abort_unless($user->canEdit(), 403, __('Нет доступа к этому разделу'));
+        $only = $user->allowedObjects();
+        $w = WorkerToken::where('workspace_id', $this->ws()->id)->where('token', (string) $request->input('t'))->first();
+        abort_unless($w && ($only === null || in_array((string) $w->project_id, $only, true)), 404);
+        $at = null;
+        if ($request->filled('at')) {
+            try {
+                $at = Carbon::parse((string) $request->input('at'));
+            } catch (\Throwable) {
+                return response()->json(['error' => __('Неверное время')], 422);
+            }
+        }
+        $in = $request->filled('in') ? (int) $request->input('in') : null;
+        $r = WorkerGeo::close($w, $in, $at, (string) $user->name, trim((string) $request->input('note', '')));
+        if (! $r['ok']) {
+            return response()->json(['error' => $r['error']], 422);
+        }
+        try {
+            app(\App\Services\TelegramBot::class)->shiftClosed($w, Carbon::parse($r['event']['t']), (string) $user->name, (string) ($r['event']['note'] ?? ''));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Telegram shift closed: '.$e->getMessage());
+        }
+
+        return response()->json($r);
     }
 
     public function events(Request $request)
