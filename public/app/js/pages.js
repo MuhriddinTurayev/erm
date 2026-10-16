@@ -71,6 +71,26 @@ function bldSvg(p) {
   s += `<line x1="0" y1="${g}" x2="${W}" y2="${g}" stroke="#6b5b45" stroke-width="2"/><text x="6" y="${top + 12}" font-size="11" fill="#555">${b.floors} эт.</text><text x="${W - 6}" y="${top + 12}" text-anchor="end" font-size="11" fill="#555">H = ${fmt(b.floors * b.floorH, 1)} м</text></svg>`;
   return s;
 }
+/* Проверки параметров здания: высота этажа и расхождение с перечнем помещений (обновляются при вводе) */
+function bldChecks(p) {
+  const b = p.b, out = [], fh = +b.floorH || 0;
+  // каждая фраза — отдельным элементом, числа — отдельно: так фразы переводятся целиком
+  if (fh && (fh < 2.4 || fh > 6)) out.push(`<div class="warnbox"><div><b>Проверьте высоту этажа</b> <b class="notr">(${fmt(fh, 1)}</b> <b>м</b><b>)</b></div>
+    <div>Это высота одного этажа в метрах (обычно 3,0–3,3 м), а не количество этажей.</div>
+    <div><span>В 3D дом показан с высотой этажа</span> <b class="notr">${fmt(viewFloorH(b), 1)}</b> <b>м</b></div></div>`);
+  if (hasInv(p)) {
+    const I = invShape(p);
+    if (I.floors !== +b.floors || I.sections !== +b.sections) out.push(`<div class="warnbox"><div><b>Параметры здания и перечень помещений не совпадают.</b></div>
+      <table class="mini-tbl"><tr><th></th><th>Этажей</th><th>Подъездов</th><th>Помещения</th></tr>
+        <tr><td>Параметры здания</td><td><b>${fmt(b.floors)}</b></td><td><b>${fmt(b.sections)}</b></td><td>—</td></tr>
+        <tr><td>Перечень помещений</td><td><b>${fmt(I.floors)}</b></td><td><b>${fmt(I.sections)}</b></td><td><b>${fmt(I.units)}</b></td></tr></table>
+      <div>Продажи и шахматка идут по перечню помещений (Объекты → Помещения).</div>
+      <div>Дом в 3D строится по большему из двух, чтобы перечень, заведённый не целиком, не уменьшал дом.</div>
+      <button class="btn-s mt" data-act="bFromInv">Взять этажи и подъезды из перечня</button></div>`);
+  }
+  return out.join('');
+}
+ACT.bFromInv = () => { const p = P(), I = invShape(p); p.b.floors = I.floors; p.b.sections = I.sections; p.b.aptsPerFloor = I.apf; save(); rerender(); toast('Этажи и подъезды взяты из перечня помещений'); };
 PAGES.project = {
   title: 'Проект и параметры здания',
   render(p) {
@@ -89,7 +109,7 @@ PAGES.project = {
       ${field('b.aptsPerFloor', 'Квартир на этаже (в подъезде)', { unit: 'шт' })}
       ${field('b.length', 'Длина здания', { unit: 'м' })}
       ${field('b.width', 'Ширина здания', { unit: 'м' })}
-      ${field('b.floorH', 'Высота этажа', { unit: 'м' })}
+      ${field('b.floorH', 'Высота этажа', { unit: 'м', hint: 'одного этажа, обычно 3,0–3,3 м' })}
       ${field('b.sellableK', 'Коэф. продаваемой площади', { hint: '0.70–0.80 (без стен, лестниц, МОП)' })}
       ${field('b.mix', 'Комнатность квартир на этаже', { type: 'text', hint: 'по порядку, например 1,2,2,3' })}
       ${field('b.commercialFirst', '1-й этаж — коммерция', { type: 'checkbox' })}
@@ -107,7 +127,7 @@ PAGES.project = {
   results(p) {
     const B = bld(p), A = genApts(p), by = {};
     A.forEach(a => { const k = a.rooms ? a.rooms + '-комнатные' : 'Коммерция'; by[k] = by[k] || { n: 0, area: 0, sum: 0 }; by[k].n++; by[k].area += a.area; by[k].sum += a.price; });
-    return `<div class="card res"><h3>Расчёт здания</h3><div class="big-res">
+    return `${bldChecks(p)}<div class="card res"><h3>Расчёт здания</h3><div class="big-res">
       ${rbox('Площадь застройки', fmt(B.fp) + ' м²')}${rbox('Застройка участка', fmt(B.coverage, 1) + ' %')}
       ${rbox('Общая площадь надземная', fmt(B.totalAbove) + ' м²', 1)}${rbox('Подземная площадь', fmt(B.under) + ' м²')}
       ${rbox('Продаваемая жилая', fmt(B.sellable) + ' м²', 1)}${rbox('Коммерция', fmt(B.commercial) + ' м²')}

@@ -8,7 +8,8 @@ function siteProgress(p) {
 function siteLayout(p) {
   const b = p.b, L = b.length, Wd = b.width, A = Math.max(b.plot, (L + 40) * (Wd + 50));
   const SW = Math.max(L + 48, Math.sqrt(A * 1.5)), SD = Math.max(Wd + 66, A / SW);
-  return { L, Wd, SW, SD, z0: -SD / 2 + 17 + Wd / 2, H: b.floors * b.floorH };
+  const v = bView(p);   // этажи и высота этажа — как у дома в 3D
+  return { L, Wd, SW, SD, z0: -SD / 2 + 17 + Wd / 2, H: v.floors * v.floorH };
 }
 function siteStats(p) {
   const B = bld(p), Ly = siteLayout(p), fp = B.fp;
@@ -450,7 +451,7 @@ function s3AddHighlight(p, Ly) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, hh, d), new THREE.MeshBasicMaterial({ color: 0xff5a00, transparent: true, opacity: 0.8, depthWrite: false }));
   m.position.set(x, y + hh / 2, z); S3.scene.add(m); S3.hlMesh = m;
   const e = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: 0xff3d00 })); e.position.copy(m.position); S3.scene.add(e);
-  const top = bView(p).floors * p.b.floorH + 7, pin = new THREE.Mesh(new THREE.ConeGeometry(1.6, 3.4, 20), new THREE.MeshBasicMaterial({ color: 0xff3d00 }));
+  const top = bView(p).floors * bView(p).floorH + 7, pin = new THREE.Mesh(new THREE.ConeGeometry(1.6, 3.4, 20), new THREE.MeshBasicMaterial({ color: 0xff3d00 }));
   pin.rotation.x = Math.PI; pin.position.set(x, top, zFace); S3.scene.add(pin);
   const ln = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, top - (y + hh), 6), new THREE.MeshBasicMaterial({ color: 0xff7a00 })); ln.position.set(x, (top + y + hh) / 2, zFace); S3.scene.add(ln);
   S3.hlInfo = { x, y, z, zFace, dir, hh };

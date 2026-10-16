@@ -54,14 +54,26 @@ function invApts(p) {
   const idx = {}; rows.forEach(a => { const k = a.section + '|' + a.floor; a.idx = idx[k] = k in idx ? idx[k] + 1 : 0; delete a._o; });
   return rows;
 }
-/* Здание для схем «где квартира в доме»: подъезды, этажи и квартир на этаже — из перечня, если он заведён */
-function bView(p) {
-  if (!hasInv(p)) return p.b;
+/* Перечень помещений в цифрах: сколько помещений, этажей, подъездов, квартир на этаже */
+function invShape(p) {
   const A = invApts(p), per = {};
   A.filter(a => a.rooms && a.floor > 0).forEach(a => { const k = a.section + '|' + a.floor; per[k] = (per[k] || 0) + 1; });   // квартир на этаже — без паркинга и кладовых
-  if (!Object.keys(per).length) per.x = 1;
-  return Object.assign({}, p.b, { sections: Math.max(1, ...A.map(a => a.section)), floors: Math.max(1, ...A.map(a => a.floor)), aptsPerFloor: Math.max(1, ...Object.values(per)),
-    commercialFirst: A.some(a => a.floor === 1 && !a.rooms) });
+  return { units: A.length, floors: Math.max(1, ...A.map(a => a.floor)), sections: Math.max(1, ...A.map(a => a.section)), apf: Math.max(1, ...Object.values(per)),
+    first: A.some(a => a.floor === 1), commercial: A.some(a => a.floor === 1 && !a.rooms) };
+}
+/* Высота этажа для 3D и схем: опечатка (16 м вместо 3) не должна превращать дом в башню */
+const viewFloorH = b => Math.min(6, Math.max(2.5, +b.floorH || 3));
+/*
+ * Здание для 3D и схем «где квартира в доме» — по параметрам здания. Перечень помещений бывает заведён не целиком
+ * (например, пока только первые этажи), поэтому этажей, подъездов и квартир на этаже берём большее из двух:
+ * дом не «усыхает» до заведённой части, а все помещения перечня в нём помещаются.
+ */
+function bView(p) {
+  const b = p.b;
+  if (!hasInv(p)) return Object.assign({}, b, { floorH: viewFloorH(b) });
+  const I = invShape(p);
+  return Object.assign({}, b, { floorH: viewFloorH(b), sections: Math.max(+b.sections || 1, I.sections), floors: Math.max(+b.floors || 1, I.floors),
+    aptsPerFloor: Math.max(+b.aptsPerFloor || 1, I.apf), commercialFirst: I.first ? I.commercial : !!b.commercialFirst });
 }
 function genApts(p) {
   if (hasInv(p)) return invApts(p).map(a => { const o = p.apts[a.id] || {}; a.status = o.status || 'free'; a.price = o.price || a.basePrice; a.buyer = o.buyer || ''; a.phone = o.phone || ''; a.paid = sum(o.payments || [], x => x.amount); a.o = o; return a; });

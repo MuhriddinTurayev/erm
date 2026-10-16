@@ -120,3 +120,17 @@ _W2.forEach(([r, u, t]) => { L10W.uz[r] = u; L10W.tg[r] = t; });
 ].forEach(([r, u, t]) => { L10N.uz[r] = u; L10N.tg[r] = t; });
 /* техника в автопарке: «Миксер Shacman 10 м³», «Автокран XCMG 25 т» — по словам */
 [['миксер', 'mikser', 'миксер'], ['автокран', 'avtokran', 'автокран'], ['м³', 'm³', 'м³']].forEach(([r, u, t]) => { L10W.uz[r] = u; L10W.tg[r] = t; });
+/* Проект и здание: проверки высоты этажа и перечня помещений */
+[
+  ['одного этажа, обычно 3,0–3,3 м', 'bitta qavatniki, odatda 3,0–3,3 m', 'як ошёна, одатан 3,0–3,3 м'],
+  ['Проверьте высоту этажа', 'Qavat balandligini tekshiring', 'Баландии ошёнаро санҷед'],
+  ['Это высота одного этажа в метрах (обычно 3,0–3,3 м), а не количество этажей.', 'Bu bitta qavatning metrdagi balandligi (odatda 3,0–3,3 m), qavatlar soni emas.', 'Ин баландии як ошёна бо метр аст (одатан 3,0–3,3 м), на шумораи ошёнаҳо.'],
+  ['В 3D дом показан с высотой этажа', '3D da qavat balandligi shunday olingan:', 'Дар 3D баландии ошёна чунин гирифта шуд:'],
+  ['Параметры здания и перечень помещений не совпадают.', 'Bino parametrlari va xonadonlar ro‘yxati mos kelmaydi.', 'Параметрҳои бино ва рӯйхати биноҳо мувофиқ нестанд.'],
+  ['Перечень помещений', 'Xonadonlar ro‘yxati', 'Рӯйхати биноҳо'],
+  ['Продажи и шахматка идут по перечню помещений (Объекты → Помещения).', 'Sotuv va shaxmatka xonadonlar ro‘yxati bo‘yicha ishlaydi (Obyektlar → Xonadonlar).', 'Фурӯш ва шоҳмотка аз рӯи рӯйхати биноҳо кор мекунад (Объектҳо → Биноҳо).'],
+  ['Дом в 3D строится по большему из двух, чтобы перечень, заведённый не целиком, не уменьшал дом.', '3D dagi bino ikkalasining kattasi bo‘yicha chiziladi — ro‘yxat to‘liq kiritilmagan bo‘lsa ham bino kichraymaydi.', 'Бино дар 3D аз рӯи бузургтарини ҳарду сохта мешавад — то рӯйхати нопурра биноро хурд накунад.'],
+  ['Взять этажи и подъезды из перечня', 'Qavat va podyezdlarni ro‘yxatdan olish', 'Ошёна ва даромадгоҳҳоро аз рӯйхат гирифтан'],
+  ['Этажи и подъезды взяты из перечня помещений', 'Qavat va podyezdlar xonadonlar ro‘yxatidan olindi', 'Ошёна ва даромадгоҳҳо аз рӯйхати биноҳо гирифта шуданд'],
+].forEach(([r, u, t]) => { L10N.uz[r] = u; L10N.tg[r] = t; });
+[['Подъездов', 'Podyezdlar', 'Даромадгоҳҳо'], ['Помещения', 'Xonadonlar', 'Биноҳо'], ['м', 'm', 'м']].forEach(([r, u, t]) => { L10N.uz[r] = u; L10N.tg[r] = t; });
