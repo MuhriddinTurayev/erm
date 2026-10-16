@@ -3,6 +3,8 @@
 @section('actions')
 <a class="btn btn-s" href="/company/reports">{!! ic('arrow-left') !!}{{ __('Все отчёты') }}</a>
 <a class="btn btn-s" href="/company/overview?date={{ $r->date->toDateString() }}">{!! ic('chart-column') !!}{{ __('Подробно') }}</a>
+<a class="btn btn-s" href="/company/reports/{{ $r->id }}/pdf" target="_blank" rel="noopener" title="{{ __('Отчёт файлом PDF — для печати') }}">{!! ic('file-text') !!}PDF</a>
+<a class="btn btn-s" href="/company/reports/{{ $r->id }}/docx" title="{{ __('Отчёт файлом Word — можно править') }}">{!! ic('download') !!}Word</a>
 @endsection
 @section('content')
 @php $T = $r->stats['totals']; $cur = $r->stats['currency'] ?? 'сум'; @endphp

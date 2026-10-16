@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Company;
 use App\Http\Controllers\Controller;
 use App\Models\DailyReport;
 use App\Services\DailyReportService;
+use App\Services\ReportDocs;
 use Illuminate\Http\Request;
 
 /** Ежедневные отчёты руководителю */
@@ -33,6 +34,21 @@ class ReportController extends Controller
         abort_unless((int) $report->workspace_id === (int) $this->ws()->id, 404);
 
         return view('company.report', ['ws' => $this->ws(), 'r' => $report, 'text' => $svc->text($this->ws(), $report)]);
+    }
+
+    /** Скачать отчёт файлом: PDF или Word */
+    public function file(DailyReport $report, string $type)
+    {
+        $this->companyWide();
+        $ws = $this->ws();
+        abort_unless((int) $report->workspace_id === (int) $ws->id, 404);
+        $bytes = $type === 'pdf' ? ReportDocs::pdf($ws, $report) : ReportDocs::docx($ws, $report);
+
+        return response($bytes, 200, [
+            'Content-Type' => $type === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'Content-Disposition' => ($type === 'pdf' ? 'inline' : 'attachment').'; filename="'.ReportDocs::filename($ws, $report, $type).'"',
+            'Cache-Control' => 'private, no-store',
+        ]);
     }
 
     /** Собрать отчёт за сегодня и (по желанию) отправить сейчас */

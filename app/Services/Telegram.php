@@ -143,6 +143,51 @@ class Telegram
         }
     }
 
+    /** Файлы [имя => содержимое]: один — документом, несколько — одной группой; подпись под последним */
+    public static function documents(string $chatId, array $files, string $caption = ''): void
+    {
+        if (! $files) {
+            return;
+        }
+        $cap = $caption !== '' ? ['caption' => $caption, 'parse_mode' => 'HTML'] : [];
+        if (count($files) === 1) {
+            self::upload('sendDocument', ['chat_id' => $chatId] + $cap, ['document' => [array_key_first($files), reset($files)]]);
+
+            return;
+        }
+        $media = $parts = [];
+        foreach (array_values(array_keys($files)) as $i => $name) {
+            $parts['f'.$i] = [$name, $files[$name]];
+            $media[] = ['type' => 'document', 'media' => 'attach://f'.$i];
+        }
+        $media[count($media) - 1] += $cap;
+        self::upload('sendMediaGroup', ['chat_id' => $chatId, 'media' => json_encode($media, JSON_UNESCAPED_UNICODE)], $parts);
+    }
+
+    /** Запрос с файлами (multipart): $files = [поле => [имя, содержимое]] */
+    private static function upload(string $method, array $params, array $files): array
+    {
+        $token = self::token();
+        if ($token === '') {
+            throw new \RuntimeException(__('Telegram-бот не настроен'));
+        }
+        try {
+            $req = Http::timeout(90);
+            foreach ($files as $field => [$name, $bytes]) {
+                $req = $req->attach($field, $bytes, $name);
+            }
+            $r = $req->post("https://api.telegram.org/bot{$token}/{$method}", array_map('strval', $params));
+        } catch (\Throwable $e) {
+            throw new \RuntimeException(__('Нет связи с Telegram'));
+        }
+        $j = $r->json() ?? [];
+        if (! ($j['ok'] ?? false)) {
+            throw new \RuntimeException('Telegram: '.($j['description'] ?? $r->status()));
+        }
+
+        return (array) ($j['result'] ?? []);
+    }
+
     /** Найти чат, из которого прислали код привязки: «/start КОД» */
     public static function findChatByCode(string $code): ?array
     {

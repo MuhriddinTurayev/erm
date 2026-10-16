@@ -103,30 +103,18 @@ class DailyReportService
                 }
             }
             // снабжение: что заканчивается на объектах и какие заявки опаздывают
-            $low = [];
-            foreach (StateWriter::projects($ws) as $pid => $pn) {
-                if (\App\Services\Bot\Catalog::warehouse($ws, (string) $pid)) {
-                    foreach (\App\Services\Bot\Catalog::stock($ws, (string) $pid) as $row) {
-                        if ($row['low']) {
-                            $low[] = '• '.$e($pn).': '.$e($row['item']->name).' — '.\App\Services\Bot\Catalog::n($row['qty']).' '.$e(\App\Services\Erp\Supply::unit($row['item']->unit))
-                                .($row['days'] !== null ? ' (~'.__(':n дн.', ['n' => $row['days']]).')' : '');
-                        }
-                    }
-                }
-            }
-            if ($low) {
+            if ($low = self::lowStock($ws)) {
                 $L[] = '';
                 $L[] = '⚠️ <b>'.__('Заканчиваются материалы').':</b>';
-                array_push($L, ...array_slice($low, 0, 8));
+                foreach (array_slice($low, 0, 8) as $x) {
+                    $L[] = '• '.$e($x['obj']).': '.$e($x['item']).' — '.$x['qty'].' '.$e($x['unit']).($x['days'] !== null ? ' (~'.__(':n дн.', ['n' => $x['days']]).')' : '');
+                }
             }
-            $late = \App\Models\SupplyRequest::of($ws->id)->whereIn('status', \App\Services\Erp\Supply::RECEIVABLE)->whereNotNull('need_by')
-                ->whereDate('need_by', '<', $s['date'])->with('counterparty')->orderBy('need_by')->limit(6)->get();
-            if ($late->count()) {
+            if ($late = self::lateSupply($ws, $s['date'])) {
                 $L[] = '';
                 $L[] = '🚚 <b>'.__('Материал опаздывает').':</b>';
-                foreach ($late as $sr) {
-                    $L[] = '• №'.$sr->number.' · '.$e(StateWriter::projects($ws)[$sr->project_id] ?? '').' · '.__('нужно было к').' '.$sr->need_by->format('d.m')
-                        .' · '.__(\App\Services\Erp\Supply::STATUS[$sr->status] ?? $sr->status).($sr->counterparty ? ' · '.$e($sr->counterparty->name) : '');
+                foreach ($late as $x) {
+                    $L[] = '• №'.$x['number'].' · '.$e($x['obj']).' · '.__('нужно было к').' '.$x['need'].' · '.$x['status'].($x['who'] ? ' · '.$e($x['who']) : '');
                 }
             }
             if ($r->ai_summary) {
@@ -141,6 +129,41 @@ class DailyReportService
         });
     }
 
+    /**
+     * Материалы, которые заканчиваются на складах объектов: [['obj', 'item', 'qty', 'unit', 'days'], …]
+     *
+     * @return array<int, array{obj: string, item: string, qty: string, unit: string, days: ?int}>
+     */
+    public static function lowStock(Workspace $ws): array
+    {
+        $low = [];
+        foreach (StateWriter::projects($ws) as $pid => $pn) {
+            if (\App\Services\Bot\Catalog::warehouse($ws, (string) $pid)) {
+                foreach (\App\Services\Bot\Catalog::stock($ws, (string) $pid) as $row) {
+                    if ($row['low']) {
+                        $low[] = ['obj' => (string) $pn, 'item' => (string) $row['item']->name, 'qty' => \App\Services\Bot\Catalog::n($row['qty']),
+                            'unit' => (string) \App\Services\Erp\Supply::unit($row['item']->unit), 'days' => $row['days']];
+                    }
+                }
+            }
+        }
+
+        return $low;
+    }
+
+    /**
+     * Заявки на материалы, которые опаздывают к нужной дате
+     *
+     * @return array<int, array{number: string, obj: string, need: string, status: string, who: string}>
+     */
+    public static function lateSupply(Workspace $ws, string $date): array
+    {
+        return \App\Models\SupplyRequest::of($ws->id)->whereIn('status', \App\Services\Erp\Supply::RECEIVABLE)->whereNotNull('need_by')
+            ->whereDate('need_by', '<', $date)->with('counterparty')->orderBy('need_by')->limit(6)->get()
+            ->map(fn ($sr) => ['number' => (string) $sr->number, 'obj' => (string) (StateWriter::projects($ws)[$sr->project_id] ?? ''), 'need' => $sr->need_by->format('d.m'),
+                'status' => __(\App\Services\Erp\Supply::STATUS[$sr->status] ?? $sr->status), 'who' => (string) ($sr->counterparty?->name ?? '')])->all();
+    }
+
     /** Отправить руководителю. Возвращает список ошибок (пустой — всё ушло) */
     public function send(Workspace $ws, DailyReport $r): array
     {
@@ -152,14 +175,29 @@ class DailyReportService
         $errors = [];
         $text = $this->text($ws, $r);
         $chats = array_filter(array_map('trim', explode(',', (string) $ws->report_chats)));
-        if ($chats && Telegram::enabled()) {
+        $tg = $chats && Telegram::enabled();
+        // тот же отчёт файлами PDF и Word — с логотипами, чтобы распечатать или переслать
+        $want = ($tg || $ws->report_email) && $ws->setting('report_files', true);
+        $files = $want ? ReportDocs::files($ws, $r) : [];
+        if ($want && count($files) < 2) {
+            $errors[] = __('Не удалось собрать файлы отчёта (PDF/Word) — отправлен только текст');
+        }
+        if ($tg) {
             $ok = false;
+            $caption = '📎 <b>'.e($ws->name).'</b> · '.__('Ежедневный отчёт').' '.\Illuminate\Support\Carbon::parse($r->stats['date'])->format('d.m.Y');
             foreach ($chats as $chat) {
                 try {
                     Telegram::send($chat, $text);
                     $ok = true;
                 } catch (\Throwable $e) {
                     $errors[] = $e->getMessage();
+
+                    continue;
+                }
+                try {
+                    Telegram::documents($chat, $files, $caption);
+                } catch (\Throwable $e) {
+                    $errors[] = __('Файлы отчёта').': '.$e->getMessage();
                 }
             }
             $r->sent_telegram = $ok;
@@ -167,7 +205,12 @@ class DailyReportService
         if ($ws->report_email) {
             try {
                 $html = '<div style="font:15px/1.6 Arial,sans-serif">'.nl2br($text).'</div>';
-                Mail::html($html, fn ($m) => $m->to($ws->report_email)->subject(strip_tags(strtok($text, "\n"))));
+                Mail::html($html, function ($m) use ($ws, $text, $files) {
+                    $m->to($ws->report_email)->subject(strip_tags(strtok($text, "\n")));
+                    foreach ($files as $name => $bytes) {
+                        $m->attachData($bytes, $name, ['mime' => str_ends_with($name, '.pdf') ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']);
+                    }
+                });
                 $r->sent_email = true;
             } catch (\Throwable $e) {
                 $errors[] = 'Email: '.$e->getMessage();

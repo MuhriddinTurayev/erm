@@ -1,7 +1,7 @@
 @extends('layouts.panel')
 @section('title', __('Настройки компании'))
 @section('content')
-<form method="post" action="/company/settings">
+<form method="post" action="/company/settings" enctype="multipart/form-data">
 @csrf
 <div class="grid g2">
   <div class="card">
@@ -9,6 +9,14 @@
     <div class="form">
       <label class="field wide"><span>{{ __('Название компании') }}</span><input name="name" value="{{ old('name', $ws->name) }}" required></label>
       <label class="field"><span>{{ __('Телефон') }}</span><input name="phone" value="{{ old('phone', $ws->phone) }}"></label>
+      {{-- логотип — в шапке ежедневного отчёта (PDF и Word) --}}
+      <div class="field wide"><span>{{ __('Логотип компании (для отчётов)') }}</span>
+        <div class="flex" style="gap:12px;align-items:center">
+          @if ($logo = \App\Services\CompanyLogo::dataUri($ws))<img src="{{ $logo }}" alt="" style="height:52px;max-width:160px;object-fit:contain;border:1px solid var(--border);border-radius:10px;padding:4px;background:#fff">@endif
+          <input type="file" name="logo" accept="image/png,image/jpeg,image/webp">
+          @if ($logo)<label class="check"><input type="checkbox" name="logo_remove" value="1"> {{ __('Убрать') }}</label>@endif
+        </div>
+        <small>{{ __('PNG или JPG, лучше на прозрачном фоне. Без логотипа в отчёте будут первые буквы названия.') }}</small></div>
       <label class="field"><span>{{ __('Язык отчётов') }}</span><select name="locale">@foreach (config('oftob.locales') as $k => [$n]) <option value="{{ $k }}" @selected(old('locale', $ws->locale) === $k)>{{ $n }}</option>@endforeach</select></label>
       <label class="field wide"><span>{{ __('Часовой пояс') }}</span><select name="timezone">@foreach (config('oftob.timezones') as $k => $n) <option value="{{ $k }}" @selected(old('timezone', $ws->timezone) === $k)>{{ __($n) }}</option>@endforeach</select></label>
     </div>
@@ -22,6 +30,7 @@
       <label class="field"><span>{{ __('Email руководителя') }}</span><input type="email" name="report_email" value="{{ old('report_email', $ws->report_email) }}" placeholder="boss@company.uz"></label>
       <label class="field wide"><span>{{ __('Telegram chat_id (через запятую)') }}</span><input name="report_chats" value="{{ old('report_chats', $ws->report_chats) }}" placeholder="{{ __('подключите кнопкой ниже') }}"><small>{{ __('Можно отправлять нескольким людям: директору, учредителю, главбуху.') }}</small></label>
       <label class="switch wide"><input type="checkbox" name="report_ai" value="1" @checked($ws->report_ai)> {{ __('Добавлять в отчёт вывод ИИ-аналитика') }}</label>
+      <label class="switch wide"><input type="checkbox" name="report_files" value="1" @checked($ws->setting('report_files', true))> {{ __('Прикладывать отчёт файлами PDF и Word (с логотипом)') }}</label>
     </div>
   </div>
 </div>

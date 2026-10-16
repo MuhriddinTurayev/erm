@@ -258,6 +258,7 @@ Route::middleware(['auth', 'role:company'])->group(function () {
             Route::get('/company/overview', [Company\DashboardController::class, 'overview']);
             Route::get('/company/reports', [Company\ReportController::class, 'index']);
             Route::get('/company/reports/{report}', [Company\ReportController::class, 'show']);
+            Route::get('/company/reports/{report}/{type}', [Company\ReportController::class, 'file'])->where('type', 'pdf|docx');
         });
 
         Route::middleware('role:admin')->group(function () {

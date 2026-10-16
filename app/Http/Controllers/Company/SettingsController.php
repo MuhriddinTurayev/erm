@@ -44,11 +44,25 @@ class SettingsController extends Controller
             'report_email' => ['nullable', 'email', 'max:120'],
             'report_chats' => ['nullable', 'string', 'max:250', 'regex:/^[\-0-9,\s]*$/'],
             'ai_provider_id' => ['nullable', 'integer', Rule::exists('ai_providers', 'id')->where('is_active', true)],
+            'logo' => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp', 'max:4096'],
         ]);
         $data['report_enabled'] = $request->boolean('report_enabled');
         $data['report_ai'] = $request->boolean('report_ai');
         $data['report_chats'] = implode(',', array_filter(array_map('trim', explode(',', (string) ($data['report_chats'] ?? '')))));
-        $this->ws()->update($data);
+        unset($data['logo']);
+        $ws = $this->ws();
+        $ws->update($data);
+        $ws->putSetting('report_files', $request->boolean('report_files'));
+        // логотип компании — в шапке отчётов (PDF, Word)
+        if ($request->boolean('logo_remove')) {
+            \App\Services\CompanyLogo::delete($ws);
+        } elseif ($request->hasFile('logo')) {
+            try {
+                \App\Services\CompanyLogo::save($ws, $request->file('logo'));
+            } catch (\DomainException $e) {
+                return back()->withErrors(['logo' => $e->getMessage()]);
+            }
+        }
 
         return back()->with('ok', __('Сохранено'));
     }
