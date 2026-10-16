@@ -437,7 +437,8 @@ PAGES.settings = {
   }
 };
 ACT.projOpen = d => { DB.currentId = d.id; save(); go('home'); };
-ACT.projCopy = d => { const src = DB.projects.find(x => x.id === d.id), c = JSON.parse(JSON.stringify(src)); c.id = uid(); c.name = src.name + ' (копия)'; DB.projects.push(c); save(); rerender(); toast('Копия создана'); };
+// у копии свои ссылки сотрудникам и свои отметки: общая ссылка уводила отметки в копию
+ACT.projCopy = d => { const src = DB.projects.find(x => x.id === d.id), c = JSON.parse(JSON.stringify(src)); c.id = uid(); c.name = src.name + ' (копия)'; c.staff.forEach(s => delete s.wtok); c.geoEv = []; DB.projects.push(c); save(); rerender(); toast('Копия создана'); };
 ACT.projDel = async d => {
   if (DB.projects.length < 2) return toast('Нельзя удалить единственный проект');
   const x = DB.projects.find(z => z.id === d.id); if (!await ui.confirm(`Удалить проект «${x.name}» со всеми данными? Это нельзя отменить.`)) return;

@@ -345,16 +345,25 @@ class TelegramBot
         $this->as(null, function () use ($chat, $w, $r, $type, $at) {
             $where = $r['dist'] === null ? '' : "\n📍 ".($r['on'] ? __('Вы на объекте') : '⚠️ '.__('Вы НЕ на объекте')).' · '.__('до объекта').' '.self::meters($r['dist']);
             $this->workerKeyboard($chat, $w, $type === 'in'
-                ? '✅ <b>'.__('Смена начата').'</b> · '.$at.$where."\n\n".__('Уходя, нажмите кнопку «Ушёл» внизу.')
-                : '🏁 <b>'.__('Смена закончена').'</b> · '.$at.' · '.__('отработано сегодня').': '.self::hm((int) $r['todayMs']).$where);
+                ? '✅ <b>'.__('Смена начата').'</b> · '.$at.self::workObj($w).$where."\n\n".__('Уходя, нажмите кнопку «Ушёл» внизу.')
+                : '🏁 <b>'.__('Смена закончена').'</b> · '.$at.' · '.__('отработано сегодня').': '.self::hm((int) $r['todayMs']).self::workObj($w).$where);
         }, WorkerGeo::lang($w));
+    }
+
+    /** «\n🏗 Объект» — на каком объекте отметка (ссылка сотрудника привязана к одному объекту) */
+    private static function workObj(WorkerToken $w): string
+    {
+        $ws = Workspace::find($w->workspace_id);
+        $name = $ws ? (string) (\App\Services\StateWriter::projects($ws)[$w->project_id] ?? '') : '';
+
+        return $name !== '' ? "\n🏗 ".e(DailyReportService::shown($name)) : '';
     }
 
     /** Подсказка сотруднику и кнопка внизу экрана: «Пришёл» или «Ушёл» (кнопка сама отправит местоположение). $lead — строка над ней, на языке сотрудника */
     private function workerHelp(string $chat, WorkerToken $w, ?\Closure $lead = null): void
     {
         $open = (bool) WorkerGeo::state($w)['open'];
-        $this->as(null, fn () => $this->workerKeyboard($chat, $w, ($lead ? $lead()."\n\n" : '').'👷 <b>'.e($w->name).'</b>'."\n"
+        $this->as(null, fn () => $this->workerKeyboard($chat, $w, ($lead ? $lead()."\n\n" : '').'👷 <b>'.e($w->name).'</b>'.self::workObj($w)."\n"
             .($open ? __('Смена идёт. Уходя, нажмите кнопку «Ушёл» внизу.') : __('Придя на объект, нажмите кнопку «Пришёл» внизу — телефон сам отправит, где вы сейчас.'))
             ."\n\n📍 ".__('Местоположение принимается только этой кнопкой.')), WorkerGeo::lang($w));
     }

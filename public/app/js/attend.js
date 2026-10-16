@@ -48,10 +48,29 @@ function gpsAudit(p, add) {
   if (!C.off.length && !offIn.length) add('ok', 'Сотрудники и GPS', 'attend', `Все на объекте · на смене ${C.open.length} чел.`);
 }
 
+/*
+ * Одна ссылка — один объект. «Копия объекта» раньше уносила и ссылки сотрудников: одна ссылка числилась на двух объектах,
+ * сервер перекидывал её туда-сюда, и отметки попадали в копию. Ссылка остаётся на первом объекте, в копии — новая;
+ * отметки, ушедшие в копию по общей ссылке, возвращаются на объект ссылки.
+ */
+function gpsDedupe() {
+  const own = new Map(); let changed = false;
+  DB.projects.forEach(p => p.staff.forEach(s => {
+    if (!s.wtok) return;
+    const first = own.get(s.wtok);
+    if (!first) { own.set(s.wtok, { p, s }); return; }
+    const seen = new Set(first.p.geoEv.map(e => e.seq));
+    p.geoEv.filter(e => e.sid === s.id && e.seq != null && !seen.has(e.seq)).forEach(e => first.p.geoEv.push(Object.assign({}, e, { sid: first.s.id })));
+    p.geoEv = p.geoEv.filter(e => e.sid !== s.id || e.seq == null);
+    s.wtok = gpsTok(); changed = true;
+  }));
+  return changed;
+}
+
 /* Связь с сервером: ссылки сотрудников, координаты объекта, приём отметок */
 async function gpsSync() {
   if (!viaServer() || !DB) return;
-  let changed = false; const workers = [], sites = {}, revoke = DB.settings.gpsRevoke || [];
+  let changed = gpsDedupe(); const workers = [], sites = {}, revoke = DB.settings.gpsRevoke || [];
   DB.projects.forEach(p => {
     p.staff.filter(s => s.wtok && !gpsActive(p).includes(s)).forEach(s => revoke.push(s.wtok));
     gpsActive(p).forEach(s => { if (!s.wtok) { s.wtok = gpsTok(); changed = true; } workers.push({ t: s.wtok, sid: s.id, pid: p.id, name: s.name, role: s.role }); });
@@ -136,6 +155,8 @@ PAGES.attend = {
     const st = sh => sh.last.on === false ? `<span class="pill p-sold">⚠️ ${T('не на объекте')}</span>` : sh.last.on ? `<span class="pill p-free">✅ ${T('на объекте')}</span>` : `<span class="pill">${T('объект не задан')}</span>`;
     const ago = m => m < 1 ? T('только что') : Math.round(m) + ' ' + T('мин назад');
     const links = gpsActive(p);
+    // смены этого дня на других объектах — чтобы не искать, куда «пропал» сотрудник
+    const elsewhere = DB.projects.filter(x => x !== p).map(x => ({ x, S: gpsShifts(x).filter(s => s.date === date) })).filter(o => o.S.length);
     return `${viaServer() ? '' : `<div class="card"><b>⚠️ Программа открыта как файл.</b> Отметки с телефонов принимает сервер — запустите «Запустить_localhost.bat».</div>`}
     <div class="kpis">
       ${kpi('Сейчас на смене', C.open.length, 'из ' + gpsActive(p).length + ' сотрудников', 'bl')}
@@ -163,7 +184,8 @@ PAGES.attend = {
         <td class="n"><b>${fmt(sh.ms / 3600e3, 1)}</b></td>
         <td>${sh.offs.length ? `<span class="bad">${sh.offs.length} ${T('раз')}, ${T('до')} ${gpsDist(sh.maxDist)}</span>` : `<span class="ok">${T('нет')}</span>`}</td>
         <td class="n">${(p.ts[sh.sid] || {})[sh.date] ?? '—'}</td><td><button class="btn-s" data-act="gpsRoute" data-sid="${sh.sid}" data-in="${sh.in.t}">🗺 ${T('Маршрут')}</button></td></tr>`).join('') || `<tr><td colspan="7" class="muted">${T('За этот день отметок нет')}</td></tr>`}
-      </tbody></table></div></div>
+      </tbody></table></div>
+      ${elsewhere.map(o => `<div class="audit a-warn mt"><span>🏗</span><div>${T('В этот день на другом объекте')} <b>${esc(o.x.name)}</b>: ${o.S.map(sh => esc(sh.s.name)).join(', ')}</div><button class="btn-s" data-act="objGo" data-id="${o.x.id}" data-page="attend">${T('Открыть')}</button></div>`).join('')}</div>
     <div class="grid g2">
       <div class="card"><h3>📍 Где находится объект</h3>
         <div class="small muted mb">Сотрудник считается «на объекте», если телефон в этом радиусе. Координаты: откройте объект в Google Картах, нажмите на точку и скопируйте цифры, или вставьте ссылку.</div>

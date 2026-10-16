@@ -71,7 +71,8 @@ class GeoController extends Controller
         $mine = fn ($pid) => $only === null || in_array((string) $pid, $only, true);
         $canEdit = $user->canEdit();
         $workers = collect($canEdit ? $request->input('workers', []) : [])
-            ->filter(fn ($w) => is_array($w) && preg_match('/^[a-f0-9]{16,64}$/', (string) ($w['t'] ?? '')) && $mine($w['pid'] ?? ''));
+            ->filter(fn ($w) => is_array($w) && preg_match('/^[a-f0-9]{16,64}$/', (string) ($w['t'] ?? '')) && $mine($w['pid'] ?? ''))
+            ->unique(fn ($w) => $w['t']);   // одна ссылка — один объект (первый): старая «копия объекта» дублировала ссылки, и ссылка прыгала между объектами
         DB::transaction(function () use ($ws, $workers, $request, $canEdit, $user, $mine) {
             foreach ($workers as $w) {
                 $ex = WorkerToken::where('token', $w['t'])->first();
