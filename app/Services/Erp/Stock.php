@@ -254,6 +254,18 @@ class Stock
         return $m;
     }
 
+    /** Не хватает на складе — понятным текстом: если указана партия, а товар лежит в других партиях, так и говорим */
+    private static function short(Workspace $ws, Item $item, int $wh, ?string $batch, float $left): \DomainException
+    {
+        $u = __((string) $item->unit);
+        if ($batch !== null && $batch !== '' && ($all = self::qty($ws, $item->id, $wh)) > $left + 0.0005) {
+            return new \DomainException(__('В партии «:b» на этом складе только :q :u. Оставьте партию «Авто» — всего на складе :t :u.',
+                ['b' => $batch, 'q' => self::n($left), 't' => self::n($all), 'u' => $u]));
+        }
+
+        return new \DomainException(__('На складе только :q :u', ['q' => self::n($left), 'u' => $u]));
+    }
+
     /** Выдача на объект; не больше остатка */
     public static function issue(Workspace $ws, User $by, array $d): StockMove
     {
@@ -266,7 +278,7 @@ class Stock
             $item = self::lockItem($ws, (int) $d['item_id']);
             $left = self::qty($ws, $item->id, (int) $d['warehouse_id'], $d['batch'] ?? null);
             if ($qty > $left + 0.0005) {
-                throw new \DomainException(__('На складе только :q :u', ['q' => self::n($left), 'u' => $item->unit]));
+                throw self::short($ws, $item, (int) $d['warehouse_id'], $d['batch'] ?? null, $left);
             }
 
             $parts = ! empty($d['batch']) ? [[$d['batch'], $qty]] : self::allocate($ws, $item->id, (int) $d['warehouse_id'], $qty);
@@ -302,7 +314,7 @@ class Stock
             self::lockItem($ws, $item->id);
             $left = self::qty($ws, $item->id, (int) $d['warehouse_id'], $d['batch'] ?? null);
             if ($qty > $left + 0.0005) {
-                throw new \DomainException(__('На складе только :q :u', ['q' => self::n($left), 'u' => $item->unit]));
+                throw self::short($ws, $item, (int) $d['warehouse_id'], $d['batch'] ?? null, $left);
             }
             $parts = ! empty($d['batch']) ? [[$d['batch'], $qty]] : self::allocate($ws, $item->id, (int) $d['warehouse_id'], $qty);
             foreach ($parts as [$batch, $q]) {

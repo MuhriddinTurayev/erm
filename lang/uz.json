@@ -4813,5 +4813,8 @@
     "У руководителя не подключён Telegram — он увидит расход на сайте, в разделе «Согласование расходов».": "Rahbarning Telegrami ulanmagan — u xarajatni saytda, «Xarajatlarni tasdiqlash» bo‘limida ko‘radi.",
     "Ваш Telegram не подключён.": "Telegramingiz ulanmagan.",
     "Заявки прорабов и кнопки «Согласовать / Отклонить» приходят в бот только тем, у кого он подключён. Сейчас вы видите их только здесь, на сайте.": "Prorablarning so‘rovlari va «Kelishish / Rad etish» tugmalari botga faqat Telegrami ulanganlarga keladi. Hozir siz ularni faqat shu yerda, saytda ko‘rasiz.",
-    "Подключить Telegram": "Telegramni ulash"
+    "Подключить Telegram": "Telegramni ulash",
+    "Авто — сначала самая старая партия": "Avtomatik — avval eng eski partiya",
+    "На этом складе этого товара нет": "Bu omborda bu tovar yo‘q",
+    "В партии «:b» на этом складе только :q :u. Оставьте партию «Авто» — всего на складе :t :u.": "Bu ombordagi «:b» partiyasida faqat :q :u bor. Partiyani «Avtomatik» qoldiring — omborda jami :t :u bor."
 }

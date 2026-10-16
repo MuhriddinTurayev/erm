@@ -1,4 +1,15 @@
-@php $allItems = $allItems ?? \App\Models\Item::of($ws->id)->orderBy('name')->get(); $allWh = \App\Models\Warehouse::of($ws->id)->where('is_active', true)->get(); @endphp
+@php
+  $allItems = $allItems ?? \App\Models\Item::of($ws->id)->orderBy('name')->get(); $allWh = \App\Models\Warehouse::of($ws->id)->where('is_active', true)->get();
+  // что лежит на складах: всего и по партиям — для подсказки «на складе есть» и выбора партии при выдаче
+  $stk = [];
+  foreach (\App\Models\StockMove::of($ws->id)->selectRaw('item_id, warehouse_id, batch, sum(qty) q')->groupBy('item_id', 'warehouse_id', 'batch')->get() as $r) {
+      $c = &$stk[$r->item_id][$r->warehouse_id];
+      $c['t'] = round(($c['t'] ?? 0) + (float) $r->q, 3);
+      if ($r->batch && (float) $r->q > 0.0005) { $c['b'][] = [$r->batch, round((float) $r->q, 3)]; }
+      unset($c);
+  }
+  $units = $allItems->mapWithKeys(fn ($it) => [$it->id => __($it->unit ?? '')]);
+@endphp
 <dialog class="modal" id="dlg-mv"><form method="post" action="/company/stock/move" id="mv-form">@csrf
   <div class="modal-h"><h3>{!! ic('package') !!}{{ __('Складская операция') }}</h3><button type="button" class="icon-btn" data-close>{!! ic('x') !!}</button></div>
   <div class="modal-b form">
@@ -6,9 +17,11 @@
     <label class="field"><span>{{ __('Товар') }}</span><select name="item_id" required>@foreach ($allItems as $it)<option value="{{ $it->id }}" @selected(isset($item) && $item->id === $it->id)>{{ $it->name }} ({{ __($it->unit ?? '') }})</option>@endforeach</select></label>
     <label class="field"><span>{{ __('Склад') }}</span><select name="warehouse_id" required>@foreach ($allWh as $w)<option value="{{ $w->id }}">{{ __($w->name) }}</option>@endforeach</select></label>
     <label class="field" data-op="transfer"><span>{{ __('На склад') }}</span><select name="to_warehouse_id"><option value="">—</option>@foreach ($allWh as $w)<option value="{{ $w->id }}">{{ __($w->name) }}</option>@endforeach</select></label>
-    <label class="field"><span data-l-qty>{{ __('Количество') }}</span><input type="number" step="0.001" min="0" name="qty" required></label>
+    <label class="field"><span data-l-qty>{{ __('Количество') }}</span><input type="number" step="0.001" min="0" name="qty" required><small class="mv-left" data-op="out transfer adjust"></small></label>
     <label class="field" data-op="in"><span>{{ __('Цена за единицу') }}</span><input type="number" step="0.01" min="0" name="price"></label>
-    <label class="field" data-op="in out transfer"><span>{{ __('Партия') }}</span><input name="batch" maxlength="40" placeholder="{{ __('авто') }}"></label>
+    {{-- приход: номер новой партии (пусто — присвоится сам); выдача и перемещение — только из того, что есть на складе --}}
+    <label class="field" data-op="in"><span>{{ __('Партия') }}</span><input name="batch" maxlength="40" placeholder="{{ __('авто') }}" autocomplete="off"></label>
+    <label class="field" data-op="out transfer"><span>{{ __('Партия') }}</span><select name="batch" data-batch><option value="">{{ __('Авто — сначала самая старая партия') }}</option></select></label>
     <label class="field" data-op="out"><span>{{ __('Объект') }}</span><select name="project_id"><option value="">—</option>@foreach ($projects as $pid => $pn)<option value="{{ $pid }}">{{ $pn }}</option>@endforeach</select></label>
     <label class="field" data-op="in"><span>{{ __('Поставщик') }}</span><select name="counterparty_id"><option value="">—</option>@foreach ($counterparties ?? [] as $c)<option value="{{ $c->id }}">{{ $c->name }}</option>@endforeach</select></label>
     <label class="field"><span>{{ __('Дата') }}</span><input type="date" name="date" value="{{ $ws->localNow()->toDateString() }}"></label>
@@ -49,11 +62,24 @@
 <script>
 (() => {
   const f = document.getElementById('mv-form'); if (!f) return;
+  const STK = @json($stk), UNIT = @json($units), T = { left: @json(__('На складе')), none: @json(__('На этом складе этого товара нет')) };
+  const fmt = v => (+v).toLocaleString('ru-RU', { maximumFractionDigits: 3 });
   const sync = () => { const op = f.op.value;
-    f.querySelectorAll('[data-op]').forEach(el => el.style.display = el.dataset.op.split(' ').includes(op) ? '' : 'none');
+    f.querySelectorAll('[data-op]').forEach(el => { const on = el.dataset.op.split(' ').includes(op); el.style.display = on ? '' : 'none';
+      el.querySelectorAll('input,select').forEach(x => { x.disabled = !on; }); });   // скрытое поле «Партия» не отправляется
     f.querySelector('[data-l-qty]').textContent = op === 'adjust' ? @json(__('Фактический остаток')) : @json(__('Количество'));
-    f.to_warehouse_id.required = op === 'transfer'; };
-  f.op.addEventListener('change', sync); sync();
+    f.to_warehouse_id.required = op === 'transfer';
+    // сколько есть на складе и какие партии — по выбранным товару и складу
+    const s = (STK[f.item_id.value] || {})[f.warehouse_id.value] || { t: 0, b: [] }, u = UNIT[f.item_id.value] || '';
+    const left = f.querySelector('.mv-left'); left.textContent = s.t > 0 ? `${T.left}: ${fmt(s.t)} ${u}` : T.none; left.className = 'mv-left ' + (s.t > 0 ? 'muted' : 'bad');
+    f.qty.max = op === 'out' || op === 'transfer' ? Math.max(0, s.t) : '';
+    const bs = f.querySelector('[data-batch]'), keep = bs.value;
+    bs.querySelectorAll('option:not(:first-child)').forEach(o => o.remove());
+    (s.b || []).forEach(([b, q]) => bs.add(new Option(`${b} — ${fmt(q)} ${u}`, b)));
+    bs.value = [...bs.options].some(o => o.value === keep) ? keep : ''; };
+  ['op', 'item_id', 'warehouse_id'].forEach(n => f[n].addEventListener('change', sync));
+  new MutationObserver(sync).observe(f.closest('dialog'), { attributes: true, attributeFilter: ['open'] });   // форма сброшена при открытии
+  sync();
 })();
 </script>
 @endpush
