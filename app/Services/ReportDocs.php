@@ -75,7 +75,11 @@ class ReportDocs
                 'objectsIdle' => count((array) $s['objects']) - min(12, count($active)),
                 'low' => array_slice(DailyReportService::lowStock($ws), 0, 8),
                 'late' => DailyReportService::lateSupply($ws, $s['date']),
-                'ai' => $r->ai_summary ? trim($r->ai_summary) : null,
+                'cats_in' => array_map(fn ($cat, $v) => ['n' => __((string) $cat), 'v' => $money($v), 'p' => (int) round($v / max(1, (float) $T['in_day']) * 100)],
+                    array_keys(array_slice((array) ($s['cats_in_day'] ?? []), 0, 8, true)), array_slice((array) ($s['cats_in_day'] ?? []), 0, 8, true)),
+                'top_in' => array_map(fn ($t) => ['v' => $money($t['amount']), 'desc' => $t['desc'] ? DailyReportService::shown((string) $t['desc']) : __((string) $t['cat']), 'who' => (string) ($t['who'] ?? ''), 'obj' => DailyReportService::shown((string) ($t['obj'] ?? ''))],
+                    array_slice((array) ($s['top_in'] ?? []), 0, 6)),
+                'ai' => ($ai = app(DailyReportService::class)->aiText($ws, $r)) ? trim($ai) : null,
                 'url' => url('/company/reports/'.$r->id),
             ];
         });
@@ -91,7 +95,7 @@ class ReportDocs
     /** Имя файла: «Hisobot_Navruz-Qurilish_2026-10-16.pdf» */
     public static function filename(Workspace $ws, DailyReport $r, string $ext): string
     {
-        $word = ['uz' => 'Hisobot', 'tg' => 'Hisobot', 'ru' => 'Otchet'][$ws->locale] ?? 'Hisobot';
+        $word = ['uz' => 'Hisobot', 'tg' => 'Hisobot', 'ru' => 'Otchet'][DailyReportService::localeOf($ws)] ?? 'Hisobot';
         $name = trim(preg_replace('/[^\pL\pN]+/u', '-', \Illuminate\Support\Str::ascii($ws->name)), '-') ?: 'company';
 
         return $word.'_'.$name.'_'.Carbon::parse($r->stats['date'])->format('Y-m-d').'.'.$ext;
@@ -249,6 +253,10 @@ class ReportDocs
         $h(__('На что ушли деньги сегодня'));
         $c['cats'] ? $table([__('Статья'), __('Сумма'), __('Доля')], array_map(fn ($x) => [$x['n'], $x['v'], $x['p'].'%'], $c['cats']), [5000, 3200, 1800], [1, 2])
             : $sec->addText(__('Сегодня расходов не было'), ['color' => self::MUTED]);
+        if ($c['top_in']) {
+            $h(__('Откуда поступили деньги'));
+            $table([__('Сумма'), __('Описание'), __('От кого'), __('Объект')], array_map(fn ($x) => [$x['v'], $x['desc'], $x['who'] ?: '—', $x['obj']], $c['top_in']), [2400, 3600, 2000, 2000], [0]);
+        }
         if ($c['top']) {
             $h(__('Крупные расходы'));
             $table([__('Сумма'), __('Описание'), __('Кому'), __('Объект')], array_map(fn ($x) => [$x['v'], $x['desc'], $x['who'] ?: '—', $x['obj']], $c['top']), [2400, 3600, 2000, 2000], [0]);
@@ -302,7 +310,7 @@ class ReportDocs
     private static function inLocale(Workspace $ws, callable $fn)
     {
         $prev = App::getLocale();
-        App::setLocale($ws->locale ?: 'ru');
+        App::setLocale(DailyReportService::localeOf($ws));
         try {
             return $fn();
         } finally {

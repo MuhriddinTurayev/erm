@@ -24,8 +24,16 @@
     <div class="tg-preview"><div class="tg-msg">{!! strip_tags($text, '<b><i>') !!}</div></div>
   </div>
   <div>
-    @if ($r->ai_summary)
-    <div class="card"><div class="card-h"><h3>{!! ic('sparkles') !!}{{ __('Вывод ИИ') }}</h3></div><div style="white-space:pre-wrap;color:var(--text-2)">{{ $r->ai_summary }}</div></div>
+    @if ($ai)
+    <div class="card"><div class="card-h"><h3>{!! ic('sparkles') !!}{{ __('Вывод ИИ') }}</h3></div><div style="white-space:pre-wrap;color:var(--text-2)">{{ $ai }}</div></div>
+    @endif
+    @if ($r->stats['top_in'] ?? null)
+    <div class="card">
+      <div class="card-h"><h3>{!! ic('trending-up') !!}{{ __('Откуда поступили деньги') }}</h3></div>
+      @foreach ($r->stats['top_in'] as $t)
+        <div class="hbar"><div class="hb-t"><span>{{ $t['desc'] ? \App\Services\DailyReportService::shown($t['desc']) : __($t['cat']) }}@if ($t['who']) · {{ $t['who'] }}@endif <small class="muted">({{ \App\Services\DailyReportService::shown((string) $t['obj']) }})</small></span><b class="ok">+ {{ money_s($t['amount'], $cur) }}</b></div></div>
+      @endforeach
+    </div>
     @endif
     <div class="card">
       <div class="card-h"><h3>{!! ic('chart-pie') !!}{{ __('На что ушли деньги') }}</h3></div>

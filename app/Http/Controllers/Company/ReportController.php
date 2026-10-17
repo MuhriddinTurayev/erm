@@ -32,8 +32,9 @@ class ReportController extends Controller
     {
         $this->companyWide();
         abort_unless((int) $report->workspace_id === (int) $this->ws()->id, 404);
+        DailyReportService::$locale = app()->getLocale();   // отчёт — на языке, на котором открыта платформа
 
-        return view('company.report', ['ws' => $this->ws(), 'r' => $report, 'text' => $svc->text($this->ws(), $report)]);
+        return view('company.report', ['ws' => $this->ws(), 'r' => $report, 'text' => $svc->text($this->ws(), $report), 'ai' => $svc->aiText($this->ws(), $report)]);
     }
 
     /** Скачать отчёт файлом: PDF или Word */
@@ -42,6 +43,7 @@ class ReportController extends Controller
         $this->companyWide();
         $ws = $this->ws();
         abort_unless((int) $report->workspace_id === (int) $ws->id, 404);
+        DailyReportService::$locale = app()->getLocale();
         $bytes = $type === 'pdf' ? ReportDocs::pdf($ws, $report) : ReportDocs::docx($ws, $report);
 
         return response($bytes, 200, [
@@ -56,6 +58,7 @@ class ReportController extends Controller
     {
         abort_unless($request->user()->isAdmin(), 403);
         $ws = $this->ws();
+        DailyReportService::$locale = app()->getLocale();   // ручная отправка — на языке платформы
         $r = $svc->generate($ws, null, $request->boolean('ai', true));
         if ($request->boolean('send')) {
             $errors = $svc->send($ws, $r);

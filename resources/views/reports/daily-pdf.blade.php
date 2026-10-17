@@ -132,6 +132,18 @@
 @endif
 </div>
 
+@if ($c['top_in'])
+<div class="keep">
+<h2><span class="dot"></span>{{ __('Откуда поступили деньги') }}</h2>
+<table class="grid">
+  <tr><th class="r" style="width:120px">{{ __('Сумма') }}</th><th>{{ __('Описание') }}</th><th style="width:110px">{{ __('От кого') }}</th><th style="width:110px">{{ __('Объект') }}</th></tr>
+  @foreach ($c['top_in'] as $x)
+  <tr><td class="r b" style="color:#15803d">+ {{ $x['v'] }}</td><td>{{ $x['desc'] }}</td><td>{{ $x['who'] ?: '—' }}</td><td class="muted">{{ $x['obj'] }}</td></tr>
+  @endforeach
+</table>
+</div>
+@endif
+
 @if ($c['top'])
 <div class="keep">
 <h2><span class="dot"></span>{{ __('Крупные расходы') }}</h2>

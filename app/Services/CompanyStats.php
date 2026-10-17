@@ -28,8 +28,8 @@ class CompanyStats
 
         $T = ['balance' => 0.0, 'in_all' => 0.0, 'out_all' => 0.0, 'out_day' => 0.0, 'in_day' => 0.0, 'out_yest' => 0.0, 'in_yest' => 0.0,
             'out_week' => 0.0, 'out_month' => 0.0, 'in_month' => 0.0, 'ops_day' => 0];
-        $catsDay = $catsMonth = [];
-        $top = $objects = [];
+        $catsDay = $catsMonth = $catsIn = [];
+        $top = $topIn = $objects = [];
         $nonCash = 0.0;   // записи только в бухгалтерии объектов (оплаты квартир, расходы из Telegram, своя бухгалтерия) — в кассах их нет
 
         foreach ($ws->projects() as $p) {
@@ -54,6 +54,10 @@ class CompanyStats
                 if ($td === $date) {
                     $o[$in ? 'in_day' : 'out_day'] += $amt;
                     $T['ops_day']++;
+                    if ($in) {
+                        $catsIn[$cat] = ($catsIn[$cat] ?? 0) + $amt;
+                        $topIn[] = ['obj' => $o['name'], 'cat' => $cat, 'desc' => (string) ($t['desc'] ?? ''), 'who' => (string) ($t['who'] ?? ''), 'amount' => $amt];
+                    }
                     if (! $in) {
                         $catsDay[$cat] = ($catsDay[$cat] ?? 0) + $amt;
                         $top[] = ['obj' => $o['name'], 'cat' => $cat, 'desc' => (string) ($t['desc'] ?? ''), 'who' => (string) ($t['who'] ?? ''), 'amount' => $amt];
@@ -114,6 +118,10 @@ class CompanyStats
                 if ($td === $date) {
                     $T[$in ? 'in_day' : 'out_day'] += $amt;
                     $T['ops_day']++;
+                    if ($in) {
+                        $catsIn[$cat] = ($catsIn[$cat] ?? 0) + $amt;
+                        $topIn[] = ['obj' => __('Компания'), 'cat' => $cat, 'desc' => (string) $op->note, 'who' => (string) $op->employee, 'amount' => $amt];
+                    }
                     if (! $in) {
                         $catsDay[$cat] = ($catsDay[$cat] ?? 0) + $amt;
                         $top[] = ['obj' => __('Компания'), 'cat' => $cat, 'desc' => (string) $op->note, 'who' => (string) $op->employee, 'amount' => $amt];
@@ -144,6 +152,8 @@ class CompanyStats
         }
 
         arsort($catsDay);
+        arsort($catsIn);
+        usort($topIn, fn ($a, $b) => $b['amount'] <=> $a['amount']);
         arsort($catsMonth);
         usort($top, fn ($a, $b) => $b['amount'] <=> $a['amount']);
         usort($objects, fn ($a, $b) => $b['out_month'] <=> $a['out_month']);
@@ -157,6 +167,8 @@ class CompanyStats
             'diff_pct' => $T['out_yest'] > 0 ? round(($T['out_day'] - $T['out_yest']) / $T['out_yest'] * 100) : null,
             'cats_day' => $catsDay,
             'cats_month' => $catsMonth,
+            'cats_in_day' => $catsIn,
+            'top_in' => array_slice($topIn, 0, 7),
             'top' => array_slice($top, 0, 7),
             'objects' => $objects,
             'days14' => $days14,

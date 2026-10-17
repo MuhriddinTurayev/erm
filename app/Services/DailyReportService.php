@@ -14,6 +14,16 @@ use Illuminate\Support\Facades\Mail;
 /** Ежедневный отчёт руководителю: сколько денег, сколько ушло сегодня и вчера, на что, по объектам — в Telegram и на почту */
 class DailyReportService
 {
+    /** Язык показа: пока задан — отчёт строится на нём (страница и ручная отправка — на языке платформы), иначе — на языке компании */
+    public static ?string $locale = null;
+
+    public static function localeOf(Workspace $ws): string
+    {
+        $l = self::$locale ?: $ws->locale;
+
+        return in_array($l, ['ru', 'uz', 'tg'], true) ? $l : 'ru';
+    }
+
     public function __construct(private AiService $ai) {}
 
     /** Собрать (или пересобрать) отчёт за день */
@@ -23,11 +33,17 @@ class DailyReportService
             $stats = CompanyStats::build($ws, $date);
             // отчёт за день ищем по дате (в SQLite дата хранится с временем — поиск по строке «Y-m-d» его не находил и падал на уникальном ключе)
             $r = DailyReport::where('workspace_id', $ws->id)->whereDate('date', $stats['date'])->first();
+            $loc = self::localeOf($ws);
+            $keep = (array) ($r?->stats['ai_i18n'] ?? []);
             $summary = $r?->ai_summary;
             // ИИ — платный запрос: не чаще одного раза за день на компанию, даже если отчёт пересобирают или отправка не удалась
             if ($withAi && ! $summary && $ws->report_ai && $ws->aiAllowed()
                 && \Illuminate\Support\Facades\Cache::add('report-ai:'.$ws->id.':'.$stats['date'], 1, now()->addDay())) {
                 $summary = $this->aiSummary($ws, $stats);
+                $keep = $summary ? [$loc => $summary] : [];
+            }
+            if ($keep) {
+                $stats['ai_i18n'] = $keep;
             }
             if ($r) {
                 $r->fill(['stats' => $stats, 'ai_summary' => $summary])->save();
@@ -39,16 +55,45 @@ class DailyReportService
         });
     }
 
-    private function aiSummary(Workspace $ws, array $stats): ?string
+    /** Вывод ИИ на языке показа: готовый, а если на этом языке ещё нет — один раз пишется заново (раз в сутки на язык) */
+    public function aiText(Workspace $ws, DailyReport $r): ?string
     {
-        $lang = ['ru' => 'русском', 'uz' => 'узбекском (латиница)', 'tg' => 'таджикском'][$ws->locale] ?? 'русском';
+        $loc = self::localeOf($ws);
+        $map = (array) ($r->stats['ai_i18n'] ?? []);
+        if (isset($map[$loc])) {
+            return $map[$loc];
+        }
+        if (! $r->ai_summary) {
+            return null;
+        }
+        if ($loc === $ws->locale && ! $map) {
+            return $r->ai_summary;   // старый отчёт: вывод написан на языке компании
+        }
+        if ($ws->report_ai && $ws->aiAllowed() && \Illuminate\Support\Facades\Cache::add('report-ai:'.$ws->id.':'.$r->stats['date'].':'.$loc, 1, now()->addDay())) {
+            $t = $this->inLocale($ws, fn () => $this->aiSummary($ws, $r->stats, $loc));
+            if ($t) {
+                $st = $r->stats;
+                $st['ai_i18n'] = $map + [$loc => $t];
+                $r->forceFill(['stats' => $st])->save();
+
+                return $t;
+            }
+        }
+
+        return $r->ai_summary;
+    }
+
+    private function aiSummary(Workspace $ws, array $stats, ?string $loc = null): ?string
+    {
+        $loc = $loc ?: self::localeOf($ws);
+        $lang = ['ru' => 'русском', 'uz' => 'узбекском (латиница)', 'tg' => 'таджикском'][$loc] ?? 'русском';
         $data = $stats;
-        unset($data['days14']);
+        unset($data['days14'], $data['in14'], $data['ai_i18n']);
         $system = "Ты — финансовый аналитик строительной компании. По данным за день дай руководителю короткий вывод: 3–5 пунктов, каждый с новой строки, начиная с «• ». "
             ."Что важно: резкий рост расходов, крупные платежи, объекты с перерасходом или просрочкой, низкий остаток в кассе, что проверить завтра. "
             ."Только по данным, без выдумок, без вступления и заголовков, без markdown. Пиши на {$lang} языке. "
             // как в программе: «1 151 164 300 so'm», а не «1,151,164,300 сум»
-            .'Суммы пиши полностью, цифрами, тысячи через пробел, без «млн»/«млрд»; валюту называй так: «'.__((string) $stats['currency'], [], $ws->locale).'».';
+            .'Суммы пиши полностью, цифрами, тысячи через пробел, без «млн»/«млрд»; валюту называй так: «'.__((string) $stats['currency'], [], $loc).'».';
         try {
             return trim($this->ai->ask($ws, null, 'report', $system, [['role' => 'user', 'content' => json_encode($data, JSON_UNESCAPED_UNICODE)]], null, 900)['text']) ?: null;
         } catch (\Throwable $e) {
@@ -77,6 +122,13 @@ class DailyReportService
             $L[] = '📉 '.__('Потрачено вчера').': '.$m($T['out_yest']);
             $L[] = '📈 '.__('Поступило сегодня').': '.$m($T['in_day']);
             $L[] = '🗓 '.__('За 7 дней').': −'.$m($T['out_week']).' · '.__('за месяц').': −'.$m($T['out_month']).' / +'.$m($T['in_month']);
+            if ($s['top_in'] ?? null) {
+                $L[] = '';
+                $L[] = '📥 <b>'.__('Откуда поступили деньги').':</b>';
+                foreach (array_slice($s['top_in'], 0, 5) as $t) {
+                    $L[] = '• '.$m($t['amount']).' — '.$e($t['desc'] ? self::shown($t['desc']) : __($t['cat'])).($t['who'] ? ', '.$e($t['who']) : '').' <i>('.$e(self::shown((string) $t['obj'])).')</i>';
+                }
+            }
             if ($s['cats_day']) {
                 $L[] = '';
                 $L[] = '🧾 <b>'.__('На что ушли деньги сегодня').':</b>';
@@ -117,10 +169,10 @@ class DailyReportService
                     $L[] = '• №'.$x['number'].' · '.$e($x['obj']).' · '.__('нужно было к').' '.$x['need'].' · '.$x['status'].($x['who'] ? ' · '.$e($x['who']) : '');
                 }
             }
-            if ($r->ai_summary) {
+            if ($ai = $this->aiText($ws, $r)) {
                 $L[] = '';
                 $L[] = '🤖 <b>'.__('Вывод ИИ').':</b>';
-                $L[] = $e($r->ai_summary);
+                $L[] = $e($ai);
             }
             $L[] = '';
             $L[] = '🔗 '.url('/company/reports/'.$r->id);
@@ -286,7 +338,7 @@ class DailyReportService
     private function inLocale(Workspace $ws, callable $fn)
     {
         $prev = App::getLocale();
-        App::setLocale($ws->locale ?: 'ru');
+        App::setLocale(self::localeOf($ws));
         try {
             return $fn();
         } finally {
